@@ -1,0 +1,39 @@
+group 'com.lucasjosino.on_audio_query'
+version '1.0-SNAPSHOT'
+
+rootProject.allprojects {
+    repositories {
+        google()
+        mavenCentral()
+    }
+}
+
+// Patch local: plugin migrado para o "Built-in Kotlin" do Flutter.
+// O bloco buildscript + `apply plugin: 'kotlin-android'` foram REMOVIDOS:
+// o tool do Flutter (3.44+) aplica o Kotlin Gradle Plugin automaticamente
+// nos projetos de plugin. Aplicar KGP manualmente gera warning e vai
+// quebrar o build em versões futuras do Flutter.
+apply plugin: 'com.android.library'
+
+android {
+    // Patch local: namespace exigido pelo AGP 8+ (Flutter 3.44).
+    namespace 'com.lucasjosino.on_audio_query'
+    compileSdk 34
+
+    // A pasta src/main/kotlin é incluída automaticamente pelo KGP que o
+    // Flutter aplica via Built-in Kotlin (não precisa do sourceSets).
+    defaultConfig {
+        minSdkVersion 16
+    }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}
+
+dependencies {
+    def lifecycle_version = "2.3.1"
+    implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-core:1.6.4'
+    implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.6.4'
+    implementation "androidx.lifecycle:lifecycle-viewmodel-ktx:$lifecycle_version"
+}

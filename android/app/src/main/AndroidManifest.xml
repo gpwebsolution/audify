@@ -1,0 +1,156 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <!-- ============================================================
+         PERMISSÕES DE LEITURA DE MÍDIA
+         ============================================================
+         O on_audio_query exige TODAS estas permissões declaradas: o
+         controle de permissão dele (PermissionController) verifica e
+         solicita READ_MEDIA_AUDIO + READ_MEDIA_IMAGES no Android 13+ e
+         READ/WRITE_EXTERNAL_STORAGE nas versões antigas. Se alguma não
+         estiver no manifest, o status dele nunca fica "concedido" — o
+         app aceita a permissão mas o plugin continua reportando negada.
+         1) READ_MEDIA_*: permissões granulares do Android 13 (API 33+).
+         2) READ_EXTERNAL_STORAGE: legada, com maxSdkVersion="32" para
+            NÃO ser solicitada no Android 13+ (a Play Store rejeita o
+            APK sem esse limite).
+         3) WRITE_EXTERNAL_STORAGE: exigida pelo on_audio_query nas
+            versões <= 12; maxSdkVersion="29" é o teto aceito pelo
+            Google (API 30+ é no-op e retorna concedida sozinha).
+         ============================================================ -->
+    <uses-permission android:name="android.permission.READ_MEDIA_AUDIO" />
+    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
+    <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" />
+    <uses-permission
+        android:name="android.permission.READ_EXTERNAL_STORAGE"
+        android:maxSdkVersion="32" />
+    <uses-permission
+        android:name="android.permission.WRITE_EXTERNAL_STORAGE"
+        android:maxSdkVersion="29" />
+
+    <!-- ============================================================
+         LISTAGEM DE PDFs / DOCUMENTOS (Android 11+)
+         ============================================================
+         No Android 13+ NÃO existe permissão de documentos — o MediaStore
+         só lista PDFs com o acesso especial "Todos os arquivos"
+         (MANAGE_EXTERNAL_STORAGE), concedido pelo usuário em
+         Configurações → Acesso especial. Sem ele, o app depende do
+         seletor SAF ("Selecionar PDF"). Solicitado via
+         PermissionService.requestAllFilesAccess() na tela de PDFs.
+         ============================================================ -->
+    <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE" />
+
+    <!-- ============================================================
+         GERENCIADOR DE ARQUIVOS COMPLETO
+         ============================================================
+         MANAGE_EXTERNAL_STORAGE (All Files Access) já declarado acima.
+         Para Android 10 e abaixo, READ/WRITE_EXTERNAL_STORAGE já cobrem.
+         ============================================================ -->
+
+        <!-- ============================================================
+         SEGUNDO PLANO (foreground service + WAKE LOCK)
+         ============================================================
+         A reprodução em segundo plano depende do FOREGROUND SERVICE do
+         audio_service (declaração do <service> mais abaixo, com
+         foregroundServiceType="mediaPlayback"). É ele que mantém o app
+         vivo com a tela apagada e alimenta a notificação de mídia.
+         WAKE_LOCK: complemento que evita que a CPU durma entre os
+         buffers de decodificação de áudio. Ambos são necessários.
+         ============================================================ -->
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+
+    <!-- ============================================================
+         NOTIFICAÇÃO DE MÍDIA (Android 13+)
+         ============================================================
+         A notificação persistente de reprodução (audio_service) só é
+         exibida se o usuário conceder POST_NOTIFICATIONS no Android 13
+         (API 33+). Sem ela, a música toca em segundo plano, mas sem
+         controles na notificação/tela de bloqueio. Solicitada junto ao
+         grupo de mídia em PermissionService.requestMediaGroup().
+         ============================================================ -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
+
+    <!-- ============================================================
+         OTIMIZAÇÃO DE BATERIA
+         ============================================================
+         Permite pedir ao usuário (via dialog do sistema) a isenção de
+         otimização de bateria. Fabricantes como Xiaomi/MIUI, Samsung e
+         Motorola matam processos com player pausado/segundo plano em
+         minutos sem essa isenção — principal causa de "a música para
+         sozinha" e de crash ao retomar o áudio.
+         Solicitada opcionalmente na aba Configurações do app.
+         ============================================================ -->
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+
+    <!-- ============================================================
+         INSTALAÇÃO DE APKs (gerenciador de APKs dedicado)
+         ============================================================
+         REQUEST_INSTALL_PACKAGES: necessário para instalar APKs
+         diretamente do app (Android 8+).
+         ============================================================ -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+
+    <application
+        android:label="audify"
+        android:name="${applicationName}"
+        android:icon="@mipmap/launcher_icon">
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:launchMode="singleTop"
+            android:taskAffinity=""
+            android:theme="@style/LaunchTheme"
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode"
+            android:hardwareAccelerated="true"
+            android:windowSoftInputMode="adjustResize">
+            <!-- Specifies an Android theme to apply to this Activity as soon as
+                 the Android process has started. This theme is visible to the user
+                 while the Flutter UI initializes. After that, this theme continues
+                 to determine the Window background behind the Flutter UI. -->
+            <meta-data
+              android:name="io.flutter.embedding.android.NormalTheme"
+              android:resource="@style/NormalTheme"
+              />
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN"/>
+                <category android:name="android.intent.category.LAUNCHER"/>
+            </intent-filter>
+        </activity>
+        <!-- Don't delete the meta-data below.
+             This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->
+        <meta-data
+            android:name="flutterEmbedding"
+            android:value="2" />
+        <!-- Serviço de mídia em segundo plano (audio_service): a notificação
+             de reprodução e os controles da tela de bloqueio dependem dele. -->
+        <service
+            android:name="com.ryanheise.audioservice.AudioService"
+            android:foregroundServiceType="mediaPlayback"
+            android:exported="true"
+            tools:ignore="Instantiatable">
+            <intent-filter>
+                <action android:name="android.media.browse.MediaBrowserService" />
+            </intent-filter>
+        </service>
+        <!-- Impeller desabilitado: em GPUs Adreno antigas/restritas (ex.:
+             leitores industriais MINDEO/MS8389) o raster thread do Impeller
+             morre com SIGSEGV. Skia renderiza em qualquer hardware e é o
+             renderizador comprovado para máxima compatibilidade. -->
+        <meta-data
+            android:name="io.flutter.embedding.android.EnableImpeller"
+            android:value="false" />
+    </application>
+    <!-- Required to query activities that can process text, see:
+         https://developer.android.com/training/package-visibility and
+         https://developer.android.com/reference/android/content/Intent#ACTION_PROCESS_TEXT.
+
+         In particular, this is used by the Flutter engine in io.flutter.plugin.text.ProcessTextPlugin. -->
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.PROCESS_TEXT"/>
+            <data android:mimeType="text/plain"/>
+        </intent>
+    </queries>
+</manifest>

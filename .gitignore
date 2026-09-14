@@ -1,0 +1,147 @@
+# ============================================================
+# Audify — .gitignore (hardened)
+# Regra de ouro: NUNCA suba credenciais, chaves de assinatura,
+# caminhos locais (SDK), logs ou artefatos de build.
+# ============================================================
+
+# ---------- Segredos e credenciais (NUNCA versionar) ----------
+# Chaves de assinatura do APK e configs de release
+*.jks
+*.keystore
+*.p12
+*.pfx
+*.pem
+*.p8
+*.key
+key.properties
+signing.properties
+
+# Arquivos de ambiente / configuração com dados sensíveis
+.env
+.env.*
+!.env.example
+*.env
+google-services.json
+GoogleService-Info.plist
+firebase.json
+
+# Arquivos do backend/cloud (se adicionar no futuro)
+serviceAccount*.json
+credentials*.json
+secrets/
+config/credentials/
+
+# ---------- Logs, caches e temporários ----------
+*.log
+*.pid
+*.seed
+*.pid.lock
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+.pnpm-debug.log*
+
+# Sistemas / editores
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+.Trash-*
+.spotlight-v100/
+.fseventsd/
+.dropbox*
+.vscode/*
+!.vscode/launch.json
+!.vscode/extensions.json
+.idea/
+*.iml
+*.ipr
+*.iws
+.atom/
+.history
+.svn/
+.swiftpm/
+migrate_working_dir/
+
+# ---------- Flutter / Dart / Pub ----------
+.dart_tool/
+.pub-cache/
+.pub/
+.flutter-plugins
+.flutter-plugins-dependencies
+.flutter-plugins-dependencies.orig
+.flutter-plugins-dependencies.old
+**/doc/api/
+**/ios/Flutter/.last_build_id
+app.*.symbols
+app.*.map.json
+
+# ---------- Builds (todas as plataformas) ----------
+/build/
+/android/build/
+/ios/build/
+/macos/build/
+/linux/build/
+/windows/build/
+/web/build/
+/coverage/
+
+# ---------- Android (caminhos locais do seu PC) ----------
+# local.properties contém sdk.dir/flutter.sdk com caminhos da sua máquina
+android/local.properties
+android/.gradle/
+android/app/debug
+android/app/profile
+android/app/release
+android/.idea/
+*.apk
+*.aab
+*.ap_
+*.dex
+
+# ---------- iOS / macOS ----------
+**/ios/Flutter/Generated.xcconfig
+**/ios/Flutter/ephemeral/
+**/ios/Flutter/flutter_export_environment.sh
+**/Flutter/App.framework
+**/Flutter/Flutter.framework
+**/Flutter/Flutter.podspec
+**/Flutter/app.flx
+**/Flutter/app.zip
+**/Flutter/flutter_assets/
+**/Flutter/flutter_export_environment.sh
+**/Pods/
+**/.symlinks/
+**/DerivedData/
+**/xcuserdata/
+**/generated/
+*.mode1v3
+*.mode2v3
+*.moved-aside
+*.pbxuser
+*.perspectivev3
+**/*sync/
+.sconsign.dblite
+.tags*
+Icon?
+
+# ---------- Windows ----------
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+x64/
+x86/
+*.[Cc]ache
+!*.[Cc]ache/
+**/flutter/ephemeral/
+
+# ---------- Linux ----------
+**/flutter/ephemeral/
+**/.plugin_symlinks/
+
+# ---------- Exceções (arquivos-templo que devem ser versionados) ----------
+!key.properties.example
+!.env.example
