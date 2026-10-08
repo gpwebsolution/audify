@@ -417,6 +417,40 @@ Dois detalhes que o pacote `image` não resolve sozinho:
   diretório de saída é resolvido na isolate principal e viaja no job — o que
   também evita chamar o `path_provider` de dentro do isolate de trabalho.
 
+### Onde ficam as ações (3 pontinhos)
+
+O botão de 3 pontinhos sobre a miniatura foi **removido** da Galeria e dos
+Vídeos: com o zoom em 10 colunas o tile tem cerca de 36dp, e um botão de 48dp
+cobria a foto inteira. As ações foram para dentro de quem já mostra o conteúdo
+em tela cheia, que é onde o usuário está de fato:
+
+| Tela | Menu de ações |
+|---|---|
+| Visualizador de fotos | papel de parede, editar, marca d'água, detalhes, compartilhar, **excluir** |
+| Player de vídeo | adicionar à playlist, compartilhar, detalhes, **excluir** |
+| Player de música | adicionar à playlist, compartilhar, detalhes, **excluir** |
+| Seleção múltipla | compartilhar, adicionar à playlist, inverter seleção, … |
+
+O "excluir" entrou nos três menus: com o ⋮ fora da grade, era o **único**
+caminho para apagar um item a partir de uma miniatura.
+
+Ação que não se aplica vem **desabilitada com o motivo**, nunca oculta — é o
+que impede o "botão que não faz nada" apontado na auditoria.
+
+### Seleção múltipla com menu de 3 pontinhos
+
+A barra de lote listava as ações lado a lado. Com 5+ ações (Arquivos tem seis)
+ela estourava a largura da tela, e as ações ficavam escondidas atrás de
+rolagem horizontal — o usuário nunca as encontrava.
+
+Agora só o essencial fica sempre visível: **contador, selecionar tudo, excluir
+e o menu de 3 pontinhos**. O resto vai para o menu, **com rótulo em texto** (um
+ícone sozinho seria adivinhação) e desabilitado com esmaecimento quando não se
+aplica.
+
+Ganho em todas as abas: **inverter seleção** — a forma rápida de "marcar tudo
+menos este", que antes exigia desmarcar item por item.
+
 ### Grade com densidade ajustável (Galeria e Vídeos)
 
 As duas abas tinham contagem fixa de colunas (3 fotos, 2 vídeos). Agora há um
@@ -438,7 +472,7 @@ porque a miniatura 16:9 encolhe e o texto precisava de mais altura.
 
 ```bash
 flutter analyze        # 0 issues
-flutter test           # 183 testes passando
+flutter test           # 185 testes passando
 flutter build apk --release
 adb install -r build/app/outputs/flutter-apk/app-release.apk
 ```

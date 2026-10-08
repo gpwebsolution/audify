@@ -1,8 +1,11 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
 import '../models/gallery_image_model.dart';
+import '../models/media_ref.dart';
+import '../providers/gallery_provider.dart';
 import '../services/image_actions_service.dart';
 import '../widgets/exif_sheet.dart';
 import '../widgets/media_actions.dart';
@@ -106,9 +109,63 @@ class _PhotoViewerScreenState extends State<PhotoViewerScreen> {
                   ),
                 ),
               ),
+              const Divider(),
+              // Excluir precisa estar AQUI: com o botão de 3 pontinhos removido
+              // da miniatura, este menu é o único caminho para apagar uma foto
+              // a partir da grade.
+              ListTile(
+                leading: Icon(
+                  Icons.delete_outline,
+                  color: Theme.of(context).colorScheme.error,
+                ),
+                title: Text(
+                  'Excluir do aparelho',
+                  style: TextStyle(color: Theme.of(context).colorScheme.error),
+                ),
+                subtitle: const Text('Some da galeria e dos favoritos'),
+                onTap: () => go(() => _deleteImage(context, image)),
+              ),
             ],
           ),
         );
+      },
+    );
+  }
+
+  /// Exclui a foto e sai do visualizador.
+  ///
+  /// Confirma com o diálogo do SO (via [MediaActions.confirmDelete]) e só
+  /// remove da lista quando o nativo confirma. Se a foto for a única do
+  /// visualizador, volta para a galeria em vez de deixar uma tela vazia.
+  Future<void> _deleteImage(BuildContext context, GalleryImage image) async {
+    final NavigatorState navigator = Navigator.of(context);
+    final GalleryProvider gallery = context.read<GalleryProvider>();
+
+    await MediaActions.confirmDelete(
+      context,
+      MediaRef.fromImage(image),
+      label: image.name,
+      onDeleted: (List<MediaRef> removed) async {
+        final bool confirmed = removed.any(
+          (MediaRef r) => r.key == MediaRef.fromImage(image).key,
+        );
+        if (!confirmed) return;
+        await gallery.handleImagesDeleted(<GalleryImage>[image]);
+
+        // A foto sumiu de uma lista que este visualizador recebeu como cópia:
+        // sair da tela é mais honesto do que mostrar uma imagem apagada.
+        if (!navigator.mounted) return;
+        if (widget.images.length <= 1) {
+          navigator.pop();
+        } else {
+          setState(() {
+            // Garante que o índice atual ainda existe depois da remoção.
+            if (_currentIndex >= widget.images.length - 1) {
+              _currentIndex = widget.images.length - 2;
+            }
+            if (_currentIndex < 0) _currentIndex = 0;
+          });
+        }
       },
     );
   }

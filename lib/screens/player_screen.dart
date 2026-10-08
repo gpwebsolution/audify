@@ -4,9 +4,12 @@ import 'package:provider/provider.dart';
 import '../models/media_ref.dart';
 import '../models/song_model.dart';
 import '../providers/player_provider.dart';
+import '../providers/playlist_provider.dart';
 import '../services/audio_service.dart';
 import '../utils/format.dart';
 import '../widgets/album_artwork.dart';
+import '../widgets/media_actions.dart';
+import '../widgets/media_details_sheet.dart';
 import 'music_screen.dart';
 
 /// Player em tela cheia ("Agora tocando").
@@ -44,6 +47,137 @@ class _PlayerScreenState extends State<PlayerScreen> {
     await MusicScreen.deleteSong(context, provider, song);
   }
 
+  /// Menu de ações da faixa em reprodução.
+  ///
+  /// Reúne o que antes estava espalhado (lixeira no AppBar, "adicionar à
+  /// playlist" só na lista) e adiciona o que faltava: detalhes e
+  /// compartilhar. Uma entrada por ação, com o motivo desabilitado quando não
+  /// se aplica — em vez de botão sumindo e o usuário sem saber que existe.
+  Future<void> _showSongActions(
+    BuildContext context,
+    PlayerProvider provider,
+    Song song,
+  ) async {
+    final MediaRef? ref = MediaRef.fromSong(song);
+    final bool isAsset = ref == null;
+    final PlaylistProvider playlists = context.read<PlaylistProvider>();
+    final ScaffoldMessengerState messenger = ScaffoldMessenger.of(context);
+    final ColorScheme colors = Theme.of(context).colorScheme;
+    final bool hasPlaylists = playlists.playlists.isNotEmpty;
+
+    await showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (BuildContext sheetContext) {
+        void go(Future<void> Function() action) {
+          Navigator.pop(sheetContext);
+          action();
+        }
+
+        return SafeArea(
+          child: ListView(
+            shrinkWrap: true,
+            children: <Widget>[
+              ListTile(
+                leading: const Icon(Icons.playlist_add),
+                title: const Text('Adicionar à playlist'),
+                subtitle: hasPlaylists
+                    ? null
+                    : const Text('Crie uma playlist na aba Playlists'),
+                enabled: hasPlaylists,
+                onTap: () =>
+                    go(() => _addCurrentToPlaylist(context, playlists, song)),
+              ),
+              ListTile(
+                leading: const Icon(Icons.share_outlined),
+                title: const Text('Compartilhar'),
+                subtitle: Text(
+                  isAsset
+                      ? 'Faixa embutida no app: não é um arquivo'
+                      : 'WhatsApp, Messenger e outros',
+                ),
+                enabled: !isAsset,
+                onTap: () => go(
+                  () => MediaActions.share(
+                    context,
+                    path: song.filePath ?? '',
+                    name: '${song.title}.mp3',
+                    mimeType: 'audio/mpeg',
+                  ),
+                ),
+              ),
+              ListTile(
+                leading: const Icon(Icons.info_outline),
+                title: const Text('Detalhes'),
+                subtitle: const Text('Álbum, artista, tamanho e caminho'),
+                onTap: () =>
+                    go(() => MediaDetailsSheet.showSong(context, song)),
+              ),
+              const Divider(),
+              ListTile(
+                leading: Icon(
+                  isAsset ? Icons.lock_outline : Icons.delete_outline,
+                  color: isAsset ? null : colors.error,
+                ),
+                title: Text(
+                  isAsset ? 'Excluir do aparelho' : 'Excluir do aparelho',
+                  style: isAsset ? null : TextStyle(color: colors.error),
+                ),
+                subtitle: isAsset
+                    ? const Text(MusicScreen.assetLockedMessage)
+                    : const Text('Some da lista, da fila e das playlists'),
+                onTap: isAsset
+                    ? () {
+                        Navigator.pop(sheetContext);
+                        messenger.showSnackBar(
+                          const SnackBar(
+                            content: Text(MusicScreen.assetLockedMessage),
+                          ),
+                        );
+                      }
+                    : () => go(() => _deleteCurrent(context, provider, song)),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  /// Adiciona a faixa em reprodução a uma playlist escolhida.
+  Future<void> _addCurrentToPlaylist(
+    BuildContext context,
+    PlaylistProvider playlists,
+    Song song,
+  ) async {
+    final ScaffoldMessengerState messenger = ScaffoldMessenger.of(context);
+    await showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (BuildContext sheetContext) => SafeArea(
+        child: ListView.builder(
+          shrinkWrap: true,
+          itemCount: playlists.playlists.length,
+          itemBuilder: (BuildContext _, int index) {
+            final playlist = playlists.playlists[index];
+            return ListTile(
+              leading: const Icon(Icons.queue_music),
+              title: Text(playlist.name),
+              subtitle: Text('${playlist.songCount} faixas'),
+              onTap: () async {
+                await playlists.addSong(playlist.id, song);
+                if (sheetContext.mounted) Navigator.pop(sheetContext);
+                messenger.showSnackBar(
+                  SnackBar(content: Text('Adicionada a "${playlist.name}"')),
+                );
+              },
+            );
+          },
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final PlayerProvider provider = context.watch<PlayerProvider>();
@@ -66,12 +200,13 @@ class _PlayerScreenState extends State<PlayerScreen> {
         title: const Text('Agora tocando'),
         actions: [
           if (song != null)
+            // Menu de 3 pontinhos: as ações da faixa que TOCA ficam aqui, que
+            // é onde o usuário já está. A lixeira isolada foi substituída por
+            // este menu — mesmo padrão do visualizador de fotos.
             IconButton(
-              tooltip: MediaRef.fromSong(song) == null
-                  ? MusicScreen.assetLockedMessage
-                  : 'Excluir do aparelho',
-              icon: const Icon(Icons.delete_outline),
-              onPressed: () => _deleteCurrent(context, provider, song),
+              tooltip: 'Ações da faixa',
+              icon: const Icon(Icons.more_vert),
+              onPressed: () => _showSongActions(context, provider, song),
             ),
         ],
       ),

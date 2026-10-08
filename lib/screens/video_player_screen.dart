@@ -9,10 +9,13 @@ import 'package:video_player/video_player.dart';
 import '../models/media_ref.dart';
 import '../models/video_model.dart';
 import '../models/video_play_queue.dart';
+import '../providers/playlist_provider.dart';
 import '../providers/video_provider.dart';
 import '../services/error_log_service.dart';
 import '../utils/format.dart';
 import '../utils/motion.dart';
+import '../widgets/media_actions.dart';
+import '../widgets/media_details_sheet.dart';
 import 'videos_screen.dart';
 
 /// Player de vídeo em tela cheia, no padrão do player de música.
@@ -351,6 +354,94 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     });
   }
 
+  /// Menu de ações do vídeo em reprodução.
+  ///
+  /// Reúne compartilhar, detalhes, adicionar à playlist e excluir num só
+  /// lugar. Ação impossível vem desabilitada COM o motivo, em vez de sumir —
+  /// o mesmo cuidado do player de música.
+  Future<void> _showVideoActions(BuildContext context) async {
+    final Video video = _current;
+    final PlaylistProvider playlists = context.read<PlaylistProvider>();
+    final NavigatorState navigator = Navigator.of(context);
+    final ScaffoldMessengerState messenger = ScaffoldMessenger.of(context);
+    final bool hasPlaylists = playlists.playlists.isNotEmpty;
+
+    await showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (BuildContext sheetContext) {
+        void go(Future<void> Function() action) {
+          Navigator.pop(sheetContext);
+          action();
+        }
+
+        return SafeArea(
+          child: ListView(
+            shrinkWrap: true,
+            children: <Widget>[
+              ListTile(
+                leading: const Icon(Icons.playlist_add),
+                title: const Text('Adicionar à playlist'),
+                subtitle: hasPlaylists
+                    ? null
+                    : const Text('Crie uma playlist na aba Playlists'),
+                enabled: hasPlaylists,
+                onTap: () => go(() async {
+                  await playlists.addVideo(playlists.playlists.first.id, video);
+                  messenger.showSnackBar(
+                    SnackBar(
+                      content: Text(
+                        'Adicionado a "${playlists.playlists.first.name}"',
+                      ),
+                    ),
+                  );
+                }),
+              ),
+              ListTile(
+                leading: const Icon(Icons.share_outlined),
+                title: const Text('Compartilhar'),
+                subtitle: const Text('WhatsApp, Messenger e outros'),
+                onTap: () => go(
+                  () => MediaActions.share(
+                    context,
+                    path: video.path,
+                    name: video.displayName,
+                    mimeType: 'video/mp4',
+                  ),
+                ),
+              ),
+              ListTile(
+                leading: const Icon(Icons.info_outline),
+                title: const Text('Detalhes'),
+                subtitle: const Text('Duração, tamanho, resolução e caminho'),
+                onTap: () =>
+                    go(() => MediaDetailsSheet.showVideo(context, video)),
+              ),
+              const Divider(),
+              ListTile(
+                leading: Icon(
+                  Icons.delete_outline,
+                  color: Theme.of(context).colorScheme.error,
+                ),
+                title: Text(
+                  'Excluir do aparelho',
+                  style: TextStyle(color: Theme.of(context).colorScheme.error),
+                ),
+                subtitle: const Text('Some da lista e das playlists'),
+                onTap: () => go(() async {
+                  await _deleteCurrent(context);
+                  if (navigator.mounted && navigator.canPop()) {
+                    navigator.pop();
+                  }
+                }),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
   /// Um toque no vídeo: mostra os controles ou os esconde. Toque em play/pause
   /// além de alternar a reprodução também reacende a UI.
   void _toggleControlsVisibility() {
@@ -390,11 +481,14 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
           overflow: TextOverflow.ellipsis,
         ),
         actions: [
-          // ---- Excluir do aparelho ----
+          // ---- Menu de ações do vídeo ----
+          // Substitui a lixeira isolada: as ações do vídeo ficam aqui, que é
+          // onde o usuário já está. Mesmo padrão do player de música e do
+          // visualizador de fotos.
           IconButton(
-            tooltip: 'Excluir do aparelho',
-            icon: const Icon(Icons.delete_outline),
-            onPressed: () => _deleteCurrent(context),
+            tooltip: 'Ações do vídeo',
+            icon: const Icon(Icons.more_vert),
+            onPressed: () => _showVideoActions(context),
           ),
           // ---- Girar vídeo ----
           IconButton(
