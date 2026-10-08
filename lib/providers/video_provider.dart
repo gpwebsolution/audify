@@ -51,6 +51,21 @@ class VideoProvider extends ChangeNotifier {
     _notify();
   }
 
+  /// Remove vídeos confirmados como APAGADOS do aparelho.
+  ///
+  /// Filtra a lista, joga fora as miniaturas (memória + disco) e notifica
+  /// a UI. Não recarrega do MediaStore de propósito: o usuário acabou de
+  /// ver o sistema apagar, e a fila do provider sai do caminho da exclusão.
+  Future<void> handleVideosDeleted(List<Video> deleted) async {
+    if (deleted.isEmpty) return;
+    final Set<int> ids = deleted.map((Video v) => v.id).toSet();
+    _videos = _videos.where((Video v) => !ids.contains(v.id)).toList();
+    for (final Video video in deleted) {
+      await VideoQueryService.clearThumbnail(video.id);
+    }
+    _notify();
+  }
+
   /// Pede a permissão de vídeos (dialog do sistema) e recarrega a lista.
   Future<bool> requestAccess() async {
     final bool granted = await PermissionService.requestVideosAccess();

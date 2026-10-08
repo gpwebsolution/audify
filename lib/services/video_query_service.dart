@@ -67,4 +67,11 @@ class VideoQueryService {
   }
 
   static void clearCache() => _thumbCache.clear();
+
+  /// Remove a miniatura de um vídeo do cache de memória e do disco (usado
+  /// quando o vídeo é excluído do aparelho).
+  static Future<void> clearThumbnail(int id) async {
+    _thumbCache.remove(id);
+    await ThumbnailDiskCache.remove('video_$id');
+  }
 }

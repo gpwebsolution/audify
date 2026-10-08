@@ -98,5 +98,16 @@ class PdfQueryService {
     }
   }
 
-  static void clearCache() => _thumbCache.clear();
+  static void clearCache() {
+    _thumbCache.clear();
+    _pageCountCache.clear();
+  }
+
+  /// Limpa tudo que o serviço guardou sobre um PDF (miniatura em memória e
+  /// em disco + nº de páginas) — usado quando o arquivo é excluído.
+  static Future<void> clearForPath(String path) async {
+    _thumbCache.remove(path);
+    _pageCountCache.remove(path);
+    await ThumbnailDiskCache.remove('pdf_${diskKeyForPdfPath(path)}');
+  }
 }

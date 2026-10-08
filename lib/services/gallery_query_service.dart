@@ -101,6 +101,15 @@ class GalleryQueryService {
   }
 
   static void clearCache() => _thumbCache.clear();
+
+  /// Remove a miniatura de uma foto do cache de memória e do disco.
+  ///
+  /// Chamado quando a foto é excluída do aparelho: sem isso o JPEG órfão
+  /// continuaria ocupando espaço (e reapareceria se o id fosse reusado).
+  static Future<void> clearThumbnail(int id) async {
+    _thumbCache.remove(id);
+    await ThumbnailDiskCache.remove('gallery_$id');
+  }
 }
 
 /// Cache em disco de miniaturas (dir de cache do app, com limite duplo).
@@ -141,6 +150,19 @@ class ThumbnailDiskCache {
       unawaited(_pruneIfNeeded(dir.path));
     } catch (e) {
       // Cache é otimização: falha de escrita é ignorada.
+    }
+  }
+
+  /// Apaga uma entrada do cache em disco (miniatura de um arquivo removido).
+  ///
+  /// Best-effort: cache é otimização, então a falha é logada e engolida.
+  static Future<void> remove(String key) async {
+    try {
+      final Directory dir = await _dir();
+      final File file = File('${dir.path}/$key.jpg');
+      if (file.existsSync()) await file.delete();
+    } catch (e) {
+      debugPrint('[ThumbCache] não foi possível remover $key: $e');
     }
   }
 

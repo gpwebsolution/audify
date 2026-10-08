@@ -81,6 +81,17 @@ class PdfProvider extends ChangeNotifier {
     }
   }
 
+  /// Remove PDFs confirmados como APAGADOS do aparelho.
+  ///
+  /// Filtra a lista e avisa a UI. Limpeza de progresso/favoritos/miniatura
+  /// é responsabilidade da tela (ela tem o [PdfFavoritesService] em mãos).
+  Future<void> handlePdfsDeleted(List<PdfFile> deleted) async {
+    if (deleted.isEmpty) return;
+    final Set<String> paths = deleted.map((PdfFile p) => p.path).toSet();
+    _pdfs = _pdfs.where((PdfFile p) => !paths.contains(p.path)).toList();
+    _notify();
+  }
+
   void _notify() {
     if (!_isDisposed) notifyListeners();
   }
