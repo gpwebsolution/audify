@@ -122,4 +122,51 @@ class PlaybackQueue {
       RepeatMode.one => RepeatMode.off,
     };
   }
+
+  /// Remove da fila as faixas com os ids informados (arquivos excluídos do
+  /// aparelho) e reencaixa o índice corrente.
+  ///
+  /// Se a faixa que TOCAVA foi removida, o índice passa a apontar para a
+  /// próxima faixa sobrevivente na mesma posição — é o índice que o
+  /// PlayerProvider usa para "pular para a próxima". Se nada sobrar, a
+  /// fila esvazia (-1).
+  ///
+  /// Devolve as faixas efetivamente removidas para o caller decidir como
+  /// seguir a reprodução.
+  List<Song> removeSongs(Set<String> removedIds) {
+    if (removedIds.isEmpty || _queue.isEmpty) return const [];
+
+    final List<Song> removed =
+        _queue.where((s) => removedIds.contains(s.id)).toList();
+    if (removed.isEmpty) return const [];
+
+    final List<Song> before = _queue;
+    final int currentIndex = _queueIndex;
+    _queue = before.where((s) => !removedIds.contains(s.id)).toList();
+
+    if (_shuffle) {
+      // A ordem original também é a fila "de verdade" do shuffle: sem isto
+      // a faixa removida voltaria ao desativar o embaralhamento.
+      _originalOrder =
+          _originalOrder.where((s) => !removedIds.contains(s.id)).toList();
+    }
+
+    final Song? current = currentIndex >= 0 && currentIndex < before.length
+        ? before[currentIndex]
+        : null;
+
+    if (current == null || removedIds.contains(current.id)) {
+      // A corrente saiu: herda a posição da antiga, ajustada para a fila
+      // encurtada (o sucessor agora ocupa o mesmo índice, salvo no fim).
+      _queueIndex = _queue.isEmpty
+          ? -1
+          : currentIndex < 0
+              ? 0
+              : currentIndex.clamp(0, _queue.length - 1);
+    } else {
+      final int idx = _queue.indexWhere((s) => s.id == current.id);
+      _queueIndex = idx;
+    }
+    return removed;
+  }
 }

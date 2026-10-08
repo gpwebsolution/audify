@@ -86,9 +86,9 @@ class PlayerProvider extends ChangeNotifier {
     SongRepository? songRepository,
     SessionRepository? sessionRepository,
     PlaybackQueue? playbackQueue,
-  })  : _songRepository = songRepository ?? SongRepository(),
-        _sessionRepository = sessionRepository ?? SessionRepository(),
-        _playbackQueue = playbackQueue ?? PlaybackQueue() {
+  }) : _songRepository = songRepository ?? SongRepository(),
+       _sessionRepository = sessionRepository ?? SessionRepository(),
+       _playbackQueue = playbackQueue ?? PlaybackQueue() {
     // Botões da notificação/tela de bloqueio (audio_service) delegam a
     // navegação da fila para este provider.
     _audioService.onSkipToNext = next;
@@ -122,11 +122,14 @@ class PlayerProvider extends ChangeNotifier {
   /// (Re)carrega o catálogo e reconstrói a fila.
   Future<void> _loadSongs({required bool includeDevice}) async {
     try {
-      final List<Song> device =
-          includeDevice ? await _songRepository.loadDeviceSongs() : const [];
+      final List<Song> device = includeDevice
+          ? await _songRepository.loadDeviceSongs()
+          : const [];
       final List<Song> assets = await _songRepository.loadAssetSongs();
-      _songs = [...device, ...assets]
-        ..sort((a, b) => a.title.toLowerCase().compareTo(b.title.toLowerCase()));
+      _songs = [
+        ...device,
+        ...assets,
+      ]..sort((a, b) => a.title.toLowerCase().compareTo(b.title.toLowerCase()));
       _applySearchFilter();
     } catch (e) {
       _errorMessage = 'Falha ao carregar a lista de músicas: $e';
@@ -142,7 +145,9 @@ class PlayerProvider extends ChangeNotifier {
     _notify();
 
     _permission = _mapResult(await PermissionService.requestAudioAccess());
-    await _loadSongs(includeDevice: _permission == AudioPermissionState.granted);
+    await _loadSongs(
+      includeDevice: _permission == AudioPermissionState.granted,
+    );
   }
 
   AudioPermissionState _mapResult(AudioAccessResult result) {
@@ -185,9 +190,7 @@ class PlayerProvider extends ChangeNotifier {
     if (index < 0 || index >= _visibleSongs.length) return;
     _rebuildQueue();
     _playbackQueue.setIndex(
-      _playbackQueue.queue.indexWhere(
-        (s) => s.id == _visibleSongs[index].id,
-      ),
+      _playbackQueue.queue.indexWhere((s) => s.id == _visibleSongs[index].id),
     );
     await _playCurrent();
   }
@@ -387,6 +390,67 @@ class PlayerProvider extends ChangeNotifier {
     final Song? song = _currentSong;
     if (song == null) return;
     await _sessionRepository.save(song, _position);
+  }
+
+  /// Arquivos de música foram EXCLUÍDOS do aparelho.
+  ///
+  /// Faz a limpeza completa para que nenhum estado aponte para um arquivo
+  /// que não existe mais: sai do catálogo, sai da fila, sai do estado de
+  /// retomada e, se era a faixa que tocava, para o áudio e avança para a
+  /// próxima sobrevivente.
+  ///
+  /// Chamar com lista vazia é no-op (nada a atualizar).
+  Future<void> handleSongsDeleted(List<Song> deleted) async {
+    if (deleted.isEmpty) return;
+
+    final Set<String> ids = deleted.map((Song s) => s.id).toSet();
+    final Song? playing = _currentSong;
+    final bool removedCurrent = playing != null && ids.contains(playing.id);
+
+    // Sucessor escolhido ANTES de remover, para não depender do índice
+    // antigo nem da lista já filtrada.
+    final List<Song> survivors = _playbackQueue.queue
+        .where((Song s) => !ids.contains(s.id))
+        .toList();
+    Song? successor;
+    if (removedCurrent && survivors.isNotEmpty) {
+      final int current = _playbackQueue.queueIndex;
+      successor = current < 0 || _playbackQueue.shuffle
+          ? survivors.first
+          : survivors[current.clamp(0, survivors.length - 1)];
+    }
+
+    _songs = _songs.where((Song s) => !ids.contains(s.id)).toList();
+    _applySearchFilter(); // refiltra e reconstrói a fila (notify incluso)
+
+    if (removedCurrent) {
+      // A sessão salva aponta para um arquivo morto: some com ela. Só quando
+      // a excluída era a que tocava — excluir outra faixa não pode derrubar o
+      // "continuar de onde parou" de uma música que continua no aparelho.
+      await _sessionRepository.clear();
+
+      await _audioService.stop();
+      _currentSong = null;
+      _position = Duration.zero;
+      _duration = Duration.zero;
+      _status = PlayerStatus.idle;
+      _lastSessionSave = DateTime.fromMillisecondsSinceEpoch(0);
+      _notify();
+
+      final int nextIndex = successor == null
+          ? -1
+          : _visibleSongs.indexWhere((Song s) => s.id == successor!.id);
+      if (nextIndex >= 0) await playVisibleAt(nextIndex);
+      return;
+    }
+
+    // A faixa que tocava sobreviveu: a fila já foi reencaixada, mas o
+    // objeto corrente precisa voltar a ser o da lista nova.
+    if (playing != null) {
+      final int idx = _songs.indexWhere((Song s) => s.id == playing.id);
+      if (idx >= 0) _currentSong = _songs[idx];
+    }
+    _notify();
   }
 
   @override

@@ -56,4 +56,28 @@ void main() {
     expect(restored.$1, isNull);
     expect(restored.$2, Duration.zero);
   });
+
+
+  test('clear apaga a sessao salva (faixa excluida do aparelho)', () async {
+    SharedPreferences.setMockInitialValues({});
+    final SessionRepository repository = SessionRepository();
+    await repository.save(
+      Song.fromAsset(assetPath: 'assets/songs/a.mp3'),
+      const Duration(seconds: 42),
+    );
+    expect((await repository.load()).$1, isNotNull);
+
+    await repository.clear();
+
+    final (Song?, Duration) afterClear = await repository.load();
+    expect(afterClear.$1, isNull);
+    expect(afterClear.$2, Duration.zero);
+  });
+
+  test('clear em sessao inexistente nao lanca', () async {
+    SharedPreferences.setMockInitialValues({});
+    final SessionRepository repository = SessionRepository();
+    await repository.clear();
+    expect((await repository.load()).$1, isNull);
+  });
 }

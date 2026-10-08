@@ -26,6 +26,20 @@ class SessionRepository {
     }
   }
 
+  /// Apaga a sessão salva.
+  ///
+  /// Usado quando a faixa salva é excluída do aparelho: retomar a sessão
+  /// apontaria para um arquivo inexistente.
+  Future<void> clear() async {
+    try {
+      final SharedPreferences prefs = await SharedPreferences.getInstance();
+      await prefs.remove(_lastSongKey);
+      await prefs.remove(_lastPositionKey);
+    } catch (e) {
+      debugPrint('[SessionRepository] clear falhou: $e');
+    }
+  }
+
   /// Retorna a última faixa salva (ou null) e sua posição.
   ///
   /// Dados corrompidos/ilegíveis retornam (null, zero) — nunca lançam.

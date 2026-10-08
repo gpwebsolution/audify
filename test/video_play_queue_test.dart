@@ -116,5 +116,62 @@ void main() {
       q.setShuffle(true);
       expect(q.shuffle, isTrue);
     });
+
+    // Excluir um vídeo não pode deixá-lo na fila: o player abriria um
+    // arquivo morto ao avançar.
+    group('removeVideos', () {
+      test('remove o vídeo da fila e reencaixa o índice', () {
+        final q = VideoPlayQueue(queue(4), initialIndex: 1);
+        final removed = q.removeVideos(<int>{2});
+
+        expect(removed.single.id, 2);
+        expect(q.length, 3);
+        expect(q.order.map((v) => v.id), isNot(contains(2)));
+        // O corrente (id 1) sobreviveu e continua na mesma posição.
+        expect(q.current.id, 1);
+        expect(q.index, 1);
+      });
+
+      test('vídeo removido não volta ao desligar o aleatório', () {
+        final q = VideoPlayQueue(queue(4), initialIndex: 0);
+        q.setShuffle(true);
+        q.removeVideos(<int>{3});
+
+        q.setShuffle(false);
+        expect(q.order.map((Video v) => v.id), isNot(contains(3)));
+        expect(q.length, 3);
+      });
+
+      test('remove o que tocava e herda a posição do sucessor', () {
+        final q = VideoPlayQueue(queue(4), initialIndex: 2);
+        q.removeVideos(<int>{2});
+
+        expect(q.length, 3);
+        // Índice 2 agora é o id 3, que ocupa a posição do removido — e sendo
+        // o último da fila, não há sucessor seguinte.
+        expect(q.current.id, 3);
+        expect(q.index, 2);
+        expect(q.next(), isNull);
+      });
+      test('esvaziar a fila deixa o índice em zero e next() nulo', () {
+        final q = VideoPlayQueue(queue(2), initialIndex: 0);
+        q.removeVideos(<int>{0, 1});
+
+        expect(q.length, 0);
+        expect(q.isEmpty, isTrue);
+        expect(q.index, 0);
+        expect(q.next(), isNull);
+      });
+
+      test('ids sem correspondência não alteram a fila', () {
+        final q = VideoPlayQueue(queue(3), initialIndex: 1);
+        expect(q.removeVideos(<int>{99}), isEmpty);
+        expect(q.length, 3);
+        expect(q.current.id, 1);
+
+        expect(q.removeVideos(<int>{}), isEmpty);
+        expect(q.length, 3);
+      });
+    });
   });
 }

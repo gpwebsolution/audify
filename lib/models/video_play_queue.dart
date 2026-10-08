@@ -125,4 +125,38 @@ class VideoPlayQueue {
     }
     return null;
   }
+
+  /// Remove da fila os vídeos com os ids informados (arquivos excluídos do
+  /// aparelho) e reencaixa o índice corrente.
+  ///
+  /// Sem isto, excluir o vídeo que estava tocando deixaria o arquivo morto na
+  /// fila: a tela sairia, mas o "próximo" tentaria abrir um arquivo que não
+  /// existe mais.
+  ///
+  /// A ordem original também é limpa, senão o vídeo removido voltaria ao
+  /// desligar o aleatório. Devolve os vídeos efetivamente removidos.
+  List<Video> removeVideos(Set<int> removedIds) {
+    if (removedIds.isEmpty || isEmpty) return const <Video>[];
+
+    final List<Video> removed = _order
+        .where((Video v) => removedIds.contains(v.id))
+        .toList();
+    if (removed.isEmpty) return const <Video>[];
+
+    final Video? current = _order.isEmpty ? null : _order[index];
+    _order.removeWhere((Video v) => removedIds.contains(v.id));
+    _original.removeWhere((Video v) => removedIds.contains(v.id));
+
+    if (_order.isEmpty) {
+      index = 0;
+    } else if (current == null || removedIds.contains(current.id)) {
+      // O que tocava saiu: o sucessor herda a posição antiga, ajustada para a
+      // fila encurtada.
+      index = index.clamp(0, _order.length - 1);
+    } else {
+      final int idx = _order.indexWhere((Video v) => v.id == current.id);
+      index = idx < 0 ? index.clamp(0, _order.length - 1) : idx;
+    }
+    return removed;
+  }
 }

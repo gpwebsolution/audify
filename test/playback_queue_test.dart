@@ -140,4 +140,109 @@ void main() {
       expect(queue.current, _song(9));
     });
   });
+
+  group('PlaybackQueue — remoção de faixa excluída', () {
+    test('removeSongs tira a faixa da fila e devolve o que saiu', () {
+      final PlaybackQueue queue = PlaybackQueue();
+      queue.setQueue(_threeSongs(), 0);
+
+      final List<Song> removed = queue.removeSongs(<String>{_song(2).id});
+
+      expect(removed.single, _song(2));
+      expect(queue.queue.length, 2);
+      expect(queue.queue.contains(_song(2)), isFalse);
+    });
+
+    test('nada é removido para id desconhecido', () {
+      final PlaybackQueue queue = PlaybackQueue();
+      queue.setQueue(_threeSongs(), 0);
+
+      final List<Song> removed = queue.removeSongs(<String>{'inexistente'});
+
+      expect(removed, isEmpty);
+      expect(queue.queue.length, 3);
+      expect(queue.queueIndex, 0);
+    });
+
+    test('ids vazios não alteram a fila', () {
+      final PlaybackQueue queue = PlaybackQueue();
+      queue.setQueue(_threeSongs(), 2);
+
+      expect(queue.removeSongs(<String>{}), isEmpty);
+      expect(queue.queue.length, 3);
+      expect(queue.queueIndex, 2);
+    });
+
+    test('remoção de faixa QUE NÃO TOCAVA mantém a corrente', () {
+      final PlaybackQueue queue = PlaybackQueue();
+      queue.setQueue(_threeSongs(), 1);
+      expect(queue.current, _song(2));
+
+      queue.removeSongs(<String>{_song(3).id});
+
+      expect(queue.current, _song(2));
+      expect(queue.queueIndex, 1);
+    });
+
+    test('remoção da faixa corrente avança para a próxima sobrevivente', () {
+      final PlaybackQueue queue = PlaybackQueue();
+      queue.setQueue(_threeSongs(), 0);
+
+      queue.removeSongs(<String>{_song(1).id});
+
+      // A posição 0 agora é a faixa 2 — é dela que a reprodução segue.
+      expect(queue.queueIndex, 0);
+      expect(queue.current, _song(2));
+    });
+
+    test('remoção da ÚLTIMA faixa com corrente no fim fica no índice válido',
+        () {
+      final PlaybackQueue queue = PlaybackQueue();
+      queue.setQueue(_threeSongs(), 2);
+      expect(queue.current, _song(3));
+
+      queue.removeSongs(<String>{_song(3).id});
+
+      expect(queue.queueIndex, 1);
+      expect(queue.current, _song(2));
+    });
+
+    test('remover todas as faixas esvazia a fila', () {
+      final PlaybackQueue queue = PlaybackQueue();
+      queue.setQueue(_threeSongs(), 1);
+
+      queue.removeSongs(<String>{_song(1).id, _song(2).id, _song(3).id});
+
+      expect(queue.isEmpty, isTrue);
+      expect(queue.queueIndex, -1);
+      expect(queue.current, isNull);
+      expect(queue.nextIndex(), isNull);
+    });
+
+    test('remoção em lote tira todas de uma vez', () {
+      final PlaybackQueue queue = PlaybackQueue();
+      queue.setQueue(_threeSongs(), 0);
+
+      final List<Song> removed = queue.removeSongs(<String>{
+        _song(1).id,
+        _song(3).id,
+      });
+
+      expect(removed.length, 2);
+      expect(queue.queue.single, _song(2));
+      expect(queue.current, _song(2));
+    });
+
+    test('com shuffle a faixa removida não volta ao desativar', () {
+      final PlaybackQueue queue = PlaybackQueue(random: Random(7));
+      queue.setQueue(_threeSongs(), 0);
+      queue.toggleShuffle(); // ativa
+
+      queue.removeSongs(<String>{_song(1).id});
+      queue.toggleShuffle(); // desativa -> restaura a ordem original
+
+      expect(queue.queue.contains(_song(1)), isFalse);
+      expect(queue.queue.length, 2);
+    });
+  });
 }
