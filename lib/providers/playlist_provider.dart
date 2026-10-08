@@ -42,7 +42,7 @@ class PlaylistProvider extends ChangeNotifier {
   String? get errorMessage => _errorMessage;
 
   PlaylistProvider(this._player, {PlaylistRepository? repository})
-      : _repository = repository ?? PlaylistRepository() {
+    : _repository = repository ?? PlaylistRepository() {
     reload();
   }
 
@@ -50,15 +50,16 @@ class PlaylistProvider extends ChangeNotifier {
     _isLoading = true;
     _notify();
     try {
-      final List<Map<String, Object?>> rows =
-          await _repository.getPlaylists();
+      final List<Map<String, Object?>> rows = await _repository.getPlaylists();
       _playlists = rows
-          .map((row) => Playlist(
-                id: row['id'] as int,
-                name: row['name'] as String,
-                songCount: ((row['song_count'] as num?) ?? 0).toInt(),
-                videoCount: ((row['video_count'] as num?) ?? 0).toInt(),
-              ))
+          .map(
+            (row) => Playlist(
+              id: row['id'] as int,
+              name: row['name'] as String,
+              songCount: ((row['song_count'] as num?) ?? 0).toInt(),
+              videoCount: ((row['video_count'] as num?) ?? 0).toInt(),
+            ),
+          )
           .toList();
     } catch (e) {
       _errorMessage = 'Falha ao carregar playlists: $e';
@@ -124,6 +125,42 @@ class PlaylistProvider extends ChangeNotifier {
     }
   }
 
+  /// Adiciona várias faixas a uma playlist de uma vez (modo seleção).
+  ///
+  /// Uma transação no banco e **um** [reload] no fim — o laço sobre [addSong]
+  /// fazia uma query por faixa e deixava a contagem das playlists desatualizada
+  /// na tela.
+  ///
+  /// Devolve quantas faixas entraram de fato. Faixa que já estava na playlist
+  /// não conta, e a UI usa isso para dizer "8 de 10 adicionadas" em vez de
+  /// mentir.
+  Future<int> addSongsToPlaylist(int playlistId, List<Song> songs) async {
+    if (songs.isEmpty) return 0;
+    try {
+      final int added = await _repository.addSongs(playlistId, songs);
+      await reload();
+      return added;
+    } catch (e) {
+      _errorMessage = 'Não foi possível adicionar as faixas: $e';
+      _notify();
+      return 0;
+    }
+  }
+
+  /// Adiciona vários vídeos a uma playlist de uma vez (modo seleção).
+  Future<int> addVideosToPlaylist(int playlistId, List<Video> videos) async {
+    if (videos.isEmpty) return 0;
+    try {
+      final int added = await _repository.addVideos(playlistId, videos);
+      await reload();
+      return added;
+    } catch (e) {
+      _errorMessage = 'Não foi possível adicionar os vídeos: $e';
+      _notify();
+      return 0;
+    }
+  }
+
   /// Aplica a nova ordem de faixas de uma playlist (drag & drop).
   Future<void> reorder(int playlistId, List<Song> orderedSongs) async {
     try {
@@ -141,8 +178,9 @@ class PlaylistProvider extends ChangeNotifier {
   Future<void> playPlaylist(int playlistId, Song startAt) async {
     final List<Song> songs = await songsOf(playlistId);
     if (songs.isEmpty) return;
-    final int startIndex =
-        songs.indexWhere((s) => s.id == startAt.id).clamp(0, songs.length - 1);
+    final int startIndex = songs
+        .indexWhere((s) => s.id == startAt.id)
+        .clamp(0, songs.length - 1);
     await _player.playQueue(songs, startIndex);
   }
 
@@ -169,20 +207,31 @@ class PlaylistProvider extends ChangeNotifier {
     }
   }
 
-  /// Remove um vídeo de todas as playlists (arquivo excluído do aparelho).
-  Future<void> removeVideoFromAll(Video video) async {
+  /// Remove músicas de TODAS as playlists (arquivos excluídos do aparelho).
+  ///
+  /// Lote: apaga os registros de uma vez e recarrega as contagens — sem o
+  /// [reload] a lista de playlists continuaria mostrando o item fantasma.
+  Future<void> removeSongsFromAll(List<Song> songs) async {
+    if (songs.isEmpty) return;
     try {
-      await _repository.removeVideoFromAll(video.id);
+      for (final Song song in songs) {
+        await _repository.removeSongFromAll(song.id);
+      }
+      await reload();
     } catch (e) {
       _errorMessage = 'Não foi possível atualizar as playlists: $e';
       _notify();
     }
   }
 
-  /// Remove uma música de todas as playlists (arquivo excluído do aparelho).
-  Future<void> removeSongFromAll(Song song) async {
+  /// Remove vídeos de TODAS as playlists (arquivos excluídos do aparelho).
+  Future<void> removeVideosFromAll(List<Video> videos) async {
+    if (videos.isEmpty) return;
     try {
-      await _repository.removeSongFromAll(song.id);
+      for (final Video video in videos) {
+        await _repository.removeVideoFromAll(video.id);
+      }
+      await reload();
     } catch (e) {
       _errorMessage = 'Não foi possível atualizar as playlists: $e';
       _notify();

@@ -159,10 +159,7 @@ class PlaylistDatabase {
       whereArgs: [playlistId],
       orderBy: 'position ASC',
     );
-    return rows
-        .map(Song.fromStored)
-        .whereType<Song>()
-        .toList();
+    return rows.map(Song.fromStored).whereType<Song>().toList();
   }
 
   /// Adiciona uma faixa ao fim da playlist (idempotente).
@@ -174,8 +171,7 @@ class PlaylistDatabase {
       where: 'playlist_id = ?',
       whereArgs: [playlistId],
     );
-    final int nextPosition =
-        ((rows.firstOrNull?['max_pos'] as int?) ?? -1) + 1;
+    final int nextPosition = ((rows.firstOrNull?['max_pos'] as int?) ?? -1) + 1;
 
     final Map<String, Object?> values = song.toStored()
       ..['playlist_id'] = playlistId
@@ -251,8 +247,7 @@ class PlaylistDatabase {
       where: 'playlist_id = ?',
       whereArgs: [playlistId],
     );
-    final int nextPosition =
-        ((rows.firstOrNull?['max_pos'] as int?) ?? -1) + 1;
+    final int nextPosition = ((rows.firstOrNull?['max_pos'] as int?) ?? -1) + 1;
 
     final Map<String, Object?> values = video.toStored()
       ..['playlist_id'] = playlistId
@@ -263,6 +258,111 @@ class PlaylistDatabase {
       values,
       conflictAlgorithm: ConflictAlgorithm.ignore,
     );
+  }
+
+  /// Separador usado no `GROUP_CONCAT` dos ids: o caractere de controle
+  /// ASCII 31 (unit separator). Escolhido porque nunca aparece num id do
+  /// MediaStore nem num caminho de asset, então o split é seguro.
+  static const String kGroupSeparator = '\u001f';
+
+  /// Adiciona VÁRIAS faixas ao fim da playlist numa transação única.
+  ///
+  /// Existe para o modo de seleção múltipla: chamar [addSong] em laço fazia
+  /// uma query de `MAX(position)` + um insert por faixa (10 faixas = 20
+  /// operações, sem atomicidade). Aqui a posição inicial e a lista de ids já
+  /// presentes são lidas UMA vez e os inserts correm numa transação — ou entra
+  /// tudo, ou nada.
+  ///
+  /// Devolve quantas faixas entraram **de fato**. Faixa repetida na mesma
+  /// playlist é contada como ignorada: o `ConflictAlgorithm.ignore` a
+  /// descartaria, mas o laço interno já a elimina para o contador não mentir.
+  static Future<int> addSongs(int playlistId, List<Song> songs) async {
+    if (songs.isEmpty) return 0;
+    final Database db = await _database();
+
+    return db.transaction<int>((Transaction txn) async {
+      // Query única com as duas informações que o lote precisa.
+      final List<Map<String, Object?>> rows = await txn.rawQuery(
+        'SELECT MAX(position) AS max_pos, '
+        'GROUP_CONCAT(song_id, char(31)) AS ids '
+        'FROM playlist_songs WHERE playlist_id = ?',
+        <Object?>[playlistId],
+      );
+      final Map<String, Object?> row = rows.first;
+      int position = ((row['max_pos'] as int?) ?? -1) + 1;
+      final Set<String> existing = <String>{
+        if (row['ids'] is String)
+          ...(row['ids']! as String)
+              .split(kGroupSeparator)
+              .where((String id) => id.isNotEmpty),
+      };
+
+      // Ignora repetidas do próprio lote e as que já estão na playlist.
+      final Set<String> batch = <String>{};
+      final List<Song> toInsert = <Song>[
+        for (final Song song in songs)
+          if (batch.add(song.id) && !existing.contains(song.id)) song,
+      ];
+      if (toInsert.isEmpty) return 0;
+
+      final Batch insertBatch = txn.batch();
+      for (final Song song in toInsert) {
+        insertBatch.insert(
+          'playlist_songs',
+          song.toStored()
+            ..['playlist_id'] = playlistId
+            ..['position'] = position,
+          conflictAlgorithm: ConflictAlgorithm.ignore,
+        );
+        position++;
+      }
+      await insertBatch.commit(noResult: true);
+      return toInsert.length;
+    });
+  }
+
+  /// Adiciona VÁRIOS vídeos numa transação única (mesmo motivo de [addSongs]).
+  static Future<int> addVideos(int playlistId, List<Video> videos) async {
+    if (videos.isEmpty) return 0;
+    final Database db = await _database();
+
+    return db.transaction<int>((Transaction txn) async {
+      final List<Map<String, Object?>> rows = await txn.rawQuery(
+        'SELECT MAX(position) AS max_pos, '
+        'GROUP_CONCAT(video_id) AS ids '
+        'FROM playlist_videos WHERE playlist_id = ?',
+        <Object?>[playlistId],
+      );
+      final Map<String, Object?> row = rows.first;
+      int position = ((row['max_pos'] as int?) ?? -1) + 1;
+      final Set<String> existing = <String>{
+        if (row['ids'] is String)
+          ...(row['ids']! as String)
+              .split(',')
+              .where((String id) => id.isNotEmpty),
+      };
+
+      final Set<int> batch = <int>{};
+      final List<Video> toInsert = <Video>[
+        for (final Video video in videos)
+          if (batch.add(video.id) && !existing.contains('${video.id}')) video,
+      ];
+      if (toInsert.isEmpty) return 0;
+
+      final Batch insertBatch = txn.batch();
+      for (final Video video in toInsert) {
+        insertBatch.insert(
+          'playlist_videos',
+          video.toStored()
+            ..['playlist_id'] = playlistId
+            ..['position'] = position,
+          conflictAlgorithm: ConflictAlgorithm.ignore,
+        );
+        position++;
+      }
+      await insertBatch.commit(noResult: true);
+      return toInsert.length;
+    });
   }
 
   /// Remove um vídeo da playlist.

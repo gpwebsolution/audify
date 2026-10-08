@@ -32,6 +32,10 @@ class PlaylistRepository {
   Future<void> addSong(int playlistId, Song song) =>
       PlaylistDatabase.addSong(playlistId, song);
 
+  /// Adiciona várias faixas numa transação única. Devolve quantas entraram.
+  Future<int> addSongs(int playlistId, List<Song> songs) =>
+      PlaylistDatabase.addSongs(playlistId, songs);
+
   /// Remove uma faixa da playlist.
   Future<void> removeSong(int playlistId, String songId) =>
       PlaylistDatabase.removeSong(playlistId, songId);
@@ -51,6 +55,10 @@ class PlaylistRepository {
   /// Adiciona um vídeo ao fim da playlist (idempotente).
   Future<void> addVideo(int playlistId, Video video) =>
       PlaylistDatabase.addVideo(playlistId, video);
+
+  /// Adiciona vários vídeos numa transação única. Devolve quantos entraram.
+  Future<int> addVideos(int playlistId, List<Video> videos) =>
+      PlaylistDatabase.addVideos(playlistId, videos);
 
   /// Remove um vídeo da playlist.
   Future<void> removeVideo(int playlistId, int videoId) =>
