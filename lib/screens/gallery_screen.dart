@@ -8,9 +8,11 @@ import '../models/gallery_image_model.dart';
 import '../models/image_album.dart';
 import '../models/media_ref.dart';
 import '../providers/gallery_provider.dart';
+import '../providers/settings_provider.dart';
 import '../services/gallery_query_service.dart';
 import '../utils/motion.dart';
 import '../widgets/exif_sheet.dart';
+import '../widgets/grid_zoom.dart';
 import '../widgets/media_actions.dart';
 import '../widgets/media_details_sheet.dart';
 import '../widgets/selection_bar.dart';
@@ -28,6 +30,13 @@ class _GalleryScreenState extends State<GalleryScreen>
     with MediaSelection<int> {
   final TextEditingController _searchController = TextEditingController();
 
+  /// Padding da grade (mesmo valor passado ao [ResponsiveMediaGrid]).
+  static const EdgeInsets _gridPadding = EdgeInsets.all(4);
+
+  /// Colunas que ficaram de fato (o pedido do usuário pode ser reduzido pela
+  /// largura da tela). Exibido no botão de zoom para não haver surpresa.
+  int _effectiveColumns = 3;
+
   @override
   void dispose() {
     _searchController.dispose();
@@ -37,40 +46,36 @@ class _GalleryScreenState extends State<GalleryScreen>
   @override
   Widget build(BuildContext context) {
     final GalleryProvider provider = context.watch<GalleryProvider>();
+    final SettingsProvider settings = context.watch<SettingsProvider>();
+    // Largura útil da grade = tela menos o padding lateral da grade.
+    final double available =
+        MediaQuery.sizeOf(context).width - _gridPadding.horizontal;
+    // O número pedido pelo usuário é um TETO: numa tela estreita, reduzir
+    // ainda evita thumbnails de 36dp (ilegíveis).
+    final int effective = settings.effectiveColumns(
+      settings.galleryColumns,
+      available,
+    );
+    _effectiveColumns = effective;
 
     return Column(
       children: [
-        // ---- Busca ----
+        // ---- Busca + zoom da grade ----
         Padding(
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
-          child: TextField(
-            controller: _searchController,
-            onChanged: (String value) {
-              provider.setSearchQuery(value);
-              if (isSelectionMode) clearSelection();
-            },
-            decoration: InputDecoration(
-              hintText: 'Buscar foto',
-              prefixIcon: const Icon(Icons.search),
-              suffixIcon: provider.searchQuery.isEmpty
-                  ? null
-                  : IconButton(
-                      tooltip: 'Limpar busca',
-                      icon: const Icon(Icons.clear),
-                      onPressed: () {
-                        _searchController.clear();
-                        provider.setSearchQuery('');
-                      },
-                    ),
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(28),
-                borderSide: BorderSide.none,
+          padding: const EdgeInsets.fromLTRB(16, 12, 8, 4),
+          child: Row(
+            children: <Widget>[
+              Expanded(child: _searchField(provider)),
+              GridZoomButton(
+                label: 'Fotos',
+                columns: settings.galleryColumns,
+                effectiveColumns: _effectiveColumns,
+                onChanged: settings.setGalleryColumns,
               ),
-              filled: true,
-              contentPadding: EdgeInsets.zero,
-            ),
+            ],
           ),
         ),
+
         // ---- Barra de ações em lote (modo seleção) ----
         AnimatedToolbarSwap(
           value: isSelectionMode,
@@ -94,6 +99,39 @@ class _GalleryScreenState extends State<GalleryScreen>
 
         Expanded(child: _buildBody(context, provider)),
       ],
+    );
+  }
+
+  /// Campo de busca da Galeria.
+  Widget _searchField(GalleryProvider provider) {
+    return TextField(
+      controller: _searchController,
+      onChanged: (String value) {
+        provider.setSearchQuery(value);
+        // O universo de itens mudou: manter a marcação deixaria a barra
+        // anunciando N com o lote agindo sobre menos itens.
+        if (isSelectionMode) clearSelection();
+      },
+      decoration: InputDecoration(
+        hintText: 'Buscar foto',
+        prefixIcon: const Icon(Icons.search),
+        suffixIcon: provider.searchQuery.isEmpty
+            ? null
+            : IconButton(
+                tooltip: 'Limpar busca',
+                icon: const Icon(Icons.clear),
+                onPressed: () {
+                  _searchController.clear();
+                  provider.setSearchQuery('');
+                },
+              ),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(28),
+          borderSide: BorderSide.none,
+        ),
+        filled: true,
+        contentPadding: EdgeInsets.zero,
+      ),
     );
   }
 
@@ -147,7 +185,7 @@ class _GalleryScreenState extends State<GalleryScreen>
       );
     }
 
-    // Grade 3 colunas: densidade de fotos (padrão de galerias).
+    // Grade com densidade ajustável (zoom). Fotos: tiles quase quadrados.
     return NotificationListener<ScrollNotification>(
       // Scroll infinito: carrega a próxima página ao chegar perto do fim.
       onNotification: (notification) {
@@ -157,9 +195,9 @@ class _GalleryScreenState extends State<GalleryScreen>
         return false;
       },
       child: GridView.builder(
-        padding: const EdgeInsets.all(4),
-        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-          crossAxisCount: 3,
+        padding: _gridPadding,
+        gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: _effectiveColumns,
           mainAxisSpacing: 4,
           crossAxisSpacing: 4,
         ),

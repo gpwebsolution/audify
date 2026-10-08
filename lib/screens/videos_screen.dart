@@ -6,11 +6,13 @@ import 'package:provider/provider.dart';
 import '../models/media_ref.dart';
 import '../models/video_model.dart';
 import '../providers/playlist_provider.dart';
+import '../providers/settings_provider.dart';
 import '../providers/video_provider.dart';
 import '../services/video_query_service.dart';
 import '../utils/format.dart';
 import '../utils/motion.dart';
 import '../widgets/media_actions.dart';
+import '../widgets/grid_zoom.dart';
 import '../widgets/media_details_sheet.dart';
 import '../widgets/selection_bar.dart';
 import 'video_player_screen.dart';
@@ -66,6 +68,11 @@ class VideosScreen extends StatefulWidget {
 class _VideosScreenState extends State<VideosScreen> with MediaSelection<int> {
   final TextEditingController _searchController = TextEditingController();
 
+  /// Padding da grade. Usado tanto no GridView quanto no cálculo das colunas
+  /// efetivas — se divergirem, o usuário pede 6 e a tela mostra 6 colunas
+  /// apertadas contra a borda.
+  static const EdgeInsets _gridPadding = EdgeInsets.all(12);
+
   @override
   void notifyChanged() => setState(() {});
 
@@ -75,41 +82,67 @@ class _VideosScreenState extends State<VideosScreen> with MediaSelection<int> {
     super.dispose();
   }
 
+  /// Campo de busca da aba de Vídeos.
+  Widget _searchField(VideoProvider provider) {
+    return TextField(
+      controller: _searchController,
+      onChanged: (String value) {
+        provider.setSearchQuery(value);
+        // O universo mudou: manter a marcação faria a barra prometer N e o
+        // SO agir sobre menos.
+        if (isSelectionMode) clearSelection();
+      },
+      decoration: InputDecoration(
+        hintText: 'Buscar vídeo',
+        prefixIcon: const Icon(Icons.search),
+        suffixIcon: provider.searchQuery.isEmpty
+            ? null
+            : IconButton(
+                tooltip: 'Limpar busca',
+                icon: const Icon(Icons.clear),
+                onPressed: () {
+                  _searchController.clear();
+                  provider.setSearchQuery('');
+                },
+              ),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(28),
+          borderSide: BorderSide.none,
+        ),
+        filled: true,
+        contentPadding: EdgeInsets.zero,
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final VideoProvider provider = context.watch<VideoProvider>();
+    final SettingsProvider settings = context.watch<SettingsProvider>();
+    // Mostrado no botão de zoom: o número efetivo, para o usuário ver que
+    // pediu 10 e a tela comportou 6.
+    final double available =
+        MediaQuery.sizeOf(context).width - _gridPadding.horizontal;
+    final int effective = settings.effectiveColumns(
+      settings.videoColumns,
+      available,
+    );
 
     return Column(
       children: [
-        // ---- Busca ----
+        // ---- Busca + zoom da grade ----
         Padding(
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
-          child: TextField(
-            controller: _searchController,
-            onChanged: (String value) {
-              provider.setSearchQuery(value);
-              if (isSelectionMode) clearSelection();
-            },
-            decoration: InputDecoration(
-              hintText: 'Buscar vídeo',
-              prefixIcon: const Icon(Icons.search),
-              suffixIcon: provider.searchQuery.isEmpty
-                  ? null
-                  : IconButton(
-                      tooltip: 'Limpar busca',
-                      icon: const Icon(Icons.clear),
-                      onPressed: () {
-                        _searchController.clear();
-                        provider.setSearchQuery('');
-                      },
-                    ),
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(28),
-                borderSide: BorderSide.none,
+          padding: const EdgeInsets.fromLTRB(16, 12, 8, 4),
+          child: Row(
+            children: <Widget>[
+              Expanded(child: _searchField(provider)),
+              GridZoomButton(
+                label: 'Vídeos',
+                columns: settings.videoColumns,
+                effectiveColumns: effective,
+                onChanged: settings.setVideoColumns,
               ),
-              filled: true,
-              contentPadding: EdgeInsets.zero,
-            ),
+            ],
           ),
         ),
         // ---- Barra de ações em lote (modo seleção) ----
@@ -147,6 +180,16 @@ class _VideosScreenState extends State<VideosScreen> with MediaSelection<int> {
   }
 
   Widget _buildBody(BuildContext context, VideoProvider provider) {
+    // Recalculado aqui porque _buildBody é chamado do build, mas é um método
+    // separado: ler direto da SettingsProvider evita depender de o campo
+    // mutável estar sincronizado.
+    final SettingsProvider settings = context.watch<SettingsProvider>();
+    final double available =
+        MediaQuery.sizeOf(context).width - _gridPadding.horizontal;
+    final int columns = settings.effectiveColumns(
+      settings.videoColumns,
+      available,
+    );
     if (!VideoQueryService.isSupported) {
       return const _EmptyState(
         icon: Icons.videocam_off_outlined,
@@ -176,12 +219,14 @@ class _VideosScreenState extends State<VideosScreen> with MediaSelection<int> {
 
     // Grade 2 colunas: miniatura grande + metadados (uso de tela eficiente).
     return GridView.builder(
-      padding: const EdgeInsets.all(12),
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 2,
+      padding: _gridPadding,
+      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: columns,
         mainAxisSpacing: 12,
         crossAxisSpacing: 12,
-        childAspectRatio: 0.78,
+        // Com mais colunas o tile fica mais baixo proporcionalmente: a
+        // miniatura 16:9 encolhe, mas o texto continua cabendo em 2 linhas.
+        childAspectRatio: columns >= 5 ? 0.66 : 0.78,
       ),
       itemCount: provider.visibleVideos.length,
       itemBuilder: (context, index) {
