@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:audify/models/file_item.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -39,8 +40,11 @@ void main() {
         includeHidden: false,
       );
 
-      expect(page1.items.first.isDirectory, isTrue,
-          reason: 'pastas sempre primeiro');
+      expect(
+        page1.items.first.isDirectory,
+        isTrue,
+        reason: 'pastas sempre primeiro',
+      );
       expect(page1.hasMore, isTrue);
       expect(page1.items.any((i) => i.name == '.oculto'), isFalse);
 
@@ -112,18 +116,23 @@ void main() {
         destPath: '${temp.path}/sub/movido.txt',
       );
       expect(moved, isTrue);
-      expect(File('${temp.path}/sub/movido.txt').readAsStringSync(),
-          'conteudo');
+      expect(
+        File('${temp.path}/sub/movido.txt').readAsStringSync(),
+        'conteudo',
+      );
 
-      final bool deleted =
-          await FileQueryService.delete(path: src.path, useTrash: false);
+      final bool deleted = await FileQueryService.delete(
+        path: src.path,
+        useTrash: false,
+      );
       expect(deleted, isTrue);
       expect(src.existsSync(), isFalse);
     });
 
     test('createDirectory aninhada', () async {
-      final bool ok = await FileQueryService
-          .createDirectory('${temp.path}/a/b/c');
+      final bool ok = await FileQueryService.createDirectory(
+        '${temp.path}/a/b/c',
+      );
       expect(ok, isTrue);
       expect(Directory('${temp.path}/a/b/c').existsSync(), isTrue);
     });
@@ -149,8 +158,7 @@ void main() {
       expect(extracted, isTrue);
       // O serviço extrai para uma subpasta oculta ".<nome>_extracted".
       expect(
-        File('$dest/.pacote.zip_extracted/pasta/dentro.txt')
-            .readAsStringSync(),
+        File('$dest/.pacote.zip_extracted/pasta/dentro.txt').readAsStringSync(),
         'zip me',
       );
     });
@@ -187,9 +195,7 @@ void main() {
       mkFile('pequeno.txt', '12345'); // 5 bytes
       mkFile('grande.txt', '1' * 1000);
 
-      final usage = await FileQueryService.getStorageUsage(
-        rootPath: temp.path,
-      );
+      final usage = await FileQueryService.getStorageUsage(rootPath: temp.path);
       expect(usage.byCategory.isNotEmpty, isTrue);
 
       final largest = await FileQueryService.getLargestFiles(
@@ -198,6 +204,66 @@ void main() {
       );
       expect(largest, isNotEmpty);
       expect(largest.first.name, 'grande.txt');
+    });
+  });
+
+  // ===========================================================================
+  // ApkInfo — o ícone do app vem do nativo em PNG.
+  // ===========================================================================
+  group('ApkInfo.fromChannel', () {
+    test('lê o ícone em PNG', () {
+      final Uint8List png = Uint8List.fromList(<int>[137, 80, 78, 71]);
+      final ApkInfo info = ApkInfo.fromChannel(<dynamic, dynamic>{
+        'packageName': 'com.exemplo.app',
+        'versionName': '1.2.3',
+        'versionCode': 45,
+        'appName': 'Exemplo',
+        'minSdkVersion': 24,
+        'targetSdkVersion': 35,
+        'icon': png,
+      });
+
+      expect(info.icon, isNotNull);
+      expect(info.icon!.length, 4);
+      expect(info.appName, 'Exemplo');
+      expect(info.versionCode, 45);
+    });
+
+    test('ícone ausente não quebra: a UI usa o ícone genérico', () {
+      final ApkInfo info = ApkInfo.fromChannel(<dynamic, dynamic>{
+        'packageName': 'com.exemplo.app',
+        'versionName': '1.0',
+        'versionCode': 1,
+        'appName': 'Exemplo',
+        'minSdkVersion': 24,
+        'targetSdkVersion': 35,
+      });
+
+      expect(info.icon, isNull);
+    });
+
+    test('ícone de tipo inesperado é ignorado, sem lançar', () {
+      final ApkInfo info = ApkInfo.fromChannel(<dynamic, dynamic>{
+        'packageName': 'p',
+        'versionName': '1',
+        'versionCode': 1,
+        'appName': 'a',
+        'minSdkVersion': 24,
+        'targetSdkVersion': 35,
+        // O SO pode mandar algo inesperado; preferimos o ícone genérico a
+        // estourar um cast na tela.
+        'icon': 'não sou bytes',
+      });
+
+      expect(info.icon, isNull);
+    });
+
+    test('metadados ausentes caem em valores seguros', () {
+      final ApkInfo info = ApkInfo.fromChannel(<dynamic, dynamic>{});
+      expect(info.packageName, '?');
+      expect(info.versionName, '?');
+      expect(info.versionCode, 0);
+      expect(info.icon, isNull);
     });
   });
 }
