@@ -3,7 +3,10 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 
 import '../models/gallery_image_model.dart';
+import '../services/image_actions_service.dart';
 import '../widgets/exif_sheet.dart';
+import '../widgets/media_actions.dart';
+import '../widgets/media_details_sheet.dart';
 
 /// Visualizador de fotos em tela cheia.
 ///
@@ -41,6 +44,175 @@ class _PhotoViewerScreenState extends State<PhotoViewerScreen> {
     super.dispose();
   }
 
+  /// Menu de ações da foto exibida.
+  ///
+  /// As ações que dependem de outro app (papel de parede, editar) vão por
+  /// intent nativa com `content://` do FileProvider: desde o Android 7 um
+  /// `file://` entregue a outro app lança `FileUriExposedException`.
+  Future<void> _showImageActions(
+    BuildContext context,
+    GalleryImage image,
+  ) async {
+    await showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (BuildContext sheetContext) {
+        void go(Future<void> Function() action) {
+          Navigator.pop(sheetContext);
+          action();
+        }
+
+        return SafeArea(
+          child: ListView(
+            shrinkWrap: true,
+            children: <Widget>[
+              ListTile(
+                leading: const Icon(Icons.wallpaper),
+                title: const Text('Definir como papel de parede'),
+                subtitle: const Text('Você escolhe o recorte e a posição'),
+                onTap: () =>
+                    go(() => ImageActionsService.setAsWallpaper(image.path)),
+              ),
+              ListTile(
+                leading: const Icon(Icons.edit_outlined),
+                title: const Text('Editar'),
+                subtitle: const Text('Abre um editor de imagem instalado'),
+                onTap: () =>
+                    go(() => ImageActionsService.editImage(image.path)),
+              ),
+              ListTile(
+                leading: const Icon(Icons.branding_watermark_outlined),
+                title: const Text('Marca d’água'),
+                subtitle: const Text(
+                  'Escreve um texto numa cópia, sem tocar na original',
+                ),
+                onTap: () => go(() => _promptWatermark(context, image)),
+              ),
+              ListTile(
+                leading: const Icon(Icons.info_outline),
+                title: const Text('Detalhes'),
+                subtitle: const Text('Dados EXIF, tamanho e caminho'),
+                onTap: () => go(() => _showDetails(context, image)),
+              ),
+              ListTile(
+                leading: const Icon(Icons.share_outlined),
+                title: const Text('Compartilhar'),
+                onTap: () => go(
+                  () => MediaActions.share(
+                    context,
+                    path: image.path,
+                    name: image.name,
+                    mimeType: mimeTypeForImagePath(image.path),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  /// Detalhes: painel de informações + dados EXIF.
+  Future<void> _showDetails(BuildContext context, GalleryImage image) async {
+    await MediaDetailsSheet.showImage(
+      context,
+      image,
+      onShowExif: () => showExifSheet(context, image.path),
+    );
+  }
+
+  /// MIME pela extensão, com JPEG como padrão.
+  ///
+  /// Função de arquivo (e não método): a Galeria tem a mesma regra, e duplicar
+  /// um método privado entre telas é a forma mais rápida dos dois lados
+  /// divergirem.
+  static String mimeTypeForImagePath(String path) {
+    final String lower = path.toLowerCase();
+    if (lower.endsWith('.png')) return 'image/png';
+    if (lower.endsWith('.gif')) return 'image/gif';
+    if (lower.endsWith('.webp')) return 'image/webp';
+    if (lower.endsWith('.bmp')) return 'image/bmp';
+    if (lower.endsWith('.heic') || lower.endsWith('.heif')) {
+      return 'image/heic';
+    }
+    return 'image/jpeg';
+  }
+
+  /// Pede o texto da marca d'água e aplica numa CÓPIA.
+  Future<void> _promptWatermark(
+    BuildContext context,
+    GalleryImage image,
+  ) async {
+    final TextEditingController controller = TextEditingController();
+    final String? text = await showDialog<String>(
+      context: context,
+      builder: (BuildContext dialogContext) => AlertDialog(
+        title: const Text('Marca d’água'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          maxLength: 40,
+          textCapitalization: TextCapitalization.sentences,
+          decoration: const InputDecoration(
+            hintText: 'Ex.: © Meu estúdio',
+            helperText:
+                'A original não é alterada. A cópia fica na pasta Audify do '
+                'seu armazenamento.',
+          ),
+          onSubmitted: (String value) => Navigator.pop(dialogContext, value),
+        ),
+        actions: <Widget>[
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, controller.text),
+            child: const Text('Aplicar'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (text == null || text.trim().isEmpty || !context.mounted) return;
+
+    final ScaffoldMessengerState messenger = ScaffoldMessenger.of(context);
+    final Color errorColor = Theme.of(context).colorScheme.error;
+    messenger.showSnackBar(
+      const SnackBar(content: Text('Gerando a cópia com marca d’água…')),
+    );
+    try {
+      final WatermarkResult result = await WatermarkService.applyText(
+        sourcePath: image.path,
+        text: text,
+      );
+      if (!context.mounted) return;
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text('Cópia salva em ${result.path}'),
+          action: SnackBarAction(
+            label: 'Compartilhar',
+            onPressed: () => MediaActions.share(
+              context,
+              path: result.path,
+              name: '${image.name}-marcada.jpg',
+              mimeType: 'image/jpeg',
+            ),
+          ),
+        ),
+      );
+    } catch (e) {
+      if (!context.mounted) return;
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text('Não foi possível aplicar a marca d’água: $e'),
+          backgroundColor: errorColor,
+        ),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final GalleryImage image = widget.images[_currentIndex];
@@ -67,12 +239,13 @@ class _PhotoViewerScreenState extends State<PhotoViewerScreen> {
                 ),
               ),
             ),
-          // Metadados EXIF da foto atual (câmera, GPS, técnica) + opção de
-          // gerar cópia sem metadados sensíveis.
+          // Menu de ações da foto em UM botão: papel de parede, editor, marca
+          // d'água, detalhes (com EXIF) e compartilhamento. O AppBar do
+          // visualizador é pequeno e cada ícone extra rouba espaço da foto.
           IconButton(
-            tooltip: 'Metadados',
-            icon: const Icon(Icons.info_outline),
-            onPressed: () => showExifSheet(context, image.path),
+            tooltip: 'Ações da foto',
+            icon: const Icon(Icons.more_vert),
+            onPressed: () => _showImageActions(context, image),
           ),
         ],
       ),
@@ -80,10 +253,8 @@ class _PhotoViewerScreenState extends State<PhotoViewerScreen> {
         controller: _pageController,
         itemCount: widget.images.length,
         onPageChanged: (index) => setState(() => _currentIndex = index),
-        itemBuilder: (context, index) => _ZoomableImage(
-          key: ValueKey(index),
-          image: widget.images[index],
-        ),
+        itemBuilder: (context, index) =>
+            _ZoomableImage(key: ValueKey(index), image: widget.images[index]),
       ),
       // ---- Contador (3 de 12) ----
       bottomNavigationBar: SafeArea(

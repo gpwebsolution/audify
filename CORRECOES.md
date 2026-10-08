@@ -375,11 +375,70 @@ resposta `null` do SO e `PlatformException`.
 
 ---
 
+## 7. Ações de imagem e grade com densidade ajustável
+
+### Menu de ações do visualizador de fotos
+
+O visualizador em tela cheia só tinha "Metadados" no AppBar. Agora um botão de
+menu concentra as ações que fazem falta num player local:
+
+| Ação | Como funciona |
+|---|---|
+| **Definir como papel de parede** | `ACTION_SET_WALLPAPER` — o SO mostra pré-visualização e deixa o usuário cortar e posicionar (melhor que esticar a imagem com `WallpaperManager`) |
+| **Editar** | `ACTION_EDIT`, que abre um editor instalado; `ACTION_VIEW` serviria só para ver |
+| **Marca d'água** | texto escrito numa **cópia**, no app |
+| **Detalhes** | painel de informações + EXIF |
+| **Compartilhar** | o mesmo caminho das demais abas |
+
+**FileProvider (novo).** Desde o Android 7 nenhum app pode entregar `file://`
+para fora — lança `FileUriExposedException`. Papel de parede e edição dependem
+disso, então o manifest agora declara o `androidx.core.content.FileProvider` com
+`res/xml/file_paths.xml`. A permissão é **temporária e por arquivo**: o app de
+destino não ganha acesso ao resto do armazenamento.
+
+`startActivitySafely` trata `ActivityNotFoundException` com um aviso — sem isso,
+"Editar" em aparelho sem editor seria um botão que não faz nada, exatamente o
+defeito das ListTile inertes apontado na auditoria.
+
+### Marca d'água
+
+`WatermarkService` escreve um texto numa **cópia JPEG** — o original nunca é
+sobrescrito (a tela foi aberta para ver, não para destruir) e a cópia vai para
+`Android/data/com.example.music_app/files/Audify`, que não exige
+`MANAGE_EXTERNAL_STORAGE`.
+
+Dois detalhes que o pacote `image` não resolve sozinho:
+
+- As fontes bitmap dele (arial14/24/48) têm tamanho **fixo**. Sem redimensionar,
+  o texto sairia minúsculo num print de 4000px e ilegível numa miniatura. O
+  serviço desenha no tamanho da fonte e estica com `copyResize`, com o texto
+  ocupando 80% da largura (assinatura da app, 30%).
+- `compute` roda em **isolate nova**, onde estado estático não existe. O
+  diretório de saída é resolvido na isolate principal e viaja no job — o que
+  também evita chamar o `path_provider` de dentro do isolate de trabalho.
+
+### Grade com densidade ajustável (Galeria e Vídeos)
+
+As duas abas tinham contagem fixa de colunas (3 fotos, 2 vídeos). Agora há um
+botão de **zoom** que escolhe de **2 a 10 itens por linha**, persistido em
+`SharedPreferences` (`SettingsProvider`).
+
+O número escolhido é um **teto, não uma garantia**: `effectiveColumns` reduz
+pela largura da tela para o tile nunca ficar abaixo de 56dp. Sem isso, 10
+colunas num celular de 360dp dariam thumbnails de 36dp — ilegíveis. Quando o
+limite reduz a escolha, o botão muda de cor e mostra o número efetivo, para o
+usuário não pedir 10 e ver 6 sem explicação.
+
+Vídeos também ajustam a proporção do tile acima de 5 colunas (0.78 → 0.66),
+porque a miniatura 16:9 encolhe e o texto precisava de mais altura.
+
+---
+
 ## Como validar (APK de release)
 
 ```bash
 flutter analyze        # 0 issues
-flutter test           # 169 testes passando
+flutter test           # 183 testes passando
 flutter build apk --release
 adb install -r build/app/outputs/flutter-apk/app-release.apk
 ```
