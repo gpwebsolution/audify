@@ -15,6 +15,7 @@ sem precisar ler código.
 | 3 | Sem diagnóstico quando o app fecha sozinho | Nenhum erro era registrado | Log local `crash_log.txt` visível em Configurações → Log de erros |
 | 4 | App não reagia ao ir/voltar do segundo plano | Nenhum observador de ciclo de vida | MainScreen e player de vídeo agora observam pausa/retorno |
 | 5 | Riscos adicionais encontrados na auditoria | Race no banco, cache sem limite, leaks, catches vazios | Detalhados na seção 5 |
+| 6 | **Só dava para excluir fotos e PDFs** — música, vídeo e outros arquivos não saíam do aparelho | Um único método de exclusão sem caminho por versão do SO, com retorno booleano não verificado e MediaStore não reindexado | Serviço unificado com a estratégia correta do SO + limpeza de estado (seção 6) |
 
 ---
 
@@ -162,11 +163,173 @@ Estes não estavam na lista original, mas foram encontrados e corrigidos:
 
 ---
 
+## 6. Exclusão de mídia: só funcionava para foto e PDF
+
+### O problema
+Na aba Música e na aba Vídeos, "Excluir do aparelho" **não apagava nada**: o
+arquivo continuava no aparelho e/ou voltava a aparecer na lista. Foto (Galeria)
+e PDF funcionavam normalmente.
+
+### Por que só duas abas funcionavam
+A primeira versão da correção trocou o `deleteMedia` antigo (um método único,
+com retorno booleano) pelo serviço unificado com estratégia por versão do SO.
+Isso resolveu a maior parte dos defeitos, mas deixou **um buraco no Android
+11+ que atingia todos os tipos**, então música e vídeo continuaram sem excluir
+e foto/PDF só funcionavam por acaso:
+
+- **Foto e PDF** — funcionavam porque o caminho delas acabava por não passar
+  pelo diálogo do sistema (PDF sem indexação ia por `File.delete()`), e por
+  isso escapavam do buraco.
+- **Música e vídeo** — vão sempre por `content://`, então caíam nele.
+
+### O defeito que sobrava (o que realmente travava a exclusão)
+No Android 11+, `MainActivity.deleteWithSystemDialog` montava o
+`createDeleteRequest`, o SO abria o diálogo, o usuário confirmava, o SO apagava
+— e **o app não registrava veredito nenhum para nenhum item**.
+
+O rastreamento era um `LinkedHashMap<String, String?>` onde `null` significava
+"confirmado como removido". A checagem final fazia:
+
+```kotlin
+when (state.outcomes[item.key]) {
+    null -> continue                                  // "já confirmado"
+    UNDECIDED -> ...verificar no MediaStore...
+}
+```
+
+Item **nunca registrado** e item **registrado como removido** são indistinguíveis
+num `when` sobre `Map.get`. Todo item caía no primeiro ramo e era descartado, e
+o payload devolvia `{deleted: [], failed: []}`.
+
+No Dart, a regra conservadora (item não confirmado = falha) transformava isso em
+`"A exclusão não foi confirmada."` para todos os itens, e como `deleted` vinha
+vazio o callback de limpeza **nunca era chamado** — a lista não atualizava. O
+sintoma final era: o diálogo aparecia, o arquivo sumia do aparelho, o app
+dizia que falhou e o item continuava na tela.
+
+Além disso, o mesmo método `deleteMedia` antigo tinha outros defeitos reais:
+
+1. **No Android 10 (API 29) não havia tratamento de `RecoverableSecurityException`.**
+   O SO **exige** essa exceção para permitir apagar mídia de outro app: o
+   `contentResolver.delete(uri)` cru lançava, o `catch` genérico virava um erro
+   genérico e o Dart não conseguia distinguir "falhou" de "usuário cancelou".
+   No Android 10 esse é o caminho usado para **todas** as mídias.
+2. **`Uri.fromFile()` gerava uma URI `file://`.** Isso acontecia sempre que
+   faltava o id do MediaStore (PDF do seletor SAF, "outros arquivos"). O
+   `createDeleteRequest` **rejeita** URIs `file://`, e o ramo de contingência
+   caía em `File.delete()` — que, sob *Scoped Storage*, **falha silenciosamente**
+   para arquivo de outro app. Era o caminho do item "outros arquivos".
+3. **O MediaStore não era reindexado.** Sem `MediaScannerConnection` /
+   notificação do `ContentResolver`, uma exclusão feita pelo caminho deixava
+   uma linha órfã no banco do MediaStore. O arquivo tinha sumido do disco, mas
+   **voltava a aparecer na lista** — exatamente o sintoma relatado.
+4. **O resultado pendente era um único espaço (`_pendingDeleteResult`) e não
+   havia exclusão em lote.** Um segundo pedido sobrescrevia o primeiro e o
+   `Future` do Dart ficava esperando para sempre: a tela parecia travada e o
+   usuário não recebia retorno nenhum.
+
+Some-se a isso dois problemas de interface: na aba Música o botão de excluir
+ficava **escondido dentro da opção "Compartilhar"** (dois bottom sheets
+sequenciais para uma ação), e o retorno era **um booleano genérico** — um
+item em lote que falhava era reportado como sucesso, e um `false` (falha real)
+era reportado como "exclusão cancelada".
+
+### O que foi feito
+
+**Serviço unificado** (`lib/services/media_delete_service.dart` +
+`lib/models/media_ref.dart`): uma única API `deleteMedia(List<MediaRef>)`,
+usada pelas seis abas. `MediaRef` carrega id do MediaStore, `content://`, caminho
+e tipo — e define uma **chave estável** que é o contrato com o lado nativo.
+
+**Estratégia nativa correta por versão do SO** (`MainActivity.kt`):
+
+| Versão do Android | Estratégia |
+|---|---|
+| 11+ (API 30+) | `MediaStore.createDeleteRequest` com **um único diálogo para o lote inteiro** (funciona para áudio, vídeo e imagem sem "Todos os arquivos") |
+| 10 (API 29) | `contentResolver.delete` capturando `RecoverableSecurityException` → confirma com o usuário e **repete** a exclusão |
+| 9 e abaixo (API ≤ 28) | `contentResolver.delete` direto (WRITE_EXTERNAL_STORAGE) com `File.delete()` como reserva |
+
+Além disso:
+
+- **PDFs e "outros arquivos"** (que não são mídia indexada) passam a ser
+  resolvidos por caminho em `MediaStore.Files` — assim também entram pelo
+  diálogo do sistema em vez de bater no `File.delete()` mudo. Sem
+  indexação e sem "Todos os arquivos", a resposta é um motivo claro.
+- **Reindexação obrigatória** com `MediaScannerConnection.scanFile` ao final de
+  toda exclusão — acaba com o item que "volta a aparecer".
+- **Desfecho tipado por item** (`sealed class DeleteOutcome`): `Deleted`,
+  `NotFound`, `Cancelled`, `Undecided`, `Failed` e `PermissionDenied`.
+  Substituiu o `Map` com valor `null` e eliminou a ambiguidade
+  "ausente = removido" que era a causa raiz do defeito acima.
+- **Verificação real**: cada item entra como `Undecided` antes do diálogo do
+  sistema, e `finishDelete` consulta o MediaStore / confere o disco antes de
+  promover a `Deleted`. Sem `path`/`uri`/`id` não há como verificar, e aí o
+  item **não** vira "excluído" — a verificação que falha não vira sucesso.
+- **`NotFound`**: arquivo já apagado por outro app é reportado como ausente,
+  não como falha nem como exclusão bem-sucedida — e ainda assim sai das
+  listas do app (`DeleteResult.removed` = excluídos + ausentes).
+- **Exclusão concorrente resolvida**: a reserva do slot de exclusão é feita na
+  thread da plataforma, sob monitor, **antes** de qualquer trabalho em
+  background. Antes, a checagem e a reserva ficavam em threads diferentes e
+  dois toques rápidos sobrescreviam o `Result` pendente.
+- **Sobrevive à recriação da Activity**: o lote pendente vive no `companion`
+  (escopo de processo), não em campo da Activity — rotação ou pressão de
+  memória já não deixam o `Future` do Dart pendurado para sempre.
+- **Manifest**: `WRITE_EXTERNAL_STORAGE` passou para `maxSdkVersion="28"`
+  (é a permissão do caminho de exclusão do Android 9 e abaixo). Nenhuma
+  permissão existente foi removida.
+
+**Integração em todas as abas** (`MediaActions` reescrito):
+
+- Diálogo de confirmação em português antes de excluir
+  ("Excluir X? ... Esta ação não pode ser desfeita").
+- SnackBar com o **resultado real**: sucesso, cancelado, ou erro com o motivo.
+- **Música**: item "Excluir" direto no menu de toque longo (e no player em tela
+  cheia). Faixa de `assets/songs/` mostra "Faixa embutida no app, não pode ser
+  excluída" — não é apagável por definição.
+- **Vídeos**: item direto na grade e botão no player em tela cheia, que
+  **descarta o `VideoPlayerController` antes de apagar** (com o decoder
+  segurando o arquivo, o SO não consegue removê-lo). A exclusão do player
+  reusa `VideosScreen.deleteVideo` (uma fonte só de lógica). Se o usuário
+  recusar ou a exclusão falhar, o controller é **recriado** — antes ele
+  ficava descartado e o player aparecia quebrado.
+- **Galeria e PDFs**: migrados para o mesmo serviço unificado, sem perder o
+  que já funcionava.
+- Se o usuário **cancela o diálogo do sistema**, nada na interface muda.
+- A limpeza de estado usa `DeleteResult.removed` (excluídos **e** ausentes):
+  um arquivo que já não estava no aparelho também sai das listas, senão vira
+  item fantasma permanente.
+
+**Consistência de estado** depois da exclusão confirmada:
+
+- Item sai da lista do provider correspondente (`notifyListeners` incluso).
+- Música em reprodução: o áudio **para e avança** para a próxima sobrevivente;
+  a faixa sai da fila (`PlaybackQueue.removeSongs`, que também sabe que a
+  removida **não pode voltar** ao desativar o embaralhamento) e do estado de
+  retomada de sessão (`SessionRepository.clear`) — **só quando a excluída era
+  a que tocava**: excluir outra faixa não pode derrubar o "continuar de onde
+  parou" de uma música que continua no aparelho.
+- Vídeo em reprodução: sai da `VideoPlayQueue` (`VideoPlayQueue.removeVideos`,
+  que limpa também a ordem original para não voltar ao desligar o aleatório).
+- `MediaRef.fromSong` recusa faixa de asset e faixa sem id/caminho: um id
+  sintético de asset colidiria com um id real do MediaStore e o nativo poderia
+  apagar a música errada.
+- A faixa/vídeo sai de **todas** as playlists no SQLite.
+- Cache de miniaturas é apagado (memória **e** disco), junto com o progresso de
+  leitura do PDF e o favorito dele.
+
+**Testes** — `test/media_delete_service_test.dart` (novo) trava a regra mais
+importante: **um item que o nativo não confirmou vira falha, nunca sucesso**;
+`test/playback_queue_test.dart` ganhou 10 casos de remoção de faixa da fila;
+`test/session_repository_test.dart` ganhou o caso de limpeza da sessão.
+
+---
+
 ## Como validar (APK de release)
 
 ```bash
 flutter analyze        # 0 issues
-flutter test           # 66 testes passando
+flutter test           # 107 testes passando
 flutter build apk --release
 adb install -r build/app/outputs/flutter-apk/app-release.apk
 ```
@@ -240,3 +403,31 @@ reportar — a causa provavelmente estará lá.
 ### F. Privacidade
 - [ ] F1. Confirmar em Configurações do Android → Dados móveis/Wi-Fi que o Audify
       não usa rede (modo avião: todas as funções continuam funcionando).
+
+### G. Exclusão de mídia (a correção da seção 6)
+> Faça em **Android 13+**, **Android 11/12** e **Android 10** — o caminho nativo
+> é diferente em cada um e o bug antigo só se manifestava em parte deles.
+> Tenha um MP3, um vídeo, uma foto, um PDF e um arquivo qualquer
+> (ex.: .zip em Downloads) prontos no aparelho.
+
+- [ ] G1. **Uma música**: toque longo → "Excluir do aparelho" → confirmar.
+      Deve aparecer o diálogo do sistema; ao confirmar, o arquivo some do
+      aparelho **e** da lista, e a SnackBar diz "Arquivo excluído."
+- [ ] G2. **Um vídeo**: mesmo fluxo na aba Vídeos. Depois **reabra o app** e
+      confirme que o vídeo **não voltou** para a lista.
+- [ ] G3. **Uma foto** (aba Galeria) e **um PDF** (aba PDFs): devem continuar
+      funcionando como antes (sem regressão).
+- [ ] G4. **Cancelar no diálogo do sistema**: a lista, a fila e o player devem
+      ficar **exatamente como estavam** — nada sumir da tela.
+- [ ] G5. **Faixa embutida no app**: toque longo em uma faixa de
+      `assets/songs/` → a opção de excluir aparece **desabilitada** com o texto
+      "Faixa embutida no app, não pode ser excluída."
+- [ ] G6. **Música tocando + excluí-la**: o áudio deve **parar e pular** para a
+      próxima faixa; fechar e reabrir o app **não pode** retomar a música
+      excluída ("continuar de onde parou").
+- [ ] G7. **Playlist**: ponha a música/vídeo numa playlist, exclua o arquivo e
+      abra a playlist — o item **não pode** continuar lá (item morto).
+- [ ] G8. **"Outros arquivos"**: um .zip em Downloads, via aba Arquivos
+      (lixeira do app) — deve funcionar; e um PDF em Documents pela aba PDFs.
+- [ ] G9. **Arquivo protegido** (ex.: em `Android/data` de outro app): a
+      SnackBar deve explicar o motivo da falha em vez de mentir "excluído".

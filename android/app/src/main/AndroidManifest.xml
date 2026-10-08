@@ -14,9 +14,11 @@
          2) READ_EXTERNAL_STORAGE: legada, com maxSdkVersion="32" para
             NÃO ser solicitada no Android 13+ (a Play Store rejeita o
             APK sem esse limite).
-         3) WRITE_EXTERNAL_STORAGE: exigida pelo on_audio_query nas
-            versões <= 12; maxSdkVersion="29" é o teto aceito pelo
-            Google (API 30+ é no-op e retorna concedida sozinha).
+         3) WRITE_EXTERNAL_STORAGE: é ela que permite contentResolver.delete()
+            no Android 9 e abaixo (API <= 28) — o caminho de exclusão de
+            mídia do app. No Android 10 a permissão já é ignorada pelo SO
+            (exclusão passa a exigir RecoverableSecurityException) e no 11+
+            o diálogo do sistema assume, então o teto correto é 28.
          ============================================================ -->
     <uses-permission android:name="android.permission.READ_MEDIA_AUDIO" />
     <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
@@ -26,7 +28,7 @@
         android:maxSdkVersion="32" />
     <uses-permission
         android:name="android.permission.WRITE_EXTERNAL_STORAGE"
-        android:maxSdkVersion="29" />
+        android:maxSdkVersion="28" />
 
     <!-- ============================================================
          LISTAGEM DE PDFs / DOCUMENTOS (Android 11+)
