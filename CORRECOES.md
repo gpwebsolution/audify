@@ -443,10 +443,14 @@ A barra de lote listava as ações lado a lado. Com 5+ ações (Arquivos tem sei
 ela estourava a largura da tela, e as ações ficavam escondidas atrás de
 rolagem horizontal — o usuário nunca as encontrava.
 
-Agora só o essencial fica sempre visível: **contador, selecionar tudo, excluir
-e o menu de 3 pontinhos**. O resto vai para o menu, **com rótulo em texto** (um
-ícone sozinho seria adivinhação) e desabilitado com esmaecimento quando não se
-aplica.
+Agora a barra tem **três controles** — selecionar tudo, menu de 3 pontinhos e
+cancelar — mais o contador. Tudo o mais, **inclusive excluir**, fica dentro do
+menu, com **rótulo em texto** (ícone sozinho seria adivinhação) e esmaecido
+quando não se aplica.
+
+Excluir é a ÚLTIMA entrada do menu, depois de um separador: é a ação
+irreversível e não deve ficar ao lado das reversíveis. A barra ter cinco
+controles era o que forçava rolagem horizontal em tela estreita.
 
 Ganho em todas as abas: **inverter seleção** — a forma rápida de "marcar tudo
 menos este", que antes exigia desmarcar item por item.
@@ -551,7 +555,7 @@ Dois detalhes que evitam desastre:
 
 ```bash
 flutter analyze        # 0 issues
-flutter test           # 209 testes passando
+flutter test           # 208 testes passando
 flutter build apk --release
 adb install -r build/app/outputs/flutter-apk/app-release.apk
 ```

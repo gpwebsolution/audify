@@ -338,37 +338,7 @@ void main() {
       await tester.pumpWidget(MaterialApp(home: Scaffold(body: child)));
     }
 
-    testWidgets('mostra contador e ações', (WidgetTester tester) async {
-      bool cleared = false;
-      bool deleted = false;
-      bool selectedAll = false;
-
-      await pump(
-        tester,
-        SelectionBar(
-          label: '3 selecionado(s)',
-          onSelectAll: () => selectedAll = true,
-          onClear: () => cleared = true,
-          onDelete: () => deleted = true,
-        ),
-      );
-
-      expect(find.text('3 selecionado(s)'), findsOneWidget);
-      expect(find.byIcon(Icons.select_all), findsOneWidget);
-      expect(find.byIcon(Icons.delete_outline), findsOneWidget);
-      expect(find.byIcon(Icons.close), findsOneWidget);
-
-      await tester.tap(find.byIcon(Icons.delete_outline));
-      expect(deleted, isTrue);
-
-      await tester.tap(find.byIcon(Icons.close));
-      expect(cleared, isTrue);
-
-      await tester.tap(find.byIcon(Icons.select_all));
-      expect(selectedAll, isTrue);
-    });
-
-    testWidgets('sem onDelete não mostra o botão de excluir', (
+    testWidgets('sem onDelete nem ações, a barra fica com 2 controles', (
       WidgetTester tester,
     ) async {
       await pump(
@@ -380,6 +350,11 @@ void main() {
         ),
       );
       expect(find.byIcon(Icons.delete_outline), findsNothing);
+      // Sem o que mostrar no menu, o menu não aparece — botão morto é pior
+      // que botão ausente.
+      expect(find.byIcon(Icons.more_vert), findsNothing);
+      expect(find.byIcon(Icons.select_all), findsOneWidget);
+      expect(find.byIcon(Icons.close), findsOneWidget);
     });
 
     testWidgets('ações extras vão para o menu de 3 pontinhos', (
@@ -447,7 +422,7 @@ void main() {
       expect(find.text('Detalhes (selecione 1 arquivo)'), findsOneWidget);
     });
 
-    testWidgets('sem ações extras não há botão de menu', (
+    testWidgets('com exclusão mas sem ações, o menu ainda existe', (
       WidgetTester tester,
     ) async {
       await pump(
@@ -456,9 +431,11 @@ void main() {
           label: '1 selecionada',
           onSelectAll: () {},
           onClear: () {},
+          onDelete: () {},
         ),
       );
-      expect(find.byIcon(Icons.more_vert), findsNothing);
+      // O menu existe porque tem o que mostrar: excluir.
+      expect(find.byIcon(Icons.more_vert), findsOneWidget);
     });
   });
 

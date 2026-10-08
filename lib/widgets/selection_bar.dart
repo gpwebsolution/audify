@@ -137,6 +137,43 @@ class SelectionAction {
   });
 }
 
+/// Linha do menu de ações: ícone + rótulo, esmaecida quando desabilitada.
+class _MenuRow extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final bool enabled;
+  final Color? color;
+
+  const _MenuRow({
+    required this.icon,
+    required this.label,
+    required this.enabled,
+    this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final ColorScheme colors = Theme.of(context).colorScheme;
+    final Color tone = !enabled
+        ? colors.onSurfaceVariant.withValues(alpha: 0.4)
+        : color ?? colors.onSurface;
+    return Row(
+      children: <Widget>[
+        Icon(icon, size: 20, color: tone),
+        const SizedBox(width: 12),
+        Flexible(
+          child: Text(
+            label,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(color: tone),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
 /// Barra de ações em lote que substitui a toolbar normal no modo seleção.
 ///
 /// Aplica a mesma cadência visual do resto do app ([Motion.normal]) para a
@@ -168,7 +205,11 @@ class SelectionBar extends StatelessWidget {
   /// selecionar tudo, excluir e o menu.
   final List<SelectionAction> actions;
 
-  /// Ação destrutiva (excluir) — pintada com a cor de erro.
+  /// Ação destrutiva (excluir).
+  ///
+  /// Entra no MENU de 3 pontinhos, não como botão na barra: com o botão
+  /// visível a barra tinha 5 controles e não cabia em tela estreita, obrigando
+  /// o usuário a rolar horizontalmente para achar o básico.
   final VoidCallback? onDelete;
 
   final VoidCallback onClear;
@@ -229,51 +270,45 @@ class SelectionBar extends StatelessWidget {
               icon: const Icon(Icons.select_all),
               onPressed: onSelectAll,
             ),
-            if (onDelete != null)
-              IconButton(
-                tooltip: 'Excluir selecionados',
-                icon: Icon(Icons.delete_outline, color: colors.error),
-                onPressed: onDelete,
-              ),
-            if (actions.isNotEmpty)
-              // Menu de 3 pontinhos: o resto das ações do lote. Fica SEMPRE
-              // visível, então o usuário descobre que as ações existem.
+            if (actions.isNotEmpty || onDelete != null)
+              // Só o MENU guarda as ações. A barra fica com três controles
+              // (selecionar tudo, menu, cancelar) + o contador, o que cabe em
+              // qualquer tela sem rolagem horizontal.
               PopupMenuButton<int>(
-                tooltip: 'Mais ações',
+                tooltip: 'Ações da seleção',
                 icon: const Icon(Icons.more_vert),
-                onSelected: (int index) => actions[index].onPressed?.call(),
+                onSelected: (int index) {
+                  if (index < 0) {
+                    onDelete?.call();
+                  } else {
+                    actions[index].onPressed?.call();
+                  }
+                },
                 itemBuilder: (BuildContext context) => <PopupMenuEntry<int>>[
                   for (int i = 0; i < actions.length; i++)
                     PopupMenuItem<int>(
                       value: i,
                       enabled: actions[i].onPressed != null,
-                      child: Row(
-                        children: <Widget>[
-                          Icon(
-                            actions[i].icon,
-                            size: 20,
-                            color: actions[i].onPressed == null
-                                ? colors.onSurfaceVariant.withValues(alpha: 0.4)
-                                : null,
-                          ),
-                          const SizedBox(width: 12),
-                          Flexible(
-                            child: Text(
-                              actions[i].label,
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                              style: TextStyle(
-                                color: actions[i].onPressed == null
-                                    ? colors.onSurfaceVariant.withValues(
-                                        alpha: 0.4,
-                                      )
-                                    : null,
-                              ),
-                            ),
-                          ),
-                        ],
+                      child: _MenuRow(
+                        icon: actions[i].icon,
+                        label: actions[i].label,
+                        enabled: actions[i].onPressed != null,
                       ),
                     ),
+                  // Excluir por último e com separador: é a ação
+                  // irreversível, não deve ficar ao lado das reversíveis.
+                  if (onDelete != null) ...<PopupMenuEntry<int>>[
+                    if (actions.isNotEmpty) const PopupMenuDivider(),
+                    PopupMenuItem<int>(
+                      value: -1,
+                      child: _MenuRow(
+                        icon: Icons.delete_outline,
+                        label: 'Excluir selecionados',
+                        enabled: true,
+                        color: colors.error,
+                      ),
+                    ),
+                  ],
                 ],
               ),
             IconButton(
