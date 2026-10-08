@@ -11,6 +11,7 @@ import android.net.Uri
 import android.os.Build
 import android.os.Environment
 import android.provider.MediaStore
+import android.widget.Toast
 import java.util.concurrent.atomic.AtomicBoolean
 import com.ryanheise.audioservice.AudioServiceActivity
 import io.flutter.embedding.engine.FlutterEngine
@@ -154,6 +155,35 @@ class MainActivity : AudioServiceActivity() {
                         return@setMethodCallHandler
                     }
                     deleteBatch(rawItems, result)
+                }
+                "getContentUri" -> {
+                    // Converte um caminho em content:// via FileProvider —
+                    // o único tipo de URI aceito por apps de fora desde o
+                    // Android 7 (FileUriExposedException).
+                    val path = call.argument<String>("path")
+                    if (path.isNullOrEmpty()) {
+                        result.error("bad_args", "path obrigatório", null)
+                        return@setMethodCallHandler
+                    }
+                    result.success(queryContentUri(path))
+                }
+                "setAsWallpaper" -> {
+                    val path = call.argument<String>("path")
+                    if (path.isNullOrEmpty()) {
+                        result.error("bad_args", "path obrigatório", null)
+                        return@setMethodCallHandler
+                    }
+                    setAsWallpaper(path)
+                    result.success(null)
+                }
+                "editImage" -> {
+                    val path = call.argument<String>("path")
+                    if (path.isNullOrEmpty()) {
+                        result.error("bad_args", "path obrigatório", null)
+                        return@setMethodCallHandler
+                    }
+                    editImage(path)
+                    result.success(null)
                 }
                 else -> result.notImplemented()
             }
@@ -1547,6 +1577,97 @@ class MainActivity : AudioServiceActivity() {
         }
         return android.graphics.BitmapFactory.decodeFile(file.absolutePath, opts)
     }
+
+    /**
+     * `content://` de um arquivo, via FileProvider.
+     *
+     * Desde o Android 7 nenhum app pode passar `file://` para fora
+     * (FileUriExposedException). Devolve null quando o caminho não existe ou
+     * está fora das raízes declaradas em `res/xml/file_paths.xml`.
+     */
+    private fun queryContentUri(path: String): String? {
+        return try {
+            val file = java.io.File(path)
+            if (!file.exists()) return null
+            androidx.core.content.FileProvider.getUriForFile(
+                this,
+                "$packageName.fileprovider",
+                file
+            ).toString()
+        } catch (e: Exception) {
+            android.util.Log.w(TAG, "contentUri($path): $e")
+            null
+        }
+    }
+
+    /**
+     * Abre o seletor de papel de parede do sistema com a imagem.
+     *
+     * Usa ACTION_SET_WALLPAPER (e não `WallpaperManager.setStream`) de
+     * propósito: o SO mostra a pré-visualização e deixa o usuário cortar e
+     * posicionar, em vez de esticar a imagem e estragá-la.
+     */
+    private fun setAsWallpaper(path: String) {
+        val uri = queryContentUri(path)
+        if (uri == null) {
+            runOnUiThread {
+                Toast.makeText(this, "Não foi possível abrir esta imagem.", Toast.LENGTH_SHORT).show()
+            }
+            return
+        }
+        val intent = Intent(Intent.ACTION_SET_WALLPAPER).apply {
+            data = Uri.parse(uri)
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+        runOnUiThread {
+            startActivitySafely(intent, "Nenhum app de papel de parede encontrado")
+        }
+    }
+
+    /**
+     * Abre a imagem em um EDITOR externo (ACTION_EDIT).
+     *
+     * ACTION_EDIT e não ACTION_VIEW: ACTION_VIEW abriria o visualizador, só de
+     * leitura, que não resolve "editar".
+     */
+    private fun editImage(path: String) {
+        val uri = queryContentUri(path)
+        if (uri == null) {
+            runOnUiThread {
+                Toast.makeText(this, "Não foi possível abrir esta imagem.", Toast.LENGTH_SHORT).show()
+            }
+            return
+        }
+        val intent = Intent(Intent.ACTION_EDIT).apply {
+            data = Uri.parse(uri)
+            type = "image/*"
+            addFlags(
+                Intent.FLAG_GRANT_READ_URI_PERMISSION or
+                    Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+            )
+        }
+        runOnUiThread {
+            startActivitySafely(intent, "Nenhum editor de imagem instalado")
+        }
+    }
+
+    /**
+     * Inicia uma intent informando quando NENHUM app pode atender.
+     *
+     * `ActivityNotFoundException` é o sintoma de "não há app instalado" e sem
+     * este tratamento a tela ficaria em silêncio — o usuário tocaria em
+     * "Editar" e nada aconteceria, igual ao bug das ListTile inertes.
+     */
+    private fun startActivitySafely(intent: Intent, emptyMessage: String) {
+        try {
+            startActivity(intent)
+        } catch (e: android.content.ActivityNotFoundException) {
+            Toast.makeText(this, emptyMessage, Toast.LENGTH_LONG).show()
+        } catch (e: SecurityException) {
+            Toast.makeText(this, "O Android bloqueou esta ação.", Toast.LENGTH_SHORT).show()
+        }
+    }
+
 
     /// Metadados de APK solto no disco (nome do pacote, versão, label).
     /// getPackageArchiveInfo parseia o binário AndroidManifest embutido.

@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Caminhos expostos pelo FileProvider do Audify.
+
+    `external-path` = /storage/emulated/0 (todo o armazenamento
+    compartilhado). Precisa existir porque as fotos/vídeos/PDFs que o app
+    manipula vivem no MediaStore, fora do diretório privado dele.
+
+    O `grantUriPermissions` está no provider do manifest, então a permissão
+    é temporária e por arquivo — o app de destino não ganha acesso ao resto
+    do armazenamento.
+-->
+<paths>
+    <external-path name="shared" path="." />
+    <external-files-path name="app_external" path="." />
+    <files-path name="app_internal" path="." />
+    <cache-path name="app_cache" path="." />
+</paths>

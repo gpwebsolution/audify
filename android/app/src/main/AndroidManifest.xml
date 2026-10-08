@@ -98,6 +98,29 @@
         android:label="audify"
         android:name="${applicationName}"
         android:icon="@mipmap/launcher_icon">
+
+        <!-- ============================================================
+             FileProvider — content:// para arquivos do armazenamento
+             ============================================================
+             Desde o Android 7 (N), passing `file://` para fora do app
+             (ACTION_SET_WALLPAPER, ACTION_EDIT, compartilhamento) lança
+             FileUriExposedException. O FileProvider expõe o arquivo como
+             content:// com permissão temporária para o app de destino.
+
+             É o que permite "definir como papel de parede" e "editar" no
+             visualizador de imagens sem depender do open_filex (que tem as
+             próprias restrições) e sem cada tela montar Uri à mão.
+             ============================================================ -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
+
         <activity
             android:name=".MainActivity"
             android:exported="true"
