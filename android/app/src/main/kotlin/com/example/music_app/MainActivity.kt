@@ -11,6 +11,7 @@ import android.net.Uri
 import android.os.Build
 import android.os.Environment
 import android.provider.MediaStore
+import java.util.concurrent.atomic.AtomicBoolean
 import com.ryanheise.audioservice.AudioServiceActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
@@ -23,6 +24,10 @@ class MainActivity : AudioServiceActivity() {
         /// Código de request do diálogo de exclusão do sistema
         /// (MediaStore.createDeleteRequest / RecoverableSecurityException).
         private const val DELETE_MEDIA_REQUEST = 7001
+
+        /// Esquema e autoridade que o MediaStore aceita em createDeleteRequest.
+        private const val SCHEME_CONTENT = "content"
+        private const val AUTHORITY_MEDIA = "media"
 
         /// Texto mostrado quando o SO exige MANAGE_EXTERNAL_STORAGE.
         private const val MISSING_ALL_FILES =
@@ -214,6 +219,7 @@ class MainActivity : AudioServiceActivity() {
         if (requestCode != DELETE_MEDIA_REQUEST) return
         val pending = synchronized(deleteLock) {
             val current = pendingDelete ?: return
+            current.dialogAnswered = true
             pendingDelete = null
             current
         }
@@ -298,7 +304,36 @@ class MainActivity : AudioServiceActivity() {
             return
         }
 
-        Thread { runDelete(state, items) }.start()
+
+        // Todo o trabalho em background fica sob try/catch/finally: sem isso,
+        // uma exceção em qualquer etapa (resolução de alvo, consulta ao
+        // MediaStore, montagem do pedido) deixava o `Result` sem resposta e o
+        // Future do Dart pendurado para sempre — a tela parecia travada.
+        Thread {
+            try {
+                runDelete(state, items)
+            } catch (t: Throwable) {
+                // Só os itens SEM desfecho viram failed: quem já foi confirmado
+                // como removido continua `deleted` (mentir seria pior).
+                state.failPending("Falha inesperada ao excluir: ${describe(t)}")
+                finishDelete(state)
+            } finally {
+                // Idempotente e condicional (ver releaseReservation): não
+                // derruba a reserva enquanto um diálogo do SO estiver em tela.
+                releaseReservation(state)
+            }
+        }.start()
+    }
+
+    /// Mensagem legível de uma falha inesperada, sem vazar ruído interno.
+    private fun describe(t: Throwable): String {
+        val message = t.message?.trim().orEmpty()
+        return when {
+            t is SecurityException && message.isEmpty() -> "sem permissão do sistema"
+            message.isEmpty() -> t.javaClass.simpleName
+            message.length > 120 -> "erro do sistema"
+            else -> message
+        }
     }
 
     /**
@@ -309,7 +344,12 @@ class MainActivity : AudioServiceActivity() {
      */
     private fun releaseReservation(state: DeleteState) {
         synchronized(deleteLock) {
-            if (pendingDelete?.state === state) pendingDelete = null
+            val pending = pendingDelete
+            if (pending?.state !== state) return
+            // Diálogo em tela: a reserva TEM de continuar, senão um segundo
+            // pedido passaria pela guarda e abriria outro diálogo por cima.
+            if (pending.dialogLaunched && !pending.dialogAnswered) return
+            pendingDelete = null
         }
     }
 
@@ -371,15 +411,36 @@ class MainActivity : AudioServiceActivity() {
         state: DeleteState,
         targets: List<Pair<DeleteItem, Uri>>
     ) {
-        val uris = targets.map { it.second }
-        for ((item, _) in targets) state.set(item, DeleteOutcome.Undecided)
+        // Só entram no pedido as URIs que o MediaStore aceita. Uma URI
+        // inválida (file://, authority errada, esquema diferente) faz o SO
+        // recusar o pedido INTEIRO — o que derrubaria a exclusão dos itens
+        // válidos que estavam no mesmo lote.
+        val eligible = mutableListOf<Pair<DeleteItem, Uri>>()
+        for ((item, uri) in targets) {
+            val safe = sanitizeMediaUri(item, uri)
+            if (safe == null) {
+                // Sem URI reconstruível: tenta o disco antes de desistir, em
+                // vez de reprovar o item junto com o lote.
+                state.set(item, deleteOnDisk(item))
+            } else {
+                eligible.add(item to safe)
+            }
+        }
+        if (eligible.isEmpty()) {
+            finishDelete(state)
+            return
+        }
+
+        val uris = eligible.map { it.second }
+        for ((item, _) in eligible) state.set(item, DeleteOutcome.Undecided)
 
         val sender = try {
             MediaStore.createDeleteRequest(contentResolver, uris).intentSender
         } catch (e: Exception) {
-            // O SO recusou montar o pedido (URI não elegível, por exemplo).
-            // Resgate por conteúdo: arquivo do próprio app segue deletável.
-            for ((item, uri) in targets) {
+            // O SO recusou montar o pedido. Resgate item a item por
+            // conteúdo — arquivo do próprio app segue deletável e um item
+            // problemático não derruba os demais.
+            for ((item, uri) in eligible) {
                 state.set(item, deleteViaResolver(item, uri))
             }
             finishDelete(state)
@@ -388,9 +449,15 @@ class MainActivity : AudioServiceActivity() {
 
         runOnUiThread {
             try {
+                // Marca ANTES de entregar: se `startIntentSenderForResult`
+                // lançar depois de o SO ter recebido o pedido, a reserva
+                // precisa ser mantida para o `onActivityResult` que virá.
+                synchronized(deleteLock) {
+                    pendingDelete?.takeIf { it.state === state }?.dialogLaunched = true
+                }
                 startIntentSenderForResult(sender, DELETE_MEDIA_REQUEST, null, 0, 0, 0)
             } catch (e: Exception) {
-                for ((item, _) in targets) {
+                for ((item, _) in eligible) {
                     state.set(
                         item,
                         DeleteOutcome.Failed(
@@ -467,6 +534,9 @@ class MainActivity : AudioServiceActivity() {
 
         runOnUiThread {
             try {
+                synchronized(deleteLock) {
+                    pendingDelete?.takeIf { it.state === state }?.dialogLaunched = true
+                }
                 startIntentSenderForResult(
                     thrown.userAction.actionIntent.intentSender,
                     DELETE_MEDIA_REQUEST, null, 0, 0, 0
@@ -557,6 +627,12 @@ class MainActivity : AudioServiceActivity() {
      * falha, consultando o MediaStore e o disco — nunca há sucesso presumido.
      */
     private fun finishDelete(state: DeleteState) {
+        // Responde UMA vez. Uma segunda chamada (exceção depois do diálogo já
+        // estar em tela, ou conclusão duplicada) faria o Flutter lançar
+        // "reply already submitted" e derrubar o isolate do canal — por isso o
+        // FIRST-CALL-WINS acontece ANTES de qualquer outro efeito.
+        if (!state.claimAnswer()) return
+
         // [finishDelete] é o ÚNICO ponto terminal do lote: liberar a reserva
         // aqui garante que nenhum caminho (sem diálogo, diálogo recusado,
         // createDeleteRequest que lançou) deixe o slot ocupado e faça o
@@ -650,7 +726,45 @@ class MainActivity : AudioServiceActivity() {
         return path.isNotEmpty() && !java.io.File(path).exists()
     }
 
-    /** A linha do MediaStore ainda existe? Usado para detectar notFound. */
+    /**
+     * Deixa a URI pronta para o `MediaStore.createDeleteRequest`.
+     *
+     * O SO só aceita `content://media/...`: qualquer outro esquema
+     * (`file://`, `content://downloads/...`, authority do app) faz o pedido
+     * INTEIRO ser recusado. Em vez de reprovar o lote, reconstroi a URI:
+     *  1. se a URI já é do MediaStore, usa como está;
+     *  2. senão, tenta pelo id do item na coleção do tipo (áudio/vídeo/imagem/
+     *     arquivos) — é o `_id` do MediaStore, não um id do app;
+     *  3. senão, procura o id por caminho em `MediaStore.Files`.
+     *
+     * Devolve null quando nenhuma das três funciona; o chamador então tenta
+     * o disco antes de desistir do item.
+     */
+    private fun sanitizeMediaUri(item: DeleteItem, uri: Uri): Uri? {
+        if (uri.scheme == SCHEME_CONTENT && uri.authority == AUTHORITY_MEDIA) {
+            return uri
+        }
+        item.mediaId?.let { id ->
+            return ContentUris.withAppendedId(collectionFor(item.type), id)
+        }
+        val path = item.path?.takeIf { it.isNotEmpty() } ?: return null
+        val foundId = lookupMediaStoreIdByPath(path) ?: return null
+        return ContentUris.withAppendedId(filesCollection(), foundId)
+    }
+
+    /**
+     * Última tentativa para um item sem URI elegível: exclusão direta no disco.
+     *
+     * Só funciona de fato com "Todos os arquivos" (MANAGE_EXTERNAL_STORAGE)
+     * ou para arquivo do próprio app. Sem permissão, devolve PermissionDenied
+     * com o motivo certo em vez de um "não foi possível" genérico.
+     */
+    private fun deleteOnDisk(item: DeleteItem): DeleteOutcome {
+        val path = item.path?.takeIf { it.isNotEmpty() } ?: return DeleteOutcome.NotFound
+        return deleteFile(java.io.File(path))
+    }
+
+    /// A linha do MediaStore ainda existe? Usado para detectar notFound.
     private fun contentExists(uri: Uri): Boolean = try {
         contentResolver.query(
             uri, arrayOf(MediaStore.MediaColumns._ID), null, null, null
@@ -796,6 +910,20 @@ class MainActivity : AudioServiceActivity() {
     ) {
         private val outcomes = LinkedHashMap<String, DeleteOutcome>()
 
+        /**
+         * Garante que o `MethodChannel.Result` seja respondido UMA única vez.
+         *
+         * Existem dois motivos plausíveis para `finishDelete` ser chamado duas
+         * vezes: uma exceção depois do diálogo já estar em tela, ou uma
+         * conclusão duplicada. Responder duas vezes faz o Flutter lançar
+         * ("reply already submitted") e derruba o isolate do canal.
+         */
+        private val answered = AtomicBoolean(false)
+
+        /// Reserva o direito de responder. Devolve false para quem perdeu a
+        /// corrida — esse chamador não responde nada.
+        fun claimAnswer(): Boolean = answered.compareAndSet(false, true)
+
         fun set(item: DeleteItem, outcome: DeleteOutcome) {
             synchronized(outcomes) { outcomes[item.key] = outcome }
         }
@@ -824,6 +952,23 @@ class MainActivity : AudioServiceActivity() {
                 for (item in items) outcomes[item.key] = DeleteOutcome.Failed(reason)
             }
         }
+
+        /**
+         * Falha apenas o que ainda NÃO tem desfecho.
+         *
+         * Usado no `catch` do trabalho em background: um item já confirmado
+         * como removido precisa continuar `deleted` — sobrescrevê-lo por
+         * `failed` seria mentir sobre um arquivo que saiu do aparelho.
+         */
+        fun failPending(reason: String) {
+            synchronized(outcomes) {
+                for (item in items) {
+                    if (!outcomes.containsKey(item.key)) {
+                        outcomes[item.key] = DeleteOutcome.Failed(reason)
+                    }
+                }
+            }
+        }
     }
 
     /** Exclusão aguardando a resposta do diálogo do SO. */
@@ -831,7 +976,21 @@ class MainActivity : AudioServiceActivity() {
         val state: DeleteState,
         /** Preenchido no Android 10: URIs a repetir após o RESULT_OK. */
         val retry: List<Pair<DeleteItem, Uri>>?
-    )
+    ) {
+        /**
+         * O `IntentSender` já foi entregue ao SO e o diálogo está em tela.
+         *
+         * Enquanto for true e [dialogAnswered] for false, a reserva do slot
+         * NÃO pode ser liberada: um segundo pedido abriria um segundo diálogo
+         * por cima do primeiro.
+         */
+        @Volatile
+        var dialogLaunched = false
+
+        /// O SO já devolveu RESULT_OK/RESULT_CANCELED.
+        @Volatile
+        var dialogAnswered = false
+    }
 
     /// Lista os vídeos do aparelho (mais recentes primeiro).
     private fun queryVideos(): List<Map<String, Any?>> {
