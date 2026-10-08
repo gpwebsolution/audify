@@ -3,11 +3,14 @@ import 'dart:collection';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../models/media_ref.dart';
 import '../models/song_model.dart';
 import '../providers/player_provider.dart';
 import '../providers/playlist_provider.dart';
 import '../services/permission_service.dart';
 import '../widgets/media_actions.dart';
+import '../widgets/media_details_sheet.dart';
+import '../widgets/selection_bar.dart';
 import '../widgets/song_list_tile.dart';
 
 /// Aba de Música: busca + biblioteca de faixas (aparelho + assets).
@@ -22,15 +25,174 @@ class MusicScreen extends StatefulWidget {
 
   @override
   State<MusicScreen> createState() => _MusicScreenState();
+
+  /// Exclui uma música do aparelho e limpa catálogo, fila, sessão e
+  /// playlists.
+  ///
+  /// Estático para ser reusado pelo player em tela cheia
+  /// ([PlayerScreen] tem o mesmo fluxo) sem duplicar a lógica.
+  static Future<void> deleteSong(
+    BuildContext context,
+    PlayerProvider provider,
+    Song song,
+  ) async {
+    // O modelo decide: faixa de asset (ou sem id/caminho) não vira MediaRef
+    // e nunca chega ao canal nativo.
+    final MediaRef? ref = MediaRef.fromSong(song);
+    if (ref == null) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text(assetLockedMessage)));
+      return;
+    }
+
+    // Provider lido antes de qualquer await: nada de segurar BuildContext
+    // através de lacuna assíncrona.
+    final PlaylistProvider playlists = context.read<PlaylistProvider>();
+    await MediaActions.confirmDelete(
+      context,
+      ref,
+      label: song.title,
+      onDeleted: (List<MediaRef> _) async {
+        // Excluída do aparelho: sai de todas as playlists.
+        await playlists.removeSongsFromAll(<Song>[song]);
+        await provider.handleSongsDeleted(<Song>[song]);
+      },
+    );
+  }
+
+  /// Motivo exibido quando a faixa não está no aparelho (é do próprio APK).
+  static const String assetLockedMessage =
+      'Faixa embutida no app, não pode ser excluída.';
 }
 
 enum _MusicGroupMode { tracks, album, artist, folder }
 
-class _MusicScreenState extends State<MusicScreen> {
+class _MusicScreenState extends State<MusicScreen> with MediaSelection<String> {
   final TextEditingController _searchController = TextEditingController();
   String? _lastShownError;
   _MusicGroupMode _groupMode = _MusicGroupMode.tracks;
   final Set<String> _collapsedGroups = {};
+
+  @override
+  void notifyChanged() => setState(() {});
+
+  /// Long-press alterna entre "abrir menu" e "marcar para o lote".
+  ///
+  /// Com o modo seleção já ligado, o long-press continua marcando/desmarcando
+  /// Long-press ENTRA no modo seleção e marca a faixa.
+  ///
+  /// Deliberadamente NÃO abre o menu de ações: o mesmo gesto já marcava só
+  /// depois de um segundo toque longo (o primeiro abria o menu), o que
+  /// impedia montar uma seleção de várias músicas. As ações por item ficam no
+  /// botão de menu do tile ([SongListTile.onMenuTap]).
+  void _onSongLongPress(Song song) => toggleSelect(song.id);
+
+  /// Toque no item: no modo seleção marca/desmarca; fora dele, reproduz.
+  void _onSongTap(PlayerProvider provider, int index, Song song) {
+    if (isSelectionMode) {
+      toggleSelect(song.id);
+      return;
+    }
+    provider.playVisibleAt(index);
+  }
+
+  /// Exclui as músicas marcadas do aparelho com UM único diálogo do sistema.
+  ///
+  /// Faixa embutida no app não é arquivo do aparelho e é filtrada antes de
+  /// qualquer chamada nativa, com o motivo informado na SnackBar.
+  Future<void> deleteSelectedSongs(
+    BuildContext context,
+    PlayerProvider provider,
+  ) async {
+    final List<Song> songs = selectedFrom(
+      provider.visibleSongs,
+      (Song s) => s.id,
+    );
+    if (songs.isEmpty) {
+      clearSelection();
+      return;
+    }
+
+    final List<Song> deletable = <Song>[
+      for (final Song s in songs)
+        if (MediaRef.fromSong(s) != null) s,
+    ];
+    final int skipped = songs.length - deletable.length;
+
+    if (deletable.isEmpty) {
+      clearSelection();
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text(MusicScreen.assetLockedMessage)),
+      );
+      return;
+    }
+
+    if (!context.mounted) return;
+
+    final PlaylistProvider playlists = context.read<PlaylistProvider>();
+    await MediaActions.confirmDeleteMany(
+      context,
+      <MediaRef>[for (final Song s in deletable) MediaRef.fromSong(s)!],
+      onDeleted: (List<MediaRef> removed) async {
+        // Limpa SÓ depois da confirmação: cancelar não pode custar ao
+        // usuário a seleção inteira de uma vez.
+        clearSelection();
+        // Usa as chaves devolvidas pelo nativo (excluídas + ausentes) para
+        // não limpar estado de uma faixa que na verdade ficou no aparelho.
+        final Set<String> goneKeys = removed.map((MediaRef r) => r.key).toSet();
+        final List<Song> gone = <Song>[
+          for (final Song s in deletable)
+            if (goneKeys.contains(MediaRef.fromSong(s)!.key)) s,
+        ];
+        if (gone.isEmpty) return;
+        await playlists.removeSongsFromAll(gone);
+        await provider.handleSongsDeleted(gone);
+        if (!context.mounted) return;
+        if (skipped > 0) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                '$skipped ${skipped == 1 ? 'faixa embutida' : 'faixas embutidas'} '
+                'no app ${skipped == 1 ? 'foi mantida' : 'foram mantidas'}.',
+              ),
+            ),
+          );
+        }
+      },
+    );
+  }
+
+  /// Compartilha as músicas marcadas num único diálogo do sistema.
+  void _shareSelected(BuildContext context, PlayerProvider provider) {
+    final List<Song> songs = selectedFrom(
+      provider.visibleSongs,
+      (Song s) => s.id,
+    );
+    if (songs.isEmpty) return;
+    MediaActions.shareMany(context, <MediaRef>[
+      for (final Song song in songs)
+        if (MediaRef.fromSong(song) case final MediaRef ref) ref,
+    ]);
+  }
+
+  /// Adiciona as músicas marcadas a uma playlist escolhida pelo usuário.
+  ///
+  /// Uma única folha de escolha para o lote inteiro (em vez de uma por música)
+  /// e o item permanece marcado para permitir adicionar a outra playlist em
+  /// seguida.
+  Future<void> _addSelectedToPlaylist(
+    BuildContext context,
+    PlayerProvider provider,
+    List<Song> songs,
+  ) async {
+    if (songs.isEmpty) {
+      clearSelection();
+      return;
+    }
+    final PlaylistProvider playlists = context.read<PlaylistProvider>();
+    await _pickPlaylistForMany(context, playlists, songs);
+  }
 
   @override
   void dispose() {
@@ -51,7 +213,13 @@ class _MusicScreenState extends State<MusicScreen> {
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
           child: TextField(
             controller: _searchController,
-            onChanged: provider.setSearchQuery,
+            onChanged: (String value) {
+              provider.setSearchQuery(value);
+              // O universo de itens mudou: manter a marcação deixaria a barra
+              // anunciando N com o lote agindo sobre menos itens (a busca
+              // filtra a lista). Mesmo padrão de "limpar ao mudar o universo".
+              if (isSelectionMode) clearSelection();
+            },
             decoration: InputDecoration(
               hintText: 'Buscar música, artista ou álbum',
               prefixIcon: const Icon(Icons.search),
@@ -75,27 +243,55 @@ class _MusicScreenState extends State<MusicScreen> {
           ),
         ),
 
-        // ---- Modo de organização (chips) ----
-        SizedBox(
-          height: 48,
-          child: ListView(
-            scrollDirection: Axis.horizontal,
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            children: [
-              for (final mode in _MusicGroupMode.values)
-                Padding(
-                  padding: const EdgeInsets.only(right: 8),
-                  child: ChoiceChip(
-                    label: Text(_modeLabel(mode)),
-                    selected: _groupMode == mode,
-                    avatar: Icon(_modeIcon(mode), size: 18),
-                    onSelected: (_) => setState(() {
-                      _groupMode = mode;
-                      _collapsedGroups.clear();
-                    }),
-                  ),
+        // ---- Chips de organização / barra de seleção em lote ----
+        // No modo seleção os chips somem e entram as ações de lote, com
+        // animação de troca em vez de corte seco.
+        AnimatedToolbarSwap(
+          value: isSelectionMode,
+          selectionBar: SelectionBar(
+            label: '$selectionCount selecionada(s)',
+            onSelectAll: () =>
+                toggleSelectAll(provider.visibleSongs.map((Song s) => s.id)),
+            onClear: clearSelection,
+            onDelete: () => deleteSelectedSongs(context, provider),
+            actions: <Widget>[
+              IconButton(
+                tooltip: 'Compartilhar selecionadas',
+                icon: const Icon(Icons.share_outlined),
+                onPressed: () => _shareSelected(context, provider),
+              ),
+              IconButton(
+                tooltip: 'Adicionar à playlist',
+                icon: const Icon(Icons.playlist_add),
+                onPressed: () => _addSelectedToPlaylist(
+                  context,
+                  provider,
+                  selectedFrom(provider.visibleSongs, (Song s) => s.id),
                 ),
+              ),
             ],
+          ),
+          toolbar: SizedBox(
+            height: 48,
+            child: ListView(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              children: [
+                for (final mode in _MusicGroupMode.values)
+                  Padding(
+                    padding: const EdgeInsets.only(right: 8),
+                    child: ChoiceChip(
+                      label: Text(_modeLabel(mode)),
+                      selected: _groupMode == mode,
+                      avatar: Icon(_modeIcon(mode), size: 18),
+                      onSelected: (_) => setState(() {
+                        _groupMode = mode;
+                        _collapsedGroups.clear();
+                      }),
+                    ),
+                  ),
+              ],
+            ),
           ),
         ),
 
@@ -150,8 +346,10 @@ class _MusicScreenState extends State<MusicScreen> {
       case _MusicGroupMode.folder:
         final String? path = song.filePath;
         if (path == null || path.isEmpty) return 'Assets do app';
-        final List<String> parts =
-            path.split('/').where((s) => s.isNotEmpty).toList();
+        final List<String> parts = path
+            .split('/')
+            .where((s) => s.isNotEmpty)
+            .toList();
         return parts.length >= 2 ? parts[parts.length - 2] : '/';
     }
   }
@@ -189,12 +387,16 @@ class _MusicScreenState extends State<MusicScreen> {
         itemBuilder: (context, index) {
           final Song song = provider.visibleSongs[index];
           final bool isCurrent = provider.currentSong?.id == song.id;
+          final bool marked = isSelected(song.id);
           return SongListTile(
             song: song,
             isCurrent: isCurrent,
             isPlaying: isCurrent && provider.isPlaying,
-            onTap: () => provider.playVisibleAt(index),
-            onLongPress: () => _showSongMenu(context, provider, song),
+            selected: marked,
+            selectionMode: isSelectionMode,
+            onTap: () => _onSongTap(provider, index, song),
+            onLongPress: () => _onSongLongPress(song),
+            onMenuTap: () => _showSongMenu(context, provider, song),
           );
         },
       );
@@ -205,41 +407,50 @@ class _MusicScreenState extends State<MusicScreen> {
     for (final Song song in provider.visibleSongs) {
       groups.putIfAbsent(_groupKeyOf(song), () => []).add(song);
     }
-    final List<MapEntry<String, List<Song>>> sortedEntries = groups.entries
-        .toList()
-      ..sort((a, b) => a.key.toLowerCase().compareTo(b.key.toLowerCase()));
+    final List<MapEntry<String, List<Song>>> sortedEntries =
+        groups.entries.toList()
+          ..sort((a, b) => a.key.toLowerCase().compareTo(b.key.toLowerCase()));
 
     final List<Widget> sections = <Widget>[];
     for (final entry in sortedEntries) {
       final String key = entry.key;
       final List<Song> songs = entry.value;
       final bool collapsed = _collapsedGroups.contains(key);
-      sections.add(_GroupHeader(
-        icon: _modeIcon(_groupMode),
-        title: key,
-        count: songs.length,
-        collapsed: collapsed,
-        onToggle: () => setState(() {
-          if (!collapsed) {
-            _collapsedGroups.add(key);
-          } else {
-            _collapsedGroups.remove(key);
-          }
-        }),
-        onPlayAll: () => provider.playQueue(songs, 0),
-      ));
+      sections.add(
+        _GroupHeader(
+          icon: _modeIcon(_groupMode),
+          title: key,
+          count: songs.length,
+          collapsed: collapsed,
+          onToggle: () => setState(() {
+            if (!collapsed) {
+              _collapsedGroups.add(key);
+            } else {
+              _collapsedGroups.remove(key);
+            }
+          }),
+          onPlayAll: () => provider.playQueue(songs, 0),
+        ),
+      );
       if (!collapsed) {
         for (int i = 0; i < songs.length; i++) {
           final Song song = songs[i];
           final bool isCurrent = provider.currentSong?.id == song.id;
-          sections.add(SongListTile(
-            song: song,
-            isCurrent: isCurrent,
-            isPlaying: isCurrent && provider.isPlaying,
-            // O grupo vira a fila: próxima/anterior navega dentro dele.
-            onTap: () => provider.playQueue(songs, i),
-            onLongPress: () => _showSongMenu(context, provider, song),
-          ));
+          sections.add(
+            SongListTile(
+              song: song,
+              isCurrent: isCurrent,
+              isPlaying: isCurrent && provider.isPlaying,
+              selected: isSelected(song.id),
+              selectionMode: isSelectionMode,
+              // O grupo vira a fila: próxima/anterior navega dentro dele.
+              onTap: () => isSelectionMode
+                  ? toggleSelect(song.id)
+                  : provider.playQueue(songs, i),
+              onLongPress: () => _onSongLongPress(song),
+              onMenuTap: () => _showSongMenu(context, provider, song),
+            ),
+          );
         }
       }
     }
@@ -250,13 +461,12 @@ class _MusicScreenState extends State<MusicScreen> {
     );
   }
 
-  /// Menu por toque longo: compartilhar / excluir (músicas do aparelho)
-  /// e adicionar à playlist.
-  void _showSongMenu(
-    BuildContext context,
-    PlayerProvider provider,
-    Song song,
-  ) {
+  /// Menu por toque longo: adicionar à playlist, compartilhar, excluir.
+  void _showSongMenu(BuildContext context, PlayerProvider provider, Song song) {
+    // Mesma regra do modelo: o que não vira MediaRef não é excluível (faixa
+    // embutida no APK, ou faixa sem id/caminho para localizar no aparelho).
+    final bool isAsset = MediaRef.fromSong(song) == null;
+
     showModalBottomSheet<void>(
       context: context,
       showDragHandle: true,
@@ -272,37 +482,75 @@ class _MusicScreenState extends State<MusicScreen> {
                 _pickPlaylist(context, song);
               },
             ),
-            // Músicas do bundle (assets) não podem ser compartilhadas/
-            // excluídas — fazem parte do APK.
-            if (!song.isAsset && song.filePath != null) ...[
+            if (!isAsset) ...[
               ListTile(
                 leading: const Icon(Icons.share_outlined),
                 title: const Text('Compartilhar'),
                 subtitle: const Text('WhatsApp, Messenger e outros'),
                 onTap: () {
                   Navigator.pop(sheetContext);
-                  MediaActions.show(
+                  // Compartilhamento direto: a exclusão já tem item
+                  // próprio neste menu, não precisa aninhar outro sheet.
+                  // `filePath` pode ser nulo mesmo para faixa do aparelho
+                  // (metadado ausente ao vir do banco), então o serviço
+                  // decide — não um `!` que estoura null-check em silêncio.
+                  MediaActions.share(
                     context,
-                    type: 'audio',
-                    mediaId: song.mediaId,
-                    filePath: song.filePath!,
-                    shareName: '${song.title}.mp3',
-                    shareMimeType: 'audio/mpeg',
-                    onDeleted: () {
-                      // Excluída do aparelho: sai de todas as playlists.
-                      final PlaylistProvider playlists =
-                          context.read<PlaylistProvider>();
-                      playlists.removeSongFromAll(song);
-                      provider.requestPermissionAndReload();
-                    },
+                    path: song.filePath ?? '',
+                    name: '${song.title}.mp3',
+                    mimeType: 'audio/mpeg',
                   );
                 },
               ),
-            ],
+              ListTile(
+                leading: Icon(
+                  Icons.delete_outline,
+                  color: Theme.of(context).colorScheme.error,
+                ),
+                title: Text(
+                  'Excluir do aparelho',
+                  style: TextStyle(color: Theme.of(context).colorScheme.error),
+                ),
+                subtitle: Text(
+                  '${song.title} • o Android pedirá confirmação',
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                onTap: () async {
+                  Navigator.pop(sheetContext);
+                  await MusicScreen.deleteSong(context, provider, song);
+                },
+              ),
+            ] else
+              ListTile(
+                enabled: false,
+                leading: Icon(
+                  Icons.lock_outline,
+                  color: Theme.of(context).colorScheme.outline,
+                ),
+                title: Text(
+                  'Excluir do aparelho',
+                  style: TextStyle(
+                    color: Theme.of(context).colorScheme.outline,
+                  ),
+                ),
+                subtitle: const Text(MusicScreen.assetLockedMessage),
+                onTap: () {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text(MusicScreen.assetLockedMessage),
+                    ),
+                  );
+                },
+              ),
             ListTile(
-              leading: Icon(Icons.info_outline, color: Theme.of(context).colorScheme.onSurfaceVariant),
-              title: Text('${song.title} • ${song.displayArtist}'),
-              subtitle: song.album != null ? Text(song.album!) : null,
+              leading: const Icon(Icons.info_outline),
+              title: const Text('Detalhes'),
+              subtitle: Text('${song.title} • ${song.displayArtist}'),
+              onTap: () {
+                Navigator.pop(sheetContext);
+                MediaDetailsSheet.showSong(context, song);
+              },
             ),
           ],
         ),
@@ -312,8 +560,7 @@ class _MusicScreenState extends State<MusicScreen> {
 
   /// Escolhe uma playlist para receber a faixa.
   void _pickPlaylist(BuildContext context, Song song) {
-    final PlaylistProvider playlistProvider =
-        context.read<PlaylistProvider>();
+    final PlaylistProvider playlistProvider = context.read<PlaylistProvider>();
     showModalBottomSheet<void>(
       context: context,
       showDragHandle: true,
@@ -359,17 +606,78 @@ class _MusicScreenState extends State<MusicScreen> {
     );
   }
 
+  /// Escolhe uma playlist para várias músicas de uma vez (modo seleção).
+  ///
+  /// Um único add por música no banco. Se alguma falhar, o contador de erro
+  /// diz quantas entraram de fato em vez de mentir "N adicionadas".
+  Future<void> _pickPlaylistForMany(
+    BuildContext context,
+    PlaylistProvider playlistProvider,
+    List<Song> songs,
+  ) async {
+    if (playlistProvider.playlists.isEmpty) {
+      clearSelection();
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Nenhuma playlist ainda. Crie uma na aba Playlists.'),
+        ),
+      );
+      return;
+    }
+
+    final ScaffoldMessengerState messenger = ScaffoldMessenger.of(context);
+    await showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (sheetContext) => SafeArea(
+        child: ListView.builder(
+          shrinkWrap: true,
+          itemCount: playlistProvider.playlists.length,
+          itemBuilder: (BuildContext _, int index) {
+            final playlist = playlistProvider.playlists[index];
+            return ListTile(
+              leading: const Icon(Icons.queue_music),
+              title: Text(playlist.name),
+              subtitle: Text('${playlist.songCount} faixas'),
+              onTap: () async {
+                // Uma transação + um reload (antes: um insert e uma query de
+                // posição por faixa, e a contagem da playlist ficava errada).
+                final int added = await playlistProvider.addSongsToPlaylist(
+                  playlist.id,
+                  songs,
+                );
+                if (sheetContext.mounted) Navigator.pop(sheetContext);
+                clearSelection();
+                messenger.showSnackBar(
+                  SnackBar(
+                    content: Text(
+                      added == songs.length
+                          ? '${songs.length} adicionadas a "${playlist.name}"'
+                          : '$added de ${songs.length} adicionadas a '
+                                '"${playlist.name}"',
+                    ),
+                  ),
+                );
+              },
+            );
+          },
+        ),
+      ),
+    );
+  }
+
   Widget _buildEmptyState(BuildContext context, PlayerProvider provider) {
     final bool noPermission =
         provider.permission != AudioPermissionState.granted;
 
     final String message = noPermission
         ? 'Permissão de acesso às músicas negada.\n'
-            'Permita acima para ver as músicas do aparelho.'
+              'Permita acima para ver as músicas do aparelho.'
         : (provider.songs.isEmpty
-            ? 'Nenhuma música encontrada.\n'
-                'Adicione arquivos .mp3 em assets/songs/ ou no aparelho.'
-            : 'Nenhum resultado para "${provider.searchQuery}".');
+              ? 'Nenhuma música encontrada.\n'
+                    'Adicione arquivos .mp3 em assets/songs/ ou no aparelho.'
+              : 'Nenhum resultado para "${provider.searchQuery}".');
 
     return Center(
       child: Padding(
@@ -378,9 +686,7 @@ class _MusicScreenState extends State<MusicScreen> {
           mainAxisSize: MainAxisSize.min,
           children: [
             Icon(
-              noPermission
-                  ? Icons.library_music_outlined
-                  : Icons.search_off,
+              noPermission ? Icons.library_music_outlined : Icons.search_off,
               size: 64,
               color: Theme.of(context).colorScheme.outline,
             ),
@@ -426,10 +732,9 @@ class _GroupHeader extends StatelessWidget {
         title,
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
-        style: Theme.of(context)
-            .textTheme
-            .titleSmall
-            ?.copyWith(fontWeight: FontWeight.w600),
+        style: Theme.of(
+          context,
+        ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600),
       ),
       subtitle: Text('$count ${count == 1 ? 'faixa' : 'faixas'}'),
       trailing: Row(
@@ -483,11 +788,11 @@ class _PermissionBanner extends StatelessWidget {
             child: Text(
               permanent
                   ? 'Permissão bloqueada. Libere nas Configurações do '
-                      'sistema para ver suas músicas.'
+                        'sistema para ver suas músicas.'
                   : 'Permita o acesso às músicas para ver sua biblioteca.',
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: colors.onErrorContainer,
-                  ),
+              style: Theme.of(
+                context,
+              ).textTheme.bodySmall?.copyWith(color: colors.onErrorContainer),
             ),
           ),
           const SizedBox(width: 8),

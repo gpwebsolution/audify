@@ -4,11 +4,14 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../models/pdf_file_model.dart';
+import '../models/media_ref.dart';
 import '../providers/pdf_provider.dart';
 import '../services/pdf_favorites_service.dart';
 import '../services/pdf_progress_service.dart';
 import '../services/pdf_query_service.dart';
 import '../widgets/media_actions.dart';
+import '../widgets/media_details_sheet.dart';
+import '../widgets/selection_bar.dart';
 import 'pdf_viewer_screen.dart';
 
 /// Aba de PDFs: documentos do aparelho (MediaStore) + seletor do sistema.
@@ -27,7 +30,7 @@ class PdfScreen extends StatefulWidget {
   State<PdfScreen> createState() => _PdfScreenState();
 }
 
-class _PdfScreenState extends State<PdfScreen> {
+class _PdfScreenState extends State<PdfScreen> with MediaSelection<String> {
   String? _lastShownError;
 
   @override
@@ -56,7 +59,8 @@ class _PdfScreenState extends State<PdfScreen> {
     }
 
     // Favoritos primeiro, depois mais recentes.
-    final List<PdfFile> sorted = [...provider.pdfs]..sort((a, b) {
+    final List<PdfFile> sorted = [...provider.pdfs]
+      ..sort((a, b) {
         final bool favA = favorites.isFavorite(a.path);
         final bool favB = favorites.isFavorite(b.path);
         if (favA != favB) return favA ? -1 : 1;
@@ -86,6 +90,27 @@ class _PdfScreenState extends State<PdfScreen> {
             ),
           ),
         ),
+        // ---- Barra de ações em lote (modo seleção) ----
+        AnimatedToolbarSwap(
+          value: isSelectionMode,
+          selectionBar: SelectionBar(
+            label: '$selectionCount selecionado(s)',
+            onSelectAll: () =>
+                toggleSelectAll(sorted.map((PdfFile p) => p.path)),
+            onClear: clearSelection,
+            onDelete: () =>
+                deleteSelectedPdfs(context, provider, favorites, sorted),
+            actions: <Widget>[
+              IconButton(
+                tooltip: 'Compartilhar selecionados',
+                icon: const Icon(Icons.share_outlined),
+                onPressed: () => _shareSelected(sorted),
+              ),
+            ],
+          ),
+          toolbar: const SizedBox.shrink(),
+        ),
+
         Expanded(child: _buildBody(context, provider, favorites, sorted)),
       ],
     );
@@ -113,7 +138,8 @@ class _PdfScreenState extends State<PdfScreen> {
     if (provider.pdfs.isEmpty) {
       return const _EmptyState(
         icon: Icons.picture_as_pdf_outlined,
-        message: 'Nenhum PDF encontrado no aparelho.\n'
+        message:
+            'Nenhum PDF encontrado no aparelho.\n'
             'Use "Selecionar PDF" para abrir um arquivo, '
             'ou salve PDFs para vê-los aqui.',
       );
@@ -125,56 +151,168 @@ class _PdfScreenState extends State<PdfScreen> {
       itemBuilder: (context, index) {
         final pdf = sorted[index];
         final bool isFav = favorites.isFavorite(pdf.path);
+        final bool marked = isSelectionMode && isSelected(pdf.path);
         return ListTile(
-          leading: _PdfThumbnail(pdf: pdf),
+          selected: marked,
+          selectedTileColor: Theme.of(
+            context,
+          ).colorScheme.secondaryContainer.withValues(alpha: 0.5),
+          leading: isSelectionMode
+              ? Checkbox(
+                  value: isSelected(pdf.path),
+                  onChanged: (_) => toggleSelect(pdf.path),
+                  materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                )
+              : _PdfThumbnail(pdf: pdf),
           title: Text(pdf.name, maxLines: 1, overflow: TextOverflow.ellipsis),
           subtitle: Row(
-            children: [
-              Flexible(child: _PdfSubtitle(pdf: pdf)),
-            ],
+            children: [Flexible(child: _PdfSubtitle(pdf: pdf))],
           ),
-          trailing: IconButton(
-            tooltip: isFav ? 'Remover dos favoritos' : 'Adicionar aos favoritos',
-            icon: Icon(
-              isFav ? Icons.star_rounded : Icons.star_outline_rounded,
-              color: isFav ? Theme.of(context).colorScheme.primary : null,
-            ),
-            onPressed: () => favorites.toggle(pdf.path),
-          ),
-          onTap: () => Navigator.of(context).push(
-            MaterialPageRoute(
-              builder: (_) => PdfViewerScreen(pdf: pdf),
-            ),
-          ),
-          onLongPress: () => _showPdfActions(context, provider, pdf),
+          // No modo seleção a estrela e o menu saem: o polegar precisa ir
+          // para a ação em lote, e favoritar N itens um a um não faz sentido.
+          // Fora dele, o botão ⋮ assume as ações (o long-press pertence à
+          // seleção) e a estrela continua ao lado.
+          trailing: isSelectionMode
+              ? null
+              : Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: <Widget>[
+                    IconButton(
+                      tooltip: isFav
+                          ? 'Remover dos favoritos'
+                          : 'Adicionar aos favoritos',
+                      icon: Icon(
+                        isFav ? Icons.star_rounded : Icons.star_outline_rounded,
+                        color: isFav
+                            ? Theme.of(context).colorScheme.primary
+                            : null,
+                      ),
+                      onPressed: () => favorites.toggle(pdf.path),
+                    ),
+                    IconButton(
+                      tooltip: 'Ações do PDF',
+                      icon: const Icon(Icons.more_vert),
+                      onPressed: () => _showPdfActions(context, provider, pdf),
+                    ),
+                  ],
+                ),
+          onTap: () {
+            if (isSelectionMode) {
+              toggleSelect(pdf.path);
+              return;
+            }
+            Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => PdfViewerScreen(pdf: pdf)),
+            );
+          },
+          // Long-press marca; as ações ficam no botão ⋮.
+          onLongPress: () => toggleSelect(pdf.path),
         );
       },
     );
   }
 
-  /// Menu de ações do PDF: compartilhar / excluir (long-press).
+  @override
+  void notifyChanged() => setState(() {});
+
+  /// Compartilha os PDFs marcados num único diálogo do sistema.
+  void _shareSelected(List<PdfFile> visible) {
+    final List<PdfFile> pdfs = selectedFrom(visible, (PdfFile p) => p.path);
+    if (pdfs.isEmpty) return;
+    MediaActions.shareMany(context, <MediaRef>[
+      for (final PdfFile p in pdfs) MediaRef.fromPdf(p),
+    ]);
+  }
+
+  /// Exclui os PDFs marcados com UM único diálogo do sistema e limpa o que
+  /// apontava para eles (progresso de leitura e favorito).
+  Future<void> deleteSelectedPdfs(
+    BuildContext context,
+    PdfProvider provider,
+    PdfFavoritesService favorites,
+    List<PdfFile> visible,
+  ) async {
+    final List<PdfFile> pdfs = selectedFrom(visible, (PdfFile p) => p.path);
+    if (pdfs.isEmpty) {
+      clearSelection();
+      return;
+    }
+    if (!context.mounted) return;
+
+    final ScaffoldMessengerState messenger = ScaffoldMessenger.of(context);
+    await MediaActions.confirmDeleteMany(
+      context,
+      <MediaRef>[for (final PdfFile p in pdfs) MediaRef.fromPdf(p)],
+      onDeleted: (List<MediaRef> removed) async {
+        // Só depois de confirmar: cancelar preserva a seleção.
+        clearSelection();
+        final Set<String> goneKeys = removed.map((MediaRef r) => r.key).toSet();
+        final List<PdfFile> gone = <PdfFile>[
+          for (final PdfFile p in pdfs)
+            if (goneKeys.contains(MediaRef.fromPdf(p).key)) p,
+        ];
+        if (gone.isEmpty) return;
+        for (final PdfFile p in gone) {
+          await PdfProgressService.clear(p.path);
+          await favorites.remove(p.path);
+          await PdfQueryService.clearForPath(p.path);
+        }
+        await provider.handlePdfsDeleted(gone);
+        if (!context.mounted) return;
+        messenger.showSnackBar(
+          SnackBar(
+            content: Text(
+              gone.length == 1
+                  ? 'PDF excluído.'
+                  : '${gone.length} PDFs excluídos.',
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  /// Menu de ações do PDF: compartilhar / detalhes / excluir (long-press).
   Future<void> _showPdfActions(
     BuildContext context,
     PdfProvider provider,
     PdfFile pdf,
   ) async {
-    // PDFs do MediaStore têm id numérico (para o diálogo do sistema);
-    // os do seletor SAF são excluídos pelo caminho (cache do app).
-    final int? mediaId =
-        pdf.id.startsWith('pdf-') ? int.tryParse(pdf.id.substring(4)) : null;
     await MediaActions.show(
       context,
-      type: 'pdf',
-      mediaId: mediaId,
-      filePath: pdf.path,
+      ref: MediaRef.fromPdf(pdf),
+      label: pdf.name,
+      sharePath: pdf.path,
       shareName: pdf.name,
       shareMimeType: 'application/pdf',
-      onDeleted: () {
-        // Sem progresso salvo para um arquivo que não existe mais.
-        PdfProgressService.clear(pdf.path);
-        provider.load();
-      },
+      extraTiles: <Widget>[
+        ListTile(
+          leading: const Icon(Icons.info_outline),
+          title: const Text('Detalhes'),
+          subtitle: const Text('Tamanho, origem e caminho'),
+          onTap: () {
+            Navigator.of(context).pop();
+            MediaDetailsSheet.showPdf(context, pdf);
+          },
+        ),
+      ],
+      onDeleted: (List<MediaRef> _) => _afterPdfDeleted(context, provider, pdf),
     );
+  }
+
+  /// PDF confirmado como apagado: some da lista, do progresso salvo e dos
+  /// favoritos (nada pode apontar para um arquivo inexistente).
+  Future<void> _afterPdfDeleted(
+    BuildContext context,
+    PdfProvider provider,
+    PdfFile pdf,
+  ) async {
+    await PdfProgressService.clear(pdf.path);
+    if (!context.mounted) return;
+    final PdfFavoritesService favorites = context.read<PdfFavoritesService>();
+    await favorites.remove(pdf.path);
+    await PdfQueryService.clearForPath(pdf.path);
+    await provider.handlePdfsDeleted(<PdfFile>[pdf]);
   }
 }
 
@@ -192,23 +330,17 @@ class _PdfSubtitle extends StatelessWidget {
         final int? pages = snapshot.data;
         final String text = [
           if (pdf.displaySize.isNotEmpty) pdf.displaySize,
-          if (pdf.dateAdded > 0)
-            'Adicionado em ${_formatDate(pdf.dateAdded)}',
+          if (pdf.dateAdded > 0) 'Adicionado em ${_formatDate(pdf.dateAdded)}',
           if (pages != null && pages > 0)
             '$pages ${pages == 1 ? 'página' : 'páginas'}',
         ].join(' • ');
-        return Text(
-          text,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-        );
+        return Text(text, maxLines: 1, overflow: TextOverflow.ellipsis);
       },
     );
   }
 
   static String _formatDate(int seconds) {
-    final DateTime date =
-        DateTime.fromMillisecondsSinceEpoch(seconds * 1000);
+    final DateTime date = DateTime.fromMillisecondsSinceEpoch(seconds * 1000);
     return '${date.day.toString().padLeft(2, '0')}/'
         '${date.month.toString().padLeft(2, '0')}/${date.year}';
   }
@@ -244,11 +376,7 @@ class _PdfThumbnail extends StatelessWidget {
                 ),
               );
             }
-            return Image.memory(
-              data,
-              fit: BoxFit.cover,
-              gaplessPlayback: true,
-            );
+            return Image.memory(data, fit: BoxFit.cover, gaplessPlayback: true);
           },
         ),
       ),
@@ -274,11 +402,7 @@ class _AllFilesAccessState extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(
-              Icons.folder_off_outlined,
-              size: 64,
-              color: colors.outline,
-            ),
+            Icon(Icons.folder_off_outlined, size: 64, color: colors.outline),
             const SizedBox(height: 12),
             Text(
               'Seus PDFs não aparecem porque o Android 13+ só deixa '
@@ -320,11 +444,7 @@ class _EmptyState extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(
-              icon,
-              size: 64,
-              color: Theme.of(context).colorScheme.outline,
-            ),
+            Icon(icon, size: 64, color: Theme.of(context).colorScheme.outline),
             const SizedBox(height: 12),
             Text(
               message,

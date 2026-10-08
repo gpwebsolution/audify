@@ -13,10 +13,12 @@ import '../services/file_query_service.dart';
 import '../services/media_share_service.dart';
 import 'apk_manager_screen.dart';
 import 'duplicate_files_screen.dart';
+import 'file_details_screen.dart';
 import 'pdf_viewer_screen.dart';
 import 'photo_viewer_screen.dart';
 import 'storage_analyzer_screen.dart';
 import 'trash_screen.dart';
+import '../widgets/selection_bar.dart';
 import 'video_player_screen.dart';
 
 /// Aba "Arquivos": gerenciador completo do armazenamento real do aparelho.
@@ -97,7 +99,9 @@ class _FilesScreenState extends State<FilesScreen> {
                     ? 'Escopo: todo o aparelho (toque p/ restringir)'
                     : 'Escopo: pasta atual (toque p/ ampliar)',
                 icon: Icon(
-                  provider.globalSearch ? Icons.public : Icons.folder_copy_outlined,
+                  provider.globalSearch
+                      ? Icons.public
+                      : Icons.folder_copy_outlined,
                   color: Theme.of(context).colorScheme.primary,
                 ),
                 onPressed: provider.toggleSearchScope,
@@ -159,40 +163,48 @@ class _FilesScreenState extends State<FilesScreen> {
               reverse: true,
               children: [
                 for (final entry in segments.asMap().entries.toList().reversed)
-                  Builder(builder: (context) {
-                    final int index = entry.key;
-                    final String segment = entry.value;
-                    final bool isLast = index == segments.length - 1;
-                    final String partialPath =
-                        '/${segments.take(index + 1).join('/')}';
-                    return InkWell(
-                      onTap: () => provider.navigateTo(partialPath),
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 6),
-                        child: Center(
-                          child: Text(
-                            isLast ? segment : '$segment ›',
-                            style: TextStyle(
-                              fontWeight: isLast ? FontWeight.w600 : FontWeight.normal,
-                              color: isLast
-                                  ? Theme.of(context).colorScheme.onSurface
-                                  : Theme.of(context).colorScheme.onSurfaceVariant,
+                  Builder(
+                    builder: (context) {
+                      final int index = entry.key;
+                      final String segment = entry.value;
+                      final bool isLast = index == segments.length - 1;
+                      final String partialPath =
+                          '/${segments.take(index + 1).join('/')}';
+                      return InkWell(
+                        onTap: () => provider.navigateTo(partialPath),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 6),
+                          child: Center(
+                            child: Text(
+                              isLast ? segment : '$segment ›',
+                              style: TextStyle(
+                                fontWeight: isLast
+                                    ? FontWeight.w600
+                                    : FontWeight.normal,
+                                color: isLast
+                                    ? Theme.of(context).colorScheme.onSurface
+                                    : Theme.of(
+                                        context,
+                                      ).colorScheme.onSurfaceVariant,
+                              ),
                             ),
                           ),
                         ),
-                      ),
-                    );
-                  }),
+                      );
+                    },
+                  ),
                 InkWell(
                   onTap: provider.goHome,
                   child: Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 6),
                     child: Center(
-                      child: Icon(Icons.home_outlined,
-                          size: 18,
-                          color: segments.isEmpty
-                              ? Theme.of(context).colorScheme.onSurface
-                              : Theme.of(context).colorScheme.onSurfaceVariant),
+                      child: Icon(
+                        Icons.home_outlined,
+                        size: 18,
+                        color: segments.isEmpty
+                            ? Theme.of(context).colorScheme.onSurface
+                            : Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
                     ),
                   ),
                 ),
@@ -225,10 +237,18 @@ class _FilesScreenState extends State<FilesScreen> {
             _filterItem(FileFilterType.images, 'Imagens', Icons.image),
             _filterItem(FileFilterType.videos, 'Vídeos', Icons.videocam),
             _filterItem(FileFilterType.audio, 'Áudio', Icons.music_note),
-            _filterItem(FileFilterType.documents, 'Documentos', Icons.description),
+            _filterItem(
+              FileFilterType.documents,
+              'Documentos',
+              Icons.description,
+            ),
             _filterItem(FileFilterType.apk, 'APKs', Icons.android),
             _filterItem(FileFilterType.archives, 'Compactados', Icons.archive),
-            _filterItem(FileFilterType.other, 'Outros', Icons.insert_drive_file),
+            _filterItem(
+              FileFilterType.other,
+              'Outros',
+              Icons.insert_drive_file,
+            ),
           ],
         ),
         IconButton(
@@ -242,15 +262,17 @@ class _FilesScreenState extends State<FilesScreen> {
         Text(
           '${provider.visibleItems.length} itens',
           style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                color: Theme.of(context).colorScheme.onSurfaceVariant,
-              ),
+            color: Theme.of(context).colorScheme.onSurfaceVariant,
+          ),
         ),
         const Spacer(),
         IconButton(
           tooltip: 'Lista / Grade',
-          icon: Icon(provider.viewMode == FileViewMode.list
-              ? Icons.grid_view_outlined
-              : Icons.view_list_outlined),
+          icon: Icon(
+            provider.viewMode == FileViewMode.list
+                ? Icons.grid_view_outlined
+                : Icons.view_list_outlined,
+          ),
           onPressed: () => provider.setViewMode(
             provider.viewMode == FileViewMode.list
                 ? FileViewMode.grid
@@ -262,43 +284,66 @@ class _FilesScreenState extends State<FilesScreen> {
           icon: const Icon(Icons.more_vert),
           onSelected: (value) => _handleMenuAction(context, provider, value),
           itemBuilder: (_) => [
-            PopupMenuItem(value: 'new_folder', child: ListTile(
-              leading: Icon(Icons.create_new_folder_outlined),
-              title: Text('Nova pasta'),
-              contentPadding: EdgeInsets.zero,
-            )),
-            PopupMenuItem(value: 'shortcuts', child: ListTile(
-              leading: Icon(Icons.bookmarks_outlined),
-              title: Text('Pastas do sistema'),
-              contentPadding: EdgeInsets.zero,
-            )),
-            PopupMenuItem(value: 'trash', child: ListTile(
-              leading: Icon(Icons.delete_outline),
-              title: Text('Lixeira'),
-              contentPadding: EdgeInsets.zero,
-            )),
-            PopupMenuItem(value: 'analyzer', child: ListTile(
-              leading: Icon(Icons.donut_large),
-              title: Text('Analisador de armazenamento'),
-              contentPadding: EdgeInsets.zero,
-            )),
-            PopupMenuItem(value: 'apks', child: ListTile(
-              leading: Icon(Icons.android),
-              title: Text('Gerenciador de APKs'),
-              contentPadding: EdgeInsets.zero,
-            )),
-            PopupMenuItem(value: 'duplicates', child: ListTile(
-              leading: Icon(Icons.content_copy),
-              title: Text('Arquivos duplicados'),
-              contentPadding: EdgeInsets.zero,
-            )),
-            PopupMenuItem(value: 'hidden', child: ListTile(
-              leading: Icon(Icons.visibility_outlined),
-              title: Text(provider.showHiddenFiles
-                  ? 'Ocultar arquivos ocultos'
-                  : 'Mostrar arquivos ocultos'),
-              contentPadding: EdgeInsets.zero,
-            )),
+            PopupMenuItem(
+              value: 'new_folder',
+              child: ListTile(
+                leading: Icon(Icons.create_new_folder_outlined),
+                title: Text('Nova pasta'),
+                contentPadding: EdgeInsets.zero,
+              ),
+            ),
+            PopupMenuItem(
+              value: 'shortcuts',
+              child: ListTile(
+                leading: Icon(Icons.bookmarks_outlined),
+                title: Text('Pastas do sistema'),
+                contentPadding: EdgeInsets.zero,
+              ),
+            ),
+            PopupMenuItem(
+              value: 'trash',
+              child: ListTile(
+                leading: Icon(Icons.delete_outline),
+                title: Text('Lixeira'),
+                contentPadding: EdgeInsets.zero,
+              ),
+            ),
+            PopupMenuItem(
+              value: 'analyzer',
+              child: ListTile(
+                leading: Icon(Icons.donut_large),
+                title: Text('Analisador de armazenamento'),
+                contentPadding: EdgeInsets.zero,
+              ),
+            ),
+            PopupMenuItem(
+              value: 'apks',
+              child: ListTile(
+                leading: Icon(Icons.android),
+                title: Text('Gerenciador de APKs'),
+                contentPadding: EdgeInsets.zero,
+              ),
+            ),
+            PopupMenuItem(
+              value: 'duplicates',
+              child: ListTile(
+                leading: Icon(Icons.content_copy),
+                title: Text('Arquivos duplicados'),
+                contentPadding: EdgeInsets.zero,
+              ),
+            ),
+            PopupMenuItem(
+              value: 'hidden',
+              child: ListTile(
+                leading: Icon(Icons.visibility_outlined),
+                title: Text(
+                  provider.showHiddenFiles
+                      ? 'Ocultar arquivos ocultos'
+                      : 'Mostrar arquivos ocultos',
+                ),
+                contentPadding: EdgeInsets.zero,
+              ),
+            ),
           ],
         ),
       ],
@@ -306,7 +351,10 @@ class _FilesScreenState extends State<FilesScreen> {
   }
 
   PopupMenuItem<FileFilterType> _filterItem(
-      FileFilterType value, String label, IconData icon) {
+    FileFilterType value,
+    String label,
+    IconData icon,
+  ) {
     return PopupMenuItem<FileFilterType>(
       value: value,
       child: ListTile(
@@ -340,14 +388,18 @@ class _FilesScreenState extends State<FilesScreen> {
           children: [
             for (final FileSortBy sort in FileSortBy.values)
               ListTile(
-                leading: Icon(provider.sortBy == sort
-                    ? Icons.radio_button_checked
-                    : Icons.radio_button_off),
+                leading: Icon(
+                  provider.sortBy == sort
+                      ? Icons.radio_button_checked
+                      : Icons.radio_button_off,
+                ),
                 title: Text(_sortLabel(sort)),
                 trailing: provider.sortBy == sort
-                    ? Icon(provider.sortAscending
-                        ? Icons.arrow_upward
-                        : Icons.arrow_downward)
+                    ? Icon(
+                        provider.sortAscending
+                            ? Icons.arrow_upward
+                            : Icons.arrow_downward,
+                      )
                     : null,
                 onTap: () {
                   Navigator.pop(sheetContext);
@@ -360,61 +412,48 @@ class _FilesScreenState extends State<FilesScreen> {
     );
   }
 
+  /// Barra de ações em lote — o MESMO [SelectionBar] das abas de mídia.
+  ///
+  /// Antes Arquivos tinha uma barra própria: sem a dica do gesto e com
+  /// "selecionar tudo" que nunca desmarcava, enquanto as abas de mídia
+  /// faziam o contrário. Uma implementação só, mesmo comportamento.
   Widget _buildSelectionToolbar(FileProvider provider) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
-      decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.secondaryContainer,
-        borderRadius: BorderRadius.circular(12),
-      ),
-      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
-      child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        child: Row(
-          children: [
-            Padding(
-              padding: const EdgeInsets.only(left: 8),
-              child: Text('${provider.selectedCount} selecionado(s)'),
-            ),
-            IconButton(
-              tooltip: 'Selecionar tudo',
-              icon: const Icon(Icons.select_all),
-              onPressed: provider.selectAllVisible,
-            ),
-            IconButton(
-              tooltip: 'Copiar',
-              icon: const Icon(Icons.content_copy),
-              onPressed: () => _pickDestination(copy: true),
-            ),
-            IconButton(
-              tooltip: 'Mover',
-              icon: const Icon(Icons.drive_file_move_outline),
-              onPressed: () => _pickDestination(copy: false),
-            ),
-            IconButton(
-              tooltip: 'Compactar em ZIP',
-              icon: const Icon(Icons.folder_zip_outlined),
-              onPressed: () => _showZipDialog(),
-            ),
-            IconButton(
-              tooltip: 'Compartilhar',
-              icon: const Icon(Icons.share_outlined),
-              onPressed: () => _shareSelected(),
-            ),
-            IconButton(
-              tooltip: 'Excluir (lixeira)',
-              icon: Icon(Icons.delete_outline,
-                  color: Theme.of(context).colorScheme.error),
-              onPressed: () => _confirmDeleteSelection(),
-            ),
-            IconButton(
-              tooltip: 'Limpar seleção',
-              icon: const Icon(Icons.close),
-              onPressed: provider.clearSelection,
-            ),
-          ],
+    return SelectionBar(
+      label: '${provider.selectedCount} selecionado(s)',
+      onSelectAll: provider.toggleSelectAllVisible,
+      onClear: provider.clearSelection,
+      onDelete: () => _confirmDeleteSelection(),
+      actions: <Widget>[
+        IconButton(
+          tooltip: provider.selectedCount == 1
+              ? 'Detalhes do arquivo'
+              : 'Selecione um arquivo para ver os detalhes',
+          icon: const Icon(Icons.info_outline),
+          onPressed: provider.selectedCount == 1
+              ? () => _openDetailsOfSelection(provider)
+              : null,
         ),
-      ),
+        IconButton(
+          tooltip: 'Copiar',
+          icon: const Icon(Icons.content_copy),
+          onPressed: () => _pickDestination(copy: true),
+        ),
+        IconButton(
+          tooltip: 'Mover',
+          icon: const Icon(Icons.drive_file_move_outline),
+          onPressed: () => _pickDestination(copy: false),
+        ),
+        IconButton(
+          tooltip: 'Compactar em ZIP',
+          icon: const Icon(Icons.folder_zip_outlined),
+          onPressed: () => _showZipDialog(),
+        ),
+        IconButton(
+          tooltip: 'Compartilhar',
+          icon: const Icon(Icons.share_outlined),
+          onPressed: () => _shareSelected(),
+        ),
+      ],
     );
   }
 
@@ -431,7 +470,8 @@ class _FilesScreenState extends State<FilesScreen> {
     }
     if (!provider.allFilesAccess) {
       return _AllFilesAccessState(
-          onRequest: () => provider.requestAllFilesAccess());
+        onRequest: () => provider.requestAllFilesAccess(),
+      );
     }
     if (provider.isLoading) {
       return const Center(child: CircularProgressIndicator());
@@ -472,8 +512,9 @@ class _FilesScreenState extends State<FilesScreen> {
                 itemCount: visible.length,
                 itemBuilder: (context, index) => _FileGridTile(
                   item: visible[index],
-                  isSelected:
-                      provider.selectedPaths.contains(visible[index].path),
+                  isSelected: provider.selectedPaths.contains(
+                    visible[index].path,
+                  ),
                   selectionMode: provider.isSelectionMode,
                   onTap: () => _onTap(provider, visible[index]),
                   onLongPress: () => _onLongPress(provider, visible[index]),
@@ -485,8 +526,9 @@ class _FilesScreenState extends State<FilesScreen> {
                 separatorBuilder: (_, _) => const Divider(height: 1),
                 itemBuilder: (context, index) => _FileListTile(
                   item: visible[index],
-                  isSelected:
-                      provider.selectedPaths.contains(visible[index].path),
+                  isSelected: provider.selectedPaths.contains(
+                    visible[index].path,
+                  ),
                   selectionMode: provider.isSelectionMode,
                   onTap: () => _onTap(provider, visible[index]),
                   onLongPress: () => _onLongPress(provider, visible[index]),
@@ -519,35 +561,39 @@ class _FilesScreenState extends State<FilesScreen> {
     final BuildContext context = this.context;
     switch (item.type) {
       case FileType.pdf:
-        Navigator.of(context).push(MaterialPageRoute(
-          builder: (_) => PdfViewerScreen(
-            pdf: PdfFile(
-              id: 'file-${item.path}',
-              name: item.name,
-              path: item.path,
-              size: item.size,
-              dateAdded: item.dateModified,
-            ),
-          ),
-        ));
-        return;
-      case FileType.image:
-        Navigator.of(context).push(MaterialPageRoute(
-          builder: (_) => PhotoViewerScreen(
-            images: [
-              GalleryImage(
-                id: item.path.hashCode,
+        Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (_) => PdfViewerScreen(
+              pdf: PdfFile(
+                id: 'file-${item.path}',
                 name: item.name,
                 path: item.path,
                 size: item.size,
                 dateAdded: item.dateModified,
-                width: -1,
-                height: -1,
               ),
-            ],
-            initialIndex: 0,
+            ),
           ),
-        ));
+        );
+        return;
+      case FileType.image:
+        Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (_) => PhotoViewerScreen(
+              images: [
+                GalleryImage(
+                  id: item.path.hashCode,
+                  name: item.name,
+                  path: item.path,
+                  size: item.size,
+                  dateAdded: item.dateModified,
+                  width: -1,
+                  height: -1,
+                ),
+              ],
+              initialIndex: 0,
+            ),
+          ),
+        );
         return;
       case FileType.video:
         final Video video = Video(
@@ -561,15 +607,20 @@ class _FilesScreenState extends State<FilesScreen> {
           size: item.size,
           dateAdded: item.dateModified,
         );
-        Navigator.of(context).push(MaterialPageRoute(
-          builder: (_) => VideoPlayerScreen(queue: [video], initialIndex: 0),
-        ));
+        Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (_) => VideoPlayerScreen(queue: [video], initialIndex: 0),
+          ),
+        );
         return;
       default:
         final bool ok = await FileQueryService.openFile(item.path);
         if (!ok && mounted) {
-          ScaffoldMessenger.of(this.context).showSnackBar(const SnackBar(
-              content: Text('Nenhum app instalado abre este tipo de arquivo.')));
+          ScaffoldMessenger.of(this.context).showSnackBar(
+            const SnackBar(
+              content: Text('Nenhum app instalado abre este tipo de arquivo.'),
+            ),
+          );
         }
     }
   }
@@ -587,28 +638,39 @@ class _FilesScreenState extends State<FilesScreen> {
     if (destPath == null || !mounted) return;
 
     final messenger = ScaffoldMessenger.of(context);
-    final bool ok =
-        copy ? await provider.copyTo(destPath) : await provider.moveTo(destPath);
-    messenger.showSnackBar(SnackBar(
-      content: Text(ok
-          ? (copy ? 'Copiado(s) para ${destPath.split('/').last}' : 'Movido(s)')
-          : 'Falha em parte das operações'),
-    ));
+    final bool ok = copy
+        ? await provider.copyTo(destPath)
+        : await provider.moveTo(destPath);
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text(
+          ok
+              ? (copy
+                    ? 'Copiado(s) para ${destPath.split('/').last}'
+                    : 'Movido(s)')
+              : 'Falha em parte das operações',
+        ),
+      ),
+    );
   }
 
   /// Um único share sheet com TODOS os selecionados (qualquer tipo).
   Future<void> _shareSelected() async {
     final FileProvider provider = context.read<FileProvider>();
-    final List<String> paths = provider.selectedItems.map((f) => f.path).toList();
+    final List<String> paths = provider.selectedItems
+        .map((f) => f.path)
+        .toList();
     if (paths.isEmpty) return;
     try {
       await MediaShareService.shareFiles(paths);
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text('Não foi possível compartilhar: $e'),
-          backgroundColor: Theme.of(context).colorScheme.error,
-        ));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Não foi possível compartilhar: $e'),
+            backgroundColor: Theme.of(context).colorScheme.error,
+          ),
+        );
       }
     }
   }
@@ -619,14 +681,20 @@ class _FilesScreenState extends State<FilesScreen> {
       context: context,
       builder: (dialogContext) => AlertDialog(
         title: const Text('Excluir selecionados?'),
-        content: Text('${provider.selectedCount} item(ns) vão para a lixeira '
-            '(restaurável em Mais opções → Lixeira).'),
+        content: Text(
+          '${provider.selectedCount} item(ns) vão para a lixeira '
+          '(restaurável em Mais opções → Lixeira).',
+        ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('Cancelar')),
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Cancelar'),
+          ),
           FilledButton(
             onPressed: () => Navigator.pop(dialogContext, true),
             style: FilledButton.styleFrom(
-                backgroundColor: Theme.of(context).colorScheme.error),
+              backgroundColor: Theme.of(context).colorScheme.error,
+            ),
             child: const Text('Excluir'),
           ),
         ],
@@ -635,15 +703,20 @@ class _FilesScreenState extends State<FilesScreen> {
     if (confirm != true || !mounted) return;
     final messenger = ScaffoldMessenger.of(context);
     final bool ok = await provider.deleteSelected(useTrash: true);
-    messenger.showSnackBar(SnackBar(
-      content: Text(ok ? 'Movido(s) para a lixeira' : 'Falha em alguns itens'),
-    ));
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text(
+          ok ? 'Movido(s) para a lixeira' : 'Falha em alguns itens',
+        ),
+      ),
+    );
   }
 
   void _showZipDialog() {
     final FileProvider provider = context.read<FileProvider>();
-    final TextEditingController nameCtrl =
-        TextEditingController(text: 'arquivos.zip');
+    final TextEditingController nameCtrl = TextEditingController(
+      text: 'arquivos.zip',
+    );
     showDialog<void>(
       context: context,
       builder: (dialogContext) => AlertDialog(
@@ -654,15 +727,20 @@ class _FilesScreenState extends State<FilesScreen> {
           decoration: const InputDecoration(labelText: 'Nome do arquivo .zip'),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('Cancelar')),
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Cancelar'),
+          ),
           FilledButton(
             onPressed: () async {
               Navigator.pop(dialogContext);
               final messenger = ScaffoldMessenger.of(context);
               final bool ok = await provider.zipSelection(nameCtrl.text.trim());
-              messenger.showSnackBar(SnackBar(
-                content: Text(ok ? 'ZIP criado' : 'Falha ao criar ZIP'),
-              ));
+              messenger.showSnackBar(
+                SnackBar(
+                  content: Text(ok ? 'ZIP criado' : 'Falha ao criar ZIP'),
+                ),
+              );
             },
             child: const Text('Criar'),
           ),
@@ -685,7 +763,10 @@ class _FilesScreenState extends State<FilesScreen> {
           onSubmitted: (value) => Navigator.pop(dialogContext, value),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('Cancelar')),
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Cancelar'),
+          ),
           FilledButton(
             onPressed: () => Navigator.pop(dialogContext, nameCtrl.text.trim()),
             child: const Text('Criar'),
@@ -703,23 +784,44 @@ class _FilesScreenState extends State<FilesScreen> {
     });
   }
 
-  void _handleMenuAction(BuildContext context, FileProvider provider, String action) {
+  /// Abre a tela de detalhes do único item selecionado.
+  void _openDetailsOfSelection(FileProvider provider) {
+    final List<FileItem> selected = provider.selectedItems;
+    if (selected.length != 1) return;
+    provider.clearSelection();
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => FileDetailsScreen(item: selected.first),
+      ),
+    );
+  }
+
+  void _handleMenuAction(
+    BuildContext context,
+    FileProvider provider,
+    String action,
+  ) {
     switch (action) {
       case 'new_folder':
         _showCreateFolderDialog();
       case 'shortcuts':
         _showSystemFolders(provider);
       case 'trash':
-        Navigator.of(context).push(MaterialPageRoute(builder: (_) => const TrashScreen()));
+        Navigator.of(
+          context,
+        ).push(MaterialPageRoute(builder: (_) => const TrashScreen()));
       case 'analyzer':
         Navigator.of(context).push(
-            MaterialPageRoute(builder: (_) => const StorageAnalyzerScreen()));
+          MaterialPageRoute(builder: (_) => const StorageAnalyzerScreen()),
+        );
       case 'apks':
-        Navigator.of(context)
-            .push(MaterialPageRoute(builder: (_) => const ApkManagerScreen()));
+        Navigator.of(
+          context,
+        ).push(MaterialPageRoute(builder: (_) => const ApkManagerScreen()));
       case 'duplicates':
-        Navigator.of(context)
-            .push(MaterialPageRoute(builder: (_) => const DuplicateFilesScreen()));
+        Navigator.of(
+          context,
+        ).push(MaterialPageRoute(builder: (_) => const DuplicateFilesScreen()));
       case 'hidden':
         provider.setShowHiddenFiles(!provider.showHiddenFiles);
     }
@@ -735,10 +837,14 @@ class _FilesScreenState extends State<FilesScreen> {
           children: [
             for (final StorageVolume volume in provider.volumes)
               ListTile(
-                leading: Icon(volume.isRemovable ? Icons.sd_card : Icons.storage),
+                leading: Icon(
+                  volume.isRemovable ? Icons.sd_card : Icons.storage,
+                ),
                 title: Text(volume.name),
                 subtitle: volume.totalSpace > 0
-                    ? Text('${volume.displayFreeSpace} livres de ${volume.displayTotalSpace}')
+                    ? Text(
+                        '${volume.displayFreeSpace} livres de ${volume.displayTotalSpace}',
+                      )
                     : null,
                 onTap: () {
                   Navigator.pop(sheetContext);
@@ -746,14 +852,16 @@ class _FilesScreenState extends State<FilesScreen> {
                 },
               ),
             const Divider(),
-            ...SystemFolders.shortcuts.map((SystemFolder folder) => ListTile(
-                  leading: Icon(folder.icon),
-                  title: Text(folder.name),
-                  onTap: () {
-                    Navigator.pop(sheetContext);
-                    provider.navigateTo(folder.path);
-                  },
-                )),
+            ...SystemFolders.shortcuts.map(
+              (SystemFolder folder) => ListTile(
+                leading: Icon(folder.icon),
+                title: Text(folder.name),
+                onTap: () {
+                  Navigator.pop(sheetContext);
+                  provider.navigateTo(folder.path);
+                },
+              ),
+            ),
           ],
         ),
       ),
@@ -823,8 +931,8 @@ class _FileListTile extends StatelessWidget {
                           ? item.displayDateModified
                           : '${formatBytes(item.size)} • ${item.displayDateModified}',
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                            color: colors.onSurfaceVariant,
-                          ),
+                        color: colors.onSurfaceVariant,
+                      ),
                     ),
                   ],
                 ),
@@ -893,13 +1001,11 @@ class _FileGridTile extends StatelessWidget {
                         style: Theme.of(context).textTheme.labelMedium,
                       ),
                       Text(
-                        item.isDirectory
-                            ? 'Pasta'
-                            : formatBytes(item.size),
+                        item.isDirectory ? 'Pasta' : formatBytes(item.size),
                         maxLines: 1,
                         style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                              color: colors.onSurfaceVariant,
-                            ),
+                          color: colors.onSurfaceVariant,
+                        ),
                       ),
                     ],
                   ),
@@ -962,7 +1068,11 @@ class _FileThumbnail extends StatelessWidget {
         builder: (context, snapshot) {
           final bytes = snapshot.data;
           if (bytes != null && bytes.isNotEmpty) {
-            return Image.memory(bytes, fit: BoxFit.cover, gaplessPlayback: true);
+            return Image.memory(
+              bytes,
+              fit: BoxFit.cover,
+              gaplessPlayback: true,
+            );
           }
           return Icon(item.icon, color: colors.onSurfaceVariant);
         },
@@ -1006,8 +1116,9 @@ class _DestinationPickerState extends State<_DestinationPicker> {
     );
     if (!mounted) return;
     setState(() {
-      _folders =
-          result.items.where((i) => i.isDirectory && !i.name.startsWith('.')).toList();
+      _folders = result.items
+          .where((i) => i.isDirectory && !i.name.startsWith('.'))
+          .toList();
       _isLoading = false;
     });
   }
@@ -1045,26 +1156,31 @@ class _DestinationPickerState extends State<_DestinationPicker> {
               child: _isLoading
                   ? const Center(child: CircularProgressIndicator())
                   : _folders.isEmpty
-                      ? const Center(child: Text('Nenhuma subpasta aqui.'))
-                      : ListView.builder(
-                          itemCount: _folders.length,
-                          itemBuilder: (context, index) => ListTile(
-                            dense: true,
-                            leading: Icon(_folders[index].icon,
-                                color: Theme.of(context).colorScheme.primary),
-                            title: Text(_folders[index].name),
-                            onTap: () {
-                              _currentPath = _folders[index].path;
-                              _load();
-                            },
-                          ),
+                  ? const Center(child: Text('Nenhuma subpasta aqui.'))
+                  : ListView.builder(
+                      itemCount: _folders.length,
+                      itemBuilder: (context, index) => ListTile(
+                        dense: true,
+                        leading: Icon(
+                          _folders[index].icon,
+                          color: Theme.of(context).colorScheme.primary,
                         ),
+                        title: Text(_folders[index].name),
+                        onTap: () {
+                          _currentPath = _folders[index].path;
+                          _load();
+                        },
+                      ),
+                    ),
             ),
           ],
         ),
       ),
       actions: [
-        TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancelar')),
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancelar'),
+        ),
         FilledButton(
           onPressed: () => Navigator.pop(context, _currentPath),
           child: const Text('Selecionar esta pasta'),
