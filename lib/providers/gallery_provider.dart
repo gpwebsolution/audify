@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import '../models/gallery_image_model.dart';
 import '../models/image_album.dart';
 import '../services/gallery_query_service.dart';
+import '../services/permission_service.dart';
 
 /// Estado da galeria de fotos do aparelho.
 ///
@@ -19,6 +20,7 @@ class GalleryProvider extends ChangeNotifier {
   bool _isLoading = true;
   bool _isLoadingMore = false;
   bool _hasMore = true;
+  bool _permissionDenied = false;
   bool _isDisposed = false;
 
   List<GalleryImage> get images => _images;
@@ -29,10 +31,19 @@ class GalleryProvider extends ChangeNotifier {
   bool get isLoadingMore => _isLoadingMore;
   bool get hasMore => _hasMore;
 
+  /// True quando o aparelho NEGOU o acesso às fotos.
+  ///
+  /// Sem isso, negar a permissão produzia uma tela vazia com a mensagem
+  /// "Nenhuma foto encontrada no aparelho" — que atribui o vazio a não ter
+  /// fotos, quando na verdade o app não pode nem olhá-las. A tela oferece
+  /// "Permitir acesso às fotos" quando esta flag está ligada.
+  bool get permissionDenied => _permissionDenied;
+
   /// Nome do álbum selecionado (para o cabeçalho da tela).
   String get selectedAlbumName {
-    final ImageAlbum? album =
-        _albums.where((a) => a.id == _selectedAlbumId).firstOrNull;
+    final ImageAlbum? album = _albums
+        .where((a) => a.id == _selectedAlbumId)
+        .firstOrNull;
     return album?.displayName ?? 'Galeria';
   }
 
@@ -40,9 +51,7 @@ class GalleryProvider extends ChangeNotifier {
   List<GalleryImage> get visibleImages {
     final String q = _searchQuery.toLowerCase();
     if (q.isEmpty) return _images;
-    return _images
-        .where((img) => img.name.toLowerCase().contains(q))
-        .toList();
+    return _images.where((img) => img.name.toLowerCase().contains(q)).toList();
   }
 
   GalleryProvider() {
@@ -55,10 +64,22 @@ class GalleryProvider extends ChangeNotifier {
     _hasMore = true;
     _notify();
 
-    final List<ImageAlbum> albums =
-        await GalleryQueryService.loadAlbums();
-    final List<GalleryImage> page =
-        await GalleryQueryService.loadImages(albumId: _selectedAlbumId);
+    // Antes de listar: sem permissão a consulta volta vazia, e sem esta
+    // checagem a UI não distingue "não tenho fotos" de "não posso ver".
+    _permissionDenied = !await PermissionService.hasPhotosAccess();
+    if (_permissionDenied) {
+      _albums = const [];
+      _images = const [];
+      _hasMore = false;
+      _isLoading = false;
+      _notify();
+      return;
+    }
+
+    final List<ImageAlbum> albums = await GalleryQueryService.loadAlbums();
+    final List<GalleryImage> page = await GalleryQueryService.loadImages(
+      albumId: _selectedAlbumId,
+    );
 
     _albums = albums;
     _images = page;
@@ -88,6 +109,41 @@ class GalleryProvider extends ChangeNotifier {
       _hasMore = page.length >= GalleryQueryService.pageSize;
     }
     _isLoadingMore = false;
+    _notify();
+  }
+
+  /// Pede o acesso às fotos e recarrega (chamado pelo botão da tela de
+  /// permissão). Devolve true quando o acesso passou a existir.
+  Future<bool> requestAccess() async {
+    final bool granted = await PermissionService.requestPhotosAccess();
+    await load();
+    return granted;
+  }
+
+  /// Remove fotos confirmadas como APAGADAS do aparelho.
+  ///
+  /// Filtra a página carregada, descarta as miniaturas (memória + disco) e
+  /// notifica. Também descarta a página inteira quando a foto removida era
+  /// a capa do álbum selecionado, para não deixar capa órfã.
+  Future<void> handleImagesDeleted(List<GalleryImage> deleted) async {
+    if (deleted.isEmpty) return;
+    final Set<int> ids = deleted.map((GalleryImage i) => i.id).toSet();
+    _images = _images.where((GalleryImage i) => !ids.contains(i.id)).toList();
+    for (final GalleryImage image in deleted) {
+      await GalleryQueryService.clearThumbnail(image.id);
+    }
+    _albums = _albums
+        .map(
+          (ImageAlbum a) => ids.contains(a.coverId)
+              ? ImageAlbum(
+                  id: a.id,
+                  name: a.name,
+                  count: a.count > 0 ? a.count - 1 : 0,
+                  coverId: 0,
+                )
+              : a,
+        )
+        .toList();
     _notify();
   }
 

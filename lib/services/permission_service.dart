@@ -70,28 +70,31 @@ class PermissionService {
   static Future<bool> openSettings() => openAppSettings();
 
   /// Solicita as permissões de mídia complementares (vídeo + galeria) via
-/// permission_handler:
-///  - [Permission.videos] + [Permission.photos] + [Permission.notification]:
-///    UM dialog do sistema com fotos e vídeos (READ_MEDIA_VIDEO +
-///    READ_MEDIA_IMAGES) + a notificação de mídia do audio_service
-///    (tela de bloqueio);
-///  - Em Android <= 12 o permission_handler mapeia videos/photos para
-///    READ_EXTERNAL_STORAGE automaticamente (mesma permissão única).
-///
-/// NÃO usamos a string do SO para decidir a versão: no MIUI/HyperOS o
-/// `Platform.operatingSystemVersion` não contém "Android" (ex.:
-/// "TKQ1.221114.001 test-keys") e a detecção por parsing falhava, pedindo
-/// a permissão errada. O mapeamento correto por API level é interno do
-/// permission_handler.
-///
-/// A permissão de ÁUDIO já é resolvida pelo fluxo do on_audio_query
-/// ([requestAudioAccess]); este grupo cobre o resto da biblioteca de mídia.
+  /// permission_handler:
+  ///  - [Permission.videos] + [Permission.photos] + [Permission.notification]:
+  ///    UM dialog do sistema com fotos e vídeos (READ_MEDIA_VIDEO +
+  ///    READ_MEDIA_IMAGES) + a notificação de mídia do audio_service
+  ///    (tela de bloqueio);
+  ///  - Em Android <= 12 o permission_handler mapeia videos/photos para
+  ///    READ_EXTERNAL_STORAGE automaticamente (mesma permissão única).
+  ///
+  /// NÃO usamos a string do SO para decidir a versão: no MIUI/HyperOS o
+  /// `Platform.operatingSystemVersion` não contém "Android" (ex.:
+  /// "TKQ1.221114.001 test-keys") e a detecção por parsing falhava, pedindo
+  /// a permissão errada. O mapeamento correto por API level é interno do
+  /// permission_handler.
+  ///
+  /// A permissão de ÁUDIO já é resolvida pelo fluxo do on_audio_query
+  /// ([requestAudioAccess]); este grupo cobre o resto da biblioteca de mídia.
   static Future<void> requestMediaGroup() async {
     if (!Platform.isAndroid || kIsWeb) return;
 
     try {
-      await [Permission.videos, Permission.photos, Permission.notification]
-          .request();
+      await [
+        Permission.videos,
+        Permission.photos,
+        Permission.notification,
+      ].request();
     } catch (e) {
       debugPrint('[PermissionService] Falha ao pedir grupo de mídia: $e');
     }
@@ -109,6 +112,23 @@ class PermissionService {
   static Future<bool> hasPhotosAccess() async {
     if (!Platform.isAndroid) return false;
     return Permission.photos.isGranted;
+  }
+
+  /// Solicita APENAS o acesso às fotos (e a notificação de mídia).
+  ///
+  /// Espelha [requestVideosAccess]: o diálogo do sistema aparece na hora em
+  /// que o usuário abre a aba Galeria, sem depender de a aba de Música ter
+  /// sido aberta antes.
+  static Future<bool> requestPhotosAccess() async {
+    if (!Platform.isAndroid) return true;
+    if (await hasPhotosAccess()) return true;
+
+    try {
+      await [Permission.photos, Permission.notification].request();
+    } catch (e) {
+      debugPrint('[PermissionService] Falha ao pedir fotos: $e');
+    }
+    return hasPhotosAccess();
   }
 
   /// True se o app pode postar notificações (necessário para a notificação
@@ -156,8 +176,8 @@ class PermissionService {
     if (!Platform.isAndroid) return false;
     if (await hasAllFilesAccess()) return true;
 
-    final PermissionStatus status =
-        await Permission.manageExternalStorage.request();
+    final PermissionStatus status = await Permission.manageExternalStorage
+        .request();
     return status.isGranted;
   }
 
@@ -187,8 +207,9 @@ class PermissionService {
     if (!Platform.isAndroid || kIsWeb) return true;
     try {
       if (await Permission.ignoreBatteryOptimizations.isGranted) return true;
-      final PermissionStatus status =
-          await Permission.ignoreBatteryOptimizations.request();
+      final PermissionStatus status = await Permission
+          .ignoreBatteryOptimizations
+          .request();
       return status.isGranted;
     } catch (e) {
       debugPrint('[PermissionService] battery request falhou: $e');
