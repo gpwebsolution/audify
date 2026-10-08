@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../providers/file_provider.dart';
 import '../providers/gallery_provider.dart';
 import '../providers/pdf_provider.dart';
 import '../providers/player_provider.dart';
+import '../utils/back_action.dart';
 import '../providers/playlist_provider.dart';
 import '../providers/video_provider.dart';
 import 'files_screen.dart';
@@ -38,6 +40,10 @@ class MainScreen extends StatefulWidget {
 
 class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
   int _currentIndex = 0;
+
+  /// Momento do último toque no botão voltar. Precisa para distinguir
+  /// "quero sair" de "só apertei sem querer".
+  DateTime? _lastBackPress;
 
   @override
   void initState() {
@@ -126,9 +132,7 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
         content: TextField(
           controller: controller,
           autofocus: true,
-          decoration: const InputDecoration(
-            hintText: 'Nome da playlist',
-          ),
+          decoration: const InputDecoration(hintText: 'Nome da playlist'),
           onSubmitted: (value) => Navigator.pop(dialogContext, value),
         ),
         actions: [
@@ -156,126 +160,192 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
     }
   }
 
+  /// FAB de criar playlist, adaptado à largura disponível.
+  ///
+  /// Em tela estreita (celular) fica circular, com o Tooltip explicando. Em
+  /// tela larga (tablet/depois de girar) vira FAB estendido com o rótulo
+  /// visível — o ícone sozinho é ambíguo e o usuário acabava tocando no
+  /// elemento errado por causa do espaço curto.
+  Widget _buildPlaylistFab(BuildContext context) {
+    return LayoutBuilder(
+      builder: (BuildContext context, BoxConstraints constraints) {
+        final bool wide = constraints.maxWidth >= 600;
+        void onPressed() => _createPlaylist(context);
+        if (!wide) {
+          return FloatingActionButton(
+            tooltip: 'Nova playlist',
+            onPressed: onPressed,
+            child: const Icon(Icons.add),
+          );
+        }
+        return FloatingActionButton.extended(
+          tooltip: 'Nova playlist',
+          onPressed: onPressed,
+          icon: const Icon(Icons.add),
+          label: const Text('Nova playlist'),
+        );
+      },
+    );
+  }
+
+  /// Comportamento do botão voltar na raiz do app.
+  ///
+  /// Antes, um toque em voltar na tela principal fechava o app na hora — o
+  /// usuário perdia a aba em que estava e a posição da rolagem sem querer.
+  /// Agora, pela ordem do que é reversível:
+  ///  1. diálogos e folhas abertos são fechados pelo próprio Material;
+  ///  2. uma tela empilhada (visualizador de PDF/foto/vídeo) volta
+  ///     normalmente — esta rota não interfere nisso;
+  ///  3. em outra aba, volta para a primeira (Música);
+  ///  4. já na primeira aba, o PRIMEIRO toque apenas avisa; só um segundo
+  ///     toque em sequência dentro de [exitWindow] encerra o app.
+  void _handleRootBack() {
+    final BackDecision decision = resolveBack(
+      currentTabIndex: _currentIndex,
+      now: DateTime.now(),
+      lastPress: _lastBackPress,
+    );
+    _lastBackPress = decision.nextLastPress;
+
+    switch (decision.action) {
+      case BackAction.exit:
+        SystemNavigator.pop();
+      case BackAction.goToFirstTab:
+        setState(() => _currentIndex = 0);
+      case BackAction.warnThenExit:
+        ScaffoldMessenger.of(context)
+          ..hideCurrentSnackBar()
+          ..showSnackBar(
+            const SnackBar(
+              content: Text('Toque em voltar novamente para sair.'),
+              duration: exitWindow,
+            ),
+          );
+      case BackAction.none:
+        break;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(_titles[_currentIndex]),
-      ),
-      body: Column(
-        children: [
-          // ---- Abas (IndexedStack preserva estado de cada uma) ----
-          Expanded(
-            child: IndexedStack(
-              index: _currentIndex,
-              children: _tabs,
-            ),
-          ),
-          // ---- Mini player fixo no rodapé ----
-          const PlayerControls(),
-        ],
-      ),
-      // ---- FAB de criar playlist (apenas na aba Playlists) ----
-      floatingActionButton: _currentIndex == MainTab.playlists.index
-          ? FloatingActionButton(
-              tooltip: 'Nova playlist',
-              onPressed: () => _createPlaylist(context),
-              child: const Icon(Icons.add),
-            )
-          : null,
-      // ---- Menu hambúrguer lateral com a logo do app no topo ----
-      drawer: Drawer(
-        child: SafeArea(
-          child: Column(
-            children: [
-              // Logo + nome do app no topo do menu.
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.fromLTRB(20, 24, 20, 20),
-                color: Theme.of(context).colorScheme.surfaceContainerHigh,
-                child: Row(
-                  children: [
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(14),
-                      child: Image.asset(
-                        'assets/images/audify.png',
-                        width: 56,
-                        height: 56,
-                        fit: BoxFit.cover,
-                        errorBuilder: (_, _, _) => Icon(
-                          Icons.music_note,
-                          size: 56,
-                          color: Theme.of(context).colorScheme.primary,
+    // `canPop: false` impede o fechamento automático na raiz; o toque é
+    // repassado para [_handleRootBack], que decide o que fazer. Telas
+    // empilhadas (PDF, foto, vídeo, detalhes) têm rota própria e continuam
+    // voltando normalmente.
+    return PopScope<void>(
+      canPop: false,
+      onPopInvokedWithResult: (bool didPop, Object? _) {
+        if (didPop) return;
+        _handleRootBack();
+      },
+      child: Scaffold(
+        appBar: AppBar(title: Text(_titles[_currentIndex])),
+        // O mini player fica em `bottomNavigationBar`, e NÃO dentro do `body`.
+        // Com ele no `body`, o Scaffold acreditava que o corpo terminava no
+        // rodapé da tela e pousava o FAB em cima da faixa — o botão "criar
+        // playlist" ficava sobre o mini player. Assim o Scaffold reserva o
+        // espaço e encaixa o FAB acima dele, sem ajuste manual.
+        body: IndexedStack(index: _currentIndex, children: _tabs),
+        bottomNavigationBar: const PlayerControls(),
+
+        // ---- FAB de criar playlist (apenas na aba Playlists) ----
+        floatingActionButton: _currentIndex == MainTab.playlists.index
+            ? _buildPlaylistFab(context)
+            : null,
+        // ---- Menu hambúrguer lateral com a logo do app no topo ----
+        drawer: Drawer(
+          child: SafeArea(
+            child: Column(
+              children: [
+                // Logo + nome do app no topo do menu.
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.fromLTRB(20, 24, 20, 20),
+                  color: Theme.of(context).colorScheme.surfaceContainerHigh,
+                  child: Row(
+                    children: [
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(14),
+                        child: Image.asset(
+                          'assets/images/audify.png',
+                          width: 56,
+                          height: 56,
+                          fit: BoxFit.cover,
+                          errorBuilder: (_, _, _) => Icon(
+                            Icons.music_note,
+                            size: 56,
+                            color: Theme.of(context).colorScheme.primary,
+                          ),
                         ),
                       ),
-                    ),
-                    const SizedBox(width: 14),
-                    Text(
-                      'Audify',
-                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                            fontWeight: FontWeight.bold,
-                          ),
-                    ),
-                  ],
+                      const SizedBox(width: 14),
+                      Text(
+                        'Audify',
+                        style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-              Expanded(
-                child: ListView(
-                  padding: const EdgeInsets.symmetric(vertical: 8),
-                  children: [
-                    _DrawerItem(
-                      icon: Icons.music_note_outlined,
-                      selectedIcon: Icons.music_note,
-                      label: 'Música',
-                      selected: _currentIndex == MainTab.music.index,
-                      onTap: () => _onDrawerTap(MainTab.music.index),
-                    ),
-                    _DrawerItem(
-                      icon: Icons.videocam_outlined,
-                      selectedIcon: Icons.videocam,
-                      label: 'Vídeos',
-                      selected: _currentIndex == MainTab.videos.index,
-                      onTap: () => _onDrawerTap(MainTab.videos.index),
-                    ),
-                    _DrawerItem(
-                      icon: Icons.photo_library_outlined,
-                      selectedIcon: Icons.photo_library,
-                      label: 'Galeria',
-                      selected: _currentIndex == MainTab.gallery.index,
-                      onTap: () => _onDrawerTap(MainTab.gallery.index),
-                    ),
-                    _DrawerItem(
-                      icon: Icons.folder_outlined,
-                      selectedIcon: Icons.folder,
-                      label: 'Arquivos',
-                      selected: _currentIndex == MainTab.files.index,
-                      onTap: () => _onDrawerTap(MainTab.files.index),
-                    ),
-                    _DrawerItem(
-                      icon: Icons.picture_as_pdf_outlined,
-                      selectedIcon: Icons.picture_as_pdf,
-                      label: 'PDFs',
-                      selected: _currentIndex == MainTab.pdfs.index,
-                      onTap: () => _onDrawerTap(MainTab.pdfs.index),
-                    ),
-                    _DrawerItem(
-                      icon: Icons.queue_music_outlined,
-                      selectedIcon: Icons.queue_music,
-                      label: 'Playlists',
-                      selected: _currentIndex == MainTab.playlists.index,
-                      onTap: () => _onDrawerTap(MainTab.playlists.index),
-                    ),
-                    _DrawerItem(
-                      icon: Icons.settings_outlined,
-                      selectedIcon: Icons.settings,
-                      label: 'Configurações',
-                      selected: _currentIndex == MainTab.settings.index,
-                      onTap: () => _onDrawerTap(MainTab.settings.index),
-                    ),
-                  ],
+                Expanded(
+                  child: ListView(
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                    children: [
+                      _DrawerItem(
+                        icon: Icons.music_note_outlined,
+                        selectedIcon: Icons.music_note,
+                        label: 'Música',
+                        selected: _currentIndex == MainTab.music.index,
+                        onTap: () => _onDrawerTap(MainTab.music.index),
+                      ),
+                      _DrawerItem(
+                        icon: Icons.videocam_outlined,
+                        selectedIcon: Icons.videocam,
+                        label: 'Vídeos',
+                        selected: _currentIndex == MainTab.videos.index,
+                        onTap: () => _onDrawerTap(MainTab.videos.index),
+                      ),
+                      _DrawerItem(
+                        icon: Icons.photo_library_outlined,
+                        selectedIcon: Icons.photo_library,
+                        label: 'Galeria',
+                        selected: _currentIndex == MainTab.gallery.index,
+                        onTap: () => _onDrawerTap(MainTab.gallery.index),
+                      ),
+                      _DrawerItem(
+                        icon: Icons.folder_outlined,
+                        selectedIcon: Icons.folder,
+                        label: 'Arquivos',
+                        selected: _currentIndex == MainTab.files.index,
+                        onTap: () => _onDrawerTap(MainTab.files.index),
+                      ),
+                      _DrawerItem(
+                        icon: Icons.picture_as_pdf_outlined,
+                        selectedIcon: Icons.picture_as_pdf,
+                        label: 'PDFs',
+                        selected: _currentIndex == MainTab.pdfs.index,
+                        onTap: () => _onDrawerTap(MainTab.pdfs.index),
+                      ),
+                      _DrawerItem(
+                        icon: Icons.queue_music_outlined,
+                        selectedIcon: Icons.queue_music,
+                        label: 'Playlists',
+                        selected: _currentIndex == MainTab.playlists.index,
+                        onTap: () => _onDrawerTap(MainTab.playlists.index),
+                      ),
+                      _DrawerItem(
+                        icon: Icons.settings_outlined,
+                        selectedIcon: Icons.settings,
+                        label: 'Configurações',
+                        selected: _currentIndex == MainTab.settings.index,
+                        onTap: () => _onDrawerTap(MainTab.settings.index),
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
