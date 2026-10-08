@@ -104,11 +104,13 @@ class MediaActions {
     BuildContext context,
     MediaRef ref, {
     String? label,
+    Future<void> Function()? onBeforeDelete,
     Future<void> Function(List<MediaRef> deleted)? onDeleted,
   }) => confirmDeleteMany(
     context,
     <MediaRef>[ref],
     label: label,
+    onBeforeDelete: onBeforeDelete,
     onDeleted: onDeleted,
   );
 
@@ -117,6 +119,7 @@ class MediaActions {
     BuildContext context,
     List<MediaRef> items, {
     String? label,
+    Future<void> Function()? onBeforeDelete,
     Future<void> Function(List<MediaRef> deleted)? onDeleted,
   }) async {
     if (items.isEmpty) return;
@@ -154,6 +157,14 @@ class MediaActions {
     );
     if (confirmed != true || !context.mounted) return;
 
+    // Libera o player ANTES de pedir a exclusão, quando o item está em uso
+    // (música tocando, vídeo aberto). Decoder e handle de áudio abertos fazem a
+    // remoção falhar no SO — e o sintoma é silencioso: o diálogo aparece, o
+    // arquivo sobrevive. Só roda depois do "Excluir" do usuário, para não
+    // parar a música de graça quando ele desiste.
+    await onBeforeDelete?.call();
+    if (!context.mounted) return;
+
     final DeleteResult result = await MediaDeleteService.deleteMedia(items);
     if (!context.mounted) return;
 
@@ -163,12 +174,17 @@ class MediaActions {
       return;
     }
 
+    // `notFound` só vale depois de reconfirmado no disco: o nativo já
+    // consultou o MediaStore, mas um arquivo acessível e ainda presente é
+    // veto para a limpeza (senão o item some da lista sem sair do aparelho).
+    result.confirmAbsent(result.notFound);
+
     final bool ok = result.removed.isNotEmpty;
     _snack(context, result.message, isError: !ok);
 
-    // A limpeza de estado usa `removed` (excluídos + já ausentes), não
-    // `deleted`: um arquivo que já não estava no aparelho também precisa
-    // sumir das listas, senão vira item fantasma permanente.
+    // A limpeza de estado usa `removed` = `deleted` + `notFound` RECONFIRMADO.
+    // `cancelled`, `failed` e `permissionRequired` nunca entram: nesses casos
+    // o arquivo continua no aparelho e limpar a lista viraria item fantasma.
     if (result.removed.isNotEmpty) {
       await onDeleted?.call(result.removed);
     }

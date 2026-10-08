@@ -45,14 +45,15 @@ class VideosScreen extends StatefulWidget {
     // O provider de playlists é lido ANTES de qualquer await: evita
     // segurar BuildContext através de uma lacuna assíncrona.
     final PlaylistProvider playlists = context.read<PlaylistProvider>();
-    // [onBeforeDelete] libera o decoder ANTES do diálogo: com o arquivo
-    // aberto pelo video_player, o SO não consegue removê-lo.
-    await onBeforeDelete?.call();
-    if (!context.mounted) return;
     await MediaActions.confirmDelete(
       context,
       MediaRef.fromVideo(video),
       label: video.displayTitle,
+      // O decoder é liberado depois do "Excluir" e ANTES da chamada nativa:
+      // com o arquivo aberto pelo video_player o SO não consegue removê-lo.
+      // Antes do diálogo, o vídeo congelava na tela enquanto o usuário
+      // decidia — desnecessário, já que ele podia desistir.
+      onBeforeDelete: onBeforeDelete,
       onDeleted: (List<MediaRef> removed) async {
         await playlists.removeVideosFromAll(<Video>[video]);
         await provider.handleVideosDeleted(<Video>[video]);

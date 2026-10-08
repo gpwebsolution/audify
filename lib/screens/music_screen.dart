@@ -49,16 +49,43 @@ class MusicScreen extends StatefulWidget {
     // Provider lido antes de qualquer await: nada de segurar BuildContext
     // através de lacuna assíncrona.
     final PlaylistProvider playlists = context.read<PlaylistProvider>();
+
+    // Índice da faixa em reprodução ANTES de qualquer mudança, para poder
+    // retomar caso o usuário desista da exclusão.
+    final bool wasPlaying = provider.currentSong?.id == song.id;
+    int? resumeIndex;
+    if (wasPlaying) {
+      resumeIndex = provider.visibleSongs.indexWhere(
+        (Song s) => s.id == song.id,
+      );
+    }
+
     await MediaActions.confirmDelete(
       context,
       ref,
       label: song.title,
+      // O handle de áudio é liberado ANTES de pedir a exclusão: arquivo em
+      // uso pode sobreviver à remoção sem nenhum erro visível. Se o usuário
+      // cancelar, a reprodução é retomada abaixo.
+      onBeforeDelete: () async {
+        if (wasPlaying) await provider.stop();
+      },
       onDeleted: (List<MediaRef> _) async {
         // Excluída do aparelho: sai de todas as playlists.
         await playlists.removeSongsFromAll(<Song>[song]);
         await provider.handleSongsDeleted(<Song>[song]);
       },
     );
+
+    // Nada foi excluído (cancelou no app ou no diálogo do SO) e a faixa que
+    // tocava continua no aparelho: volta a reproduzir.
+    final bool stillThere = provider.songs.any((Song s) => s.id == song.id);
+    if (wasPlaying && stillThere && resumeIndex != null && resumeIndex >= 0) {
+      final int target = provider.visibleSongs.indexWhere(
+        (Song s) => s.id == song.id,
+      );
+      if (target >= 0) await provider.playVisibleAt(target);
+    }
   }
 
   /// Motivo exibido quando a faixa não está no aparelho (é do próprio APK).
