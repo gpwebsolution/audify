@@ -1,13 +1,19 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import 'package:video_player/video_player.dart';
 
+import '../models/media_ref.dart';
 import '../models/video_model.dart';
 import '../models/video_play_queue.dart';
+import '../providers/video_provider.dart';
 import '../services/error_log_service.dart';
 import '../utils/format.dart';
+import '../utils/motion.dart';
+import 'videos_screen.dart';
 
 /// Player de vídeo em tela cheia, no padrão do player de música.
 ///
@@ -42,7 +48,26 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   String? _error;
 
   double _speed = 1.0;
+
+  /// Volume entre 0 e 1. Persiste entre os vídeos da fila — era o
+  /// comportamento desejado: trocar de vídeo não deve resetar o volume.
   double _volume = 1.0;
+
+  /// Volume anterior ao mudo, para o toggle voltar ao ponto anterior.
+  double _volumeBeforeMute = 1.0;
+
+  /// Os controles aparecem com toque e somem sozinhos. Sem isso o vídeo fica
+  /// coberto por SeekBar e botões a maior parte do tempo.
+  bool _controlsVisible = true;
+
+  /// Guarda do auto-ocultar dos controles.
+  Timer? _controlsTimer;
+
+  /// Texto do OSD (ex.: "70%", "Mudo"). Null = OSD escondido.
+  String? _osd;
+
+  /// Guarda do OSD: some sozinho para não cobrir o vídeo indefinidamente.
+  Timer? _osdTimer;
 
   /// Ângulo de rotação do vídeo (0/90/180/270).
   int _rotation = 0;
@@ -88,6 +113,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _controlsTimer?.cancel();
+    _osdTimer?.cancel();
     final VideoPlayerController? controller = _controller;
     controller?.removeListener(_onControllerUpdate);
     controller?.dispose();
@@ -122,10 +149,63 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       controller
           .seekTo(Duration.zero)
           .then((_) => controller.play())
-          .catchError((Object e, StackTrace s) =>
-              ErrorLogService.logSync('video/replay', e, s));
+          .catchError(
+            (Object e, StackTrace s) =>
+                ErrorLogService.logSync('video/replay', e, s),
+          );
     } else {
       _next();
+    }
+  }
+
+  /// Exclui o vídeo em reprodução e sai da tela.
+  ///
+  /// A lógica de exclusão é a de [VideosScreen.deleteVideo] (uma fonte só);
+  /// aqui o que é específico é o [onBeforeDelete], que descarta o
+  /// [VideoPlayerController] ANTES do diálogo do sistema. Com o decoder
+  /// segurando o arquivo aberto, a remoção falha silenciosamente no Android.
+  Future<void> _deleteCurrent(BuildContext context) async {
+    final NavigatorState navigator = Navigator.of(context);
+    final Video video = _current;
+    bool removed = false;
+
+    await VideosScreen.deleteVideo(
+      context,
+      context.read<VideoProvider>(),
+      video,
+      onBeforeDelete: _releaseController,
+      onDeleted: (List<MediaRef> _) async => removed = true,
+    );
+    if (!mounted) return;
+
+    if (removed) {
+      _playQueue.removeVideos(<int>{video.id});
+      if (navigator.mounted && navigator.canPop()) navigator.pop();
+      return;
+    }
+
+    // Cancelou no diálogo do SO ou a exclusão falhou: o controller já foi
+    // descartado, então recria para o player voltar a funcionar.
+    await _initController();
+  }
+
+  /// Pausa e descarta o controller atual (libera o arquivo no SO).
+  Future<void> _releaseController() async {
+    final VideoPlayerController? controller = _controller;
+    if (controller == null) return;
+    _controller = null;
+    controller.removeListener(_onControllerUpdate);
+    try {
+      if (controller.value.isInitialized) await controller.pause();
+      await controller.dispose();
+    } catch (e, s) {
+      ErrorLogService.logSync('video/release', e, s);
+    }
+    if (mounted) {
+      setState(() {
+        _isPlaying = false;
+        _error = null;
+      });
     }
   }
 
@@ -185,6 +265,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       await controller.play();
       if (mounted) setState(() => _isPlaying = true);
     }
+    // Voltar a reproduzir (ou pausar) sempre traz a UI de volta.
+    _showControls();
   }
 
   Future<void> _next() async {
@@ -229,9 +311,55 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     await _controller?.setPlaybackSpeed(speed);
   }
 
+  /// Aplica o volume e mostra o OSD — é o feedback que faltava: sem ele o
+  /// usuário arrasta o controle e não recebe nenhuma confirmação.
   Future<void> _setVolume(double volume) async {
-    setState(() => _volume = volume);
-    await _controller?.setVolume(volume);
+    final double clamped = volume.clamp(0.0, 1.0);
+    if (clamped > 0) _volumeBeforeMute = clamped;
+    setState(() => _volume = clamped);
+    await _controller?.setVolume(clamped);
+    _showOsd(clamped == 0 ? 'Mudo' : '${(clamped * 100).round()}%');
+    _showControls();
+  }
+
+  /// Alterna mudo ↔ o volume anterior.
+  Future<void> _toggleMute() async {
+    await _setVolume(_volume == 0 ? _volumeBeforeMute : 0);
+  }
+
+  /// Mostra uma mensagem no centro do vídeo por [Motion.osdLinger].
+  void _showOsd(String message) {
+    _osdTimer?.cancel();
+    setState(() => _osd = message);
+    _osdTimer = Timer(Motion.osdLinger, () {
+      if (mounted) setState(() => _osd = null);
+    });
+  }
+
+  /// Revela os controles e reagenda o auto-ocultar.
+  ///
+  /// Reproduzindo, eles somem sozinhos; pausado, ficam na tela (não faz
+  /// sentido escondê-los quando não há vídeo correndo).
+  void _showControls() {
+    _controlsTimer?.cancel();
+    if (mounted && !_controlsVisible) setState(() => _controlsVisible = true);
+    if (!_isPlaying || _dragging) return;
+    _controlsTimer = Timer(Motion.controlsLinger, () {
+      if (mounted && _isPlaying && !_dragging) {
+        setState(() => _controlsVisible = false);
+      }
+    });
+  }
+
+  /// Um toque no vídeo: mostra os controles ou os esconde. Toque em play/pause
+  /// além de alternar a reprodução também reacende a UI.
+  void _toggleControlsVisibility() {
+    setState(() => _controlsVisible = !_controlsVisible);
+    if (_controlsVisible) {
+      _showControls();
+    } else {
+      _controlsTimer?.cancel();
+    }
   }
 
   void _rotate() {
@@ -262,6 +390,12 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
           overflow: TextOverflow.ellipsis,
         ),
         actions: [
+          // ---- Excluir do aparelho ----
+          IconButton(
+            tooltip: 'Excluir do aparelho',
+            icon: const Icon(Icons.delete_outline),
+            onPressed: () => _deleteCurrent(context),
+          ),
           // ---- Girar vídeo ----
           IconButton(
             tooltip: 'Girar ($_rotation°)',
@@ -297,7 +431,11 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
           : Center(
               child: ready
                   ? GestureDetector(
-                      onTap: _togglePlay,
+                      // Um toque no vídeo alterna a UI (padrão de todo
+                      // player); o play/pause do toque duplo continua
+                      // acessível pelo botão grande e pela barra inferior.
+                      onTap: _toggleControlsVisibility,
+                      onDoubleTap: _togglePlay,
                       child: AspectRatio(
                         aspectRatio: _rotatedSize(
                           controller.value.size,
@@ -310,54 +448,143 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                               angle: _rotation * math.pi / 180,
                               child: VideoPlayer(controller),
                             ),
-                            if (!_isPlaying)
-                              Icon(
-                                Icons.play_circle_fill,
-                                size: 72,
-                                color: Colors.white.withValues(alpha: 0.85),
+
+                            // ---- OSD (volume, etc.) ----
+                            _VolumeOsd(message: _osd, volume: _volume),
+
+                            // ---- Botão de play/pause central ----
+                            FadeInOut(
+                              visible: !_isPlaying,
+                              child: PressPulse(
+                                child: IconButton(
+                                  onPressed: _togglePlay,
+                                  iconSize: 72,
+                                  icon: const Icon(Icons.play_circle_fill),
+                                  color: Colors.white.withValues(alpha: 0.85),
+                                  tooltip: 'Reproduzir',
+                                ),
                               ),
+                            ),
                           ],
                         ),
                       ),
                     )
                   : const CircularProgressIndicator(color: Colors.white70),
             ),
+      // A barra some sozinha durante a reprodução e volta em qualquer toque.
       bottomNavigationBar: ready
-          ? ValueListenableBuilder<VideoPlayerValue>(
-              valueListenable: controller,
-              builder: (context, value, _) {
-                final Duration position = _dragging
-                    ? _dragValue
-                    : value.position;
-                return _ControlsBar(
-                  position: position,
-                  duration: value.duration,
-                  isPlaying: value.isPlaying,
-                  speed: _speed,
-                  volume: _volume,
-                  onTogglePlay: _togglePlay,
-                  onPrevious: _previous,
-                  onNext: _next,
-                  onSeekStart: (v) {
-                    setState(() {
-                      _dragging = true;
-                      _dragValue = v;
-                    });
-                  },
-                  onSeekUpdate: (v) => setState(() => _dragValue = v),
-                  onSeekEnd: (v) async {
-                    await controller.seekTo(v);
-                    setState(() {
-                      _dragging = false;
-                      _dragValue = v;
-                    });
-                  },
-                  onSpeedSelected: _setSpeed,
-                  onVolumeChanged: _setVolume,
-                );
-              },
+          ? FadeInOut(
+              visible: _controlsVisible,
+              child: ValueListenableBuilder<VideoPlayerValue>(
+                valueListenable: controller,
+                builder: (context, value, _) {
+                  final Duration position = _dragging
+                      ? _dragValue
+                      : value.position;
+                  return _ControlsBar(
+                    position: position,
+                    duration: value.duration,
+                    isPlaying: value.isPlaying,
+                    speed: _speed,
+                    volume: _volume,
+                    onTogglePlay: _togglePlay,
+                    onPrevious: _previous,
+                    onNext: _next,
+                    onSeekStart: (v) {
+                      setState(() {
+                        _dragging = true;
+                        _dragValue = v;
+                      });
+                    },
+                    onSeekUpdate: (v) => setState(() => _dragValue = v),
+                    onSeekEnd: (v) async {
+                      await controller.seekTo(v);
+                      setState(() {
+                        _dragging = false;
+                        _dragValue = v;
+                      });
+                      _showControls();
+                    },
+                    onSpeedSelected: _setSpeed,
+                    onVolumeChanged: _setVolume,
+                    onToggleMute: _toggleMute,
+                  );
+                },
+              ),
             )
           : null,
+    );
+  }
+}
+
+/// Aviso visual de volume no centro do vídeo (o "OSD" dos players).
+///
+/// Aparece com fade+escala a cada mexida no volume e some sozinho. Mostra o
+/// ícone correspondente ao nível (mudo/baixo/médio/alto) e o percentual, para
+/// que o usuário saiba exatamente onde parou.
+class _VolumeOsd extends StatelessWidget {
+  /// Texto a exibir (ex.: "70%"). Null = escondido.
+  final String? message;
+
+  /// Volume atual, usado para escolher o ícone.
+  final double volume;
+
+  const _VolumeOsd({required this.message, required this.volume});
+
+  static IconData _iconFor(double value) {
+    if (value <= 0.001) return Icons.volume_off;
+    if (value < 0.34) return Icons.volume_mute;
+    if (value < 0.67) return Icons.volume_down;
+    return Icons.volume_up;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final String? text = message;
+    return IgnorePointer(
+      child: AnimatedOpacity(
+        opacity: text == null ? 0 : 1,
+        duration: text == null ? Motion.fast : Motion.normal,
+        curve: text == null ? Motion.exit : Motion.enter,
+        child: AnimatedScale(
+          scale: text == null ? 0.85 : 1,
+          duration: Motion.normal,
+          curve: Motion.enter,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+            decoration: BoxDecoration(
+              color: Colors.black.withValues(alpha: 0.55),
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                AnimatedContentSwitcher(
+                  value: _iconFor(volume),
+                  child: Icon(_iconFor(volume), color: Colors.white, size: 34),
+                ),
+                const SizedBox(height: 6),
+                // Altura reservada para o texto: sem isso o OSD "pula" quando
+                // o texto some (volume muda de 2 dígitos para 1).
+                SizedBox(
+                  height: 22,
+                  child: AnimatedContentSwitcher(
+                    value: text ?? '',
+                    child: Text(
+                      text ?? '',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w600,
+                        fontSize: 15,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
     );
   }
 }
@@ -377,6 +604,7 @@ class _ControlsBar extends StatelessWidget {
   final ValueChanged<Duration> onSeekEnd;
   final ValueChanged<double> onSpeedSelected;
   final ValueChanged<double> onVolumeChanged;
+  final VoidCallback onToggleMute;
 
   const _ControlsBar({
     required this.position,
@@ -384,6 +612,7 @@ class _ControlsBar extends StatelessWidget {
     required this.isPlaying,
     required this.speed,
     required this.volume,
+    required this.onToggleMute,
     required this.onTogglePlay,
     required this.onPrevious,
     required this.onNext,
@@ -495,16 +724,38 @@ class _ControlsBar extends StatelessWidget {
                       .toList(),
                 ),
                 // ---- Volume ----
-                PopupMenuButton<void>(
-                  tooltip: 'Volume',
-                  color: Colors.grey[900],
-                  icon: const Icon(Icons.volume_up, color: Colors.white),
-                  onSelected: (_) {},
-                  itemBuilder: (context) => [
-                    PopupMenuItem<void>(
-                      enabled: false,
-                      child: SizedBox(
-                        width: 160,
+                // Slider fixo + botão de mudo. Antes era um Slider dentro de
+                // um PopupMenuItem (menu que não fecha, área de toque ruim e
+                // nenhum retorno visual) — o usuário arrastava sem ver nada
+                // acontecer.
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    IconButton(
+                      tooltip: volume == 0 ? 'Reativar som' : 'Silenciar',
+                      onPressed: onToggleMute,
+                      color: Colors.white,
+                      icon: Icon(
+                        volume <= 0.001
+                            ? Icons.volume_off
+                            : volume < 0.34
+                            ? Icons.volume_mute
+                            : volume < 0.67
+                            ? Icons.volume_down
+                            : Icons.volume_up,
+                      ),
+                    ),
+                    // Largura fixa para o slider não respirar junto com o
+                    // resto da barra durante o arraste.
+                    SizedBox(
+                      width: 110,
+                      child: SliderTheme(
+                        data: SliderTheme.of(context).copyWith(
+                          activeTrackColor: Colors.white,
+                          inactiveTrackColor: Colors.white24,
+                          thumbColor: Colors.white,
+                          overlayColor: Colors.white24,
+                        ),
                         child: Slider(
                           value: volume.clamp(0.0, 1.0),
                           onChanged: onVolumeChanged,
