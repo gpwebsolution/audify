@@ -100,11 +100,16 @@ class _PdfScreenState extends State<PdfScreen> with MediaSelection<String> {
             onClear: clearSelection,
             onDelete: () =>
                 deleteSelectedPdfs(context, provider, favorites, sorted),
-            actions: <Widget>[
-              IconButton(
-                tooltip: 'Compartilhar selecionados',
-                icon: const Icon(Icons.share_outlined),
+            actions: <SelectionAction>[
+              SelectionAction(
+                icon: Icons.share_outlined,
+                label: 'Compartilhar selecionados',
                 onPressed: () => _shareSelected(sorted),
+              ),
+              SelectionAction(
+                icon: Icons.swap_horiz,
+                label: 'Inverter seleção',
+                onPressed: () => invertSelection(sorted.map((PdfFile p) => p.path)),
               ),
             ],
           ),

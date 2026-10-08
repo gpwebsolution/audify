@@ -13,7 +13,6 @@ import '../utils/format.dart';
 import '../utils/motion.dart';
 import '../widgets/media_actions.dart';
 import '../widgets/grid_zoom.dart';
-import '../widgets/media_details_sheet.dart';
 import '../widgets/selection_bar.dart';
 import 'video_player_screen.dart';
 
@@ -154,19 +153,26 @@ class _VideosScreenState extends State<VideosScreen> with MediaSelection<int> {
                 toggleSelectAll(provider.visibleVideos.map((Video v) => v.id)),
             onClear: clearSelection,
             onDelete: () => deleteSelectedVideos(context, provider),
-            actions: <Widget>[
-              IconButton(
-                tooltip: 'Compartilhar selecionados',
-                icon: const Icon(Icons.share_outlined),
+            actions: <SelectionAction>[
+              SelectionAction(
+                icon: Icons.share_outlined,
+                label: 'Compartilhar selecionados',
                 onPressed: () => _shareSelected(context, provider),
               ),
-              IconButton(
-                tooltip: 'Adicionar à playlist',
-                icon: const Icon(Icons.playlist_add),
+              SelectionAction(
+                icon: Icons.playlist_add,
+                label: 'Adicionar à playlist',
                 onPressed: () => _addSelectedToPlaylist(
                   context,
                   provider,
                   selectedFrom(provider.visibleVideos, (Video v) => v.id),
+                ),
+              ),
+              SelectionAction(
+                icon: Icons.swap_horiz,
+                label: 'Inverter seleção',
+                onPressed: () => invertSelection(
+                  provider.visibleVideos.map((Video v) => v.id),
                 ),
               ),
             ],
@@ -249,9 +255,11 @@ class _VideosScreenState extends State<VideosScreen> with MediaSelection<int> {
               ),
             );
           },
-          // Long-press marca; as ações ficam no botão do card.
+          // Long-press marca para o lote. As ações ficam no player em tela
+          // cheia (toque normal abre), pelo mesmo motivo da Galeria: com 10
+          // colunas o card tem ~36dp e um botão de 48dp sobre a miniatura
+          // cobria metade da imagem.
           onLongPress: () => toggleSelect(video.id),
-          onMenuTap: () => _showVideoActions(context, provider, video),
         );
       },
     );
@@ -366,141 +374,12 @@ class _VideosScreenState extends State<VideosScreen> with MediaSelection<int> {
       ),
     );
   }
-
-  Future<void> _showVideoActions(
-    BuildContext context,
-    VideoProvider provider,
-    Video video,
-  ) async {
-    await showModalBottomSheet<void>(
-      context: context,
-      showDragHandle: true,
-      builder: (sheetContext) => SafeArea(
-        child: ListView(
-          shrinkWrap: true,
-          children: [
-            ListTile(
-              leading: const Icon(Icons.playlist_add),
-              title: const Text('Adicionar à playlist'),
-              onTap: () {
-                Navigator.pop(sheetContext);
-                _pickPlaylist(context, video);
-              },
-            ),
-            // ==== COMPARECIMENTO ====
-            ListTile(
-              leading: const Icon(Icons.share_outlined),
-              title: const Text('Compartilhar'),
-              subtitle: const Text('WhatsApp, Messenger e outros'),
-              onTap: () {
-                Navigator.pop(sheetContext);
-                MediaActions.share(
-                  context,
-                  path: video.path,
-                  name: video.displayName,
-                  mimeType: 'video/mp4',
-                );
-              },
-            ),
-            ListTile(
-              leading: Icon(
-                Icons.delete_outline,
-                color: Theme.of(context).colorScheme.error,
-              ),
-              title: Text(
-                'Excluir do aparelho',
-                style: TextStyle(color: Theme.of(context).colorScheme.error),
-              ),
-              subtitle: Text(
-                '${video.displayTitle} • o Android pedirá confirmação',
-              ),
-              onTap: () async {
-                Navigator.pop(sheetContext);
-                await _deleteVideo(context, provider, video);
-              },
-            ),
-            ListTile(
-              leading: Icon(
-                Icons.info_outline,
-                color: Theme.of(context).colorScheme.onSurfaceVariant,
-              ),
-              title: Text('Detalhes'),
-              subtitle: Text(
-                '${video.displayTitle} • ${formatDuration(video.duration)}',
-              ),
-              onTap: () {
-                Navigator.pop(sheetContext);
-                MediaDetailsSheet.showVideo(context, video);
-              },
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Future<void> _deleteVideo(
-    BuildContext context,
-    VideoProvider provider,
-    Video video,
-  ) => VideosScreen.deleteVideo(context, provider, video);
-
-  /// Escolhe uma playlist para receber o vídeo.
-  void _pickPlaylist(BuildContext context, Video video) {
-    final PlaylistProvider playlistProvider = context.read<PlaylistProvider>();
-    showModalBottomSheet<void>(
-      context: context,
-      showDragHandle: true,
-      builder: (sheetContext) {
-        if (playlistProvider.playlists.isEmpty) {
-          return const SafeArea(
-            child: Padding(
-              padding: EdgeInsets.all(24),
-              child: Text(
-                'Nenhuma playlist ainda.\n'
-                'Crie uma na aba Playlists.',
-                textAlign: TextAlign.center,
-              ),
-            ),
-          );
-        }
-        return SafeArea(
-          child: ListView.builder(
-            shrinkWrap: true,
-            itemCount: playlistProvider.playlists.length,
-            itemBuilder: (context, index) {
-              final playlist = playlistProvider.playlists[index];
-              return ListTile(
-                leading: const Icon(Icons.queue_music),
-                title: Text(playlist.name),
-                subtitle: Text('${playlist.itemCount} itens'),
-                onTap: () async {
-                  await playlistProvider.addVideo(playlist.id, video);
-                  if (sheetContext.mounted) Navigator.pop(sheetContext);
-                  if (context.mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text('Adicionado a "${playlist.name}"'),
-                      ),
-                    );
-                  }
-                },
-              );
-            },
-          ),
-        );
-      },
-    );
-  }
 }
 
 class _VideoCard extends StatelessWidget {
   final Video video;
   final VoidCallback onTap;
   final VoidCallback onLongPress;
-
-  /// Abre as ações do vídeo (menu compartilhamento/exclusão/detalhes).
-  final VoidCallback onMenuTap;
   final bool selected;
   final bool selectionMode;
 
@@ -508,7 +387,6 @@ class _VideoCard extends StatelessWidget {
     required this.video,
     required this.onTap,
     required this.onLongPress,
-    required this.onMenuTap,
     this.selected = false,
     this.selectionMode = false,
   });
@@ -551,29 +429,6 @@ class _VideoCard extends StatelessWidget {
                         size: 22,
                       ),
                     ),
-                  ),
-                )
-              else
-                // Botão de ações do vídeo. Sem ele, compartilhar/detalhes/
-                // excluir um vídeo isolado ficariam inalcançáveis, porque o
-                // long-press agora pertence à seleção. Fica por último no
-                // Stack para receber o toque antes do card (o hitTest do
-                // Stack percorre de trás para frente).
-                Align(
-                  alignment: Alignment.topRight,
-                  child: IconButton(
-                    tooltip: 'Ações do vídeo',
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(
-                      minWidth: 48,
-                      minHeight: 48,
-                    ),
-                    style: IconButton.styleFrom(
-                      backgroundColor: Colors.black.withValues(alpha: 0.45),
-                      foregroundColor: Colors.white,
-                    ),
-                    icon: const Icon(Icons.more_vert, size: 20),
-                    onPressed: onMenuTap,
                   ),
                 ),
               Column(

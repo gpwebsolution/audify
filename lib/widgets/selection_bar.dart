@@ -90,6 +90,25 @@ mixin MediaSelection<K> {
     notifyChanged();
   }
 
+  /// Inverte a marcação: o que estava marcado desmarca, o que estava
+  /// desmarcado (e está visível) marca.
+  ///
+  /// É a forma mais rápida de "marcar tudo menos este". Sem ela, o usuário
+  /// teria de desmarcar item por item num lote grande.
+  void invertSelection(Iterable<K> visible) {
+    final List<K> items = visible.toList(growable: false);
+    if (items.isEmpty) return;
+    for (final K key in items) {
+      if (_selected.contains(key)) {
+        _selected.remove(key);
+      } else {
+        _selected.add(key);
+      }
+    }
+    if (_selected.isEmpty) _selectionMode = false;
+    notifyChanged();
+  }
+
   /// Só os itens marcados que ainda existem em [universe] — protege contra
   /// item marcado que saiu da lista (excluído por outro caminho) e evita
   /// passar lixo para a ação em lote.
@@ -99,6 +118,23 @@ mixin MediaSelection<K> {
         if (_selected.contains(keyOf(item))) item,
     ];
   }
+}
+
+/// Uma ação do menu de 3 pontinhos da [SelectionBar].
+class SelectionAction {
+  final IconData icon;
+  final String label;
+
+  /// Nulo = ação desabilitada no momento (ex.: "adicionar à playlist" sem
+  /// nenhuma playlist criada). Aparece esmaecida em vez de sumir, para o
+  /// usuário entender que o recurso existe.
+  final VoidCallback? onPressed;
+
+  const SelectionAction({
+    required this.icon,
+    required this.label,
+    required this.onPressed,
+  });
 }
 
 /// Barra de ações em lote que substitui a toolbar normal no modo seleção.
@@ -121,11 +157,16 @@ class SelectionBar extends StatelessWidget {
       'Toque longo marca • toque para marcar/desmarcar';
 
   /// Marca/desmarca tudo o que está visível.
+  /// Marca/desmarca tudo o que está visível (um toque alterna).
   final VoidCallback onSelectAll;
 
-  /// Ações extras do lote (além de selecionar tudo / excluir / limpar). Cada
-  /// uma é um ícone. Vazio = barra só com o essencial, como a Galeria.
-  final List<Widget> actions;
+  /// Ações extras do lote. Vão para o menu de 3 pontinhos, NÃO para a barra.
+  ///
+  /// Motivo: com 5+ ações a barra estourava a largura da tela e as ações
+  /// ficavam escondidas atrás de rolagem horizontal — exatamente o que o
+  /// usuário não encontra. Só o essencial fica sempre visível: contador,
+  /// selecionar tudo, excluir e o menu.
+  final List<SelectionAction> actions;
 
   /// Ação destrutiva (excluir) — pintada com a cor de erro.
   final VoidCallback? onDelete;
@@ -137,7 +178,7 @@ class SelectionBar extends StatelessWidget {
     required this.label,
     required this.onSelectAll,
     required this.onClear,
-    this.actions = const <Widget>[],
+    this.actions = const <SelectionAction>[],
     this.onDelete,
     this.showGestureHint = true,
   });
@@ -188,12 +229,52 @@ class SelectionBar extends StatelessWidget {
               icon: const Icon(Icons.select_all),
               onPressed: onSelectAll,
             ),
-            ...actions,
             if (onDelete != null)
               IconButton(
                 tooltip: 'Excluir selecionados',
                 icon: Icon(Icons.delete_outline, color: colors.error),
                 onPressed: onDelete,
+              ),
+            if (actions.isNotEmpty)
+              // Menu de 3 pontinhos: o resto das ações do lote. Fica SEMPRE
+              // visível, então o usuário descobre que as ações existem.
+              PopupMenuButton<int>(
+                tooltip: 'Mais ações',
+                icon: const Icon(Icons.more_vert),
+                onSelected: (int index) => actions[index].onPressed?.call(),
+                itemBuilder: (BuildContext context) => <PopupMenuEntry<int>>[
+                  for (int i = 0; i < actions.length; i++)
+                    PopupMenuItem<int>(
+                      value: i,
+                      enabled: actions[i].onPressed != null,
+                      child: Row(
+                        children: <Widget>[
+                          Icon(
+                            actions[i].icon,
+                            size: 20,
+                            color: actions[i].onPressed == null
+                                ? colors.onSurfaceVariant.withValues(alpha: 0.4)
+                                : null,
+                          ),
+                          const SizedBox(width: 12),
+                          Flexible(
+                            child: Text(
+                              actions[i].label,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                color: actions[i].onPressed == null
+                                    ? colors.onSurfaceVariant.withValues(
+                                        alpha: 0.4,
+                                      )
+                                    : null,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                ],
               ),
             IconButton(
               tooltip: 'Limpar seleção',

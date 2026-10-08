@@ -423,35 +423,42 @@ class _FilesScreenState extends State<FilesScreen> {
       onSelectAll: provider.toggleSelectAllVisible,
       onClear: provider.clearSelection,
       onDelete: () => _confirmDeleteSelection(),
-      actions: <Widget>[
-        IconButton(
-          tooltip: provider.selectedCount == 1
+      actions: <SelectionAction>[
+        SelectionAction(
+          icon: Icons.info_outline,
+          label: provider.selectedCount == 1
               ? 'Detalhes do arquivo'
-              : 'Selecione um arquivo para ver os detalhes',
-          icon: const Icon(Icons.info_outline),
+              : 'Detalhes (selecione 1 arquivo)',
+          // Desabilitado em vez de sumir: o usuário entende que o recurso
+          // existe e precisa marcar exatamente um item.
           onPressed: provider.selectedCount == 1
               ? () => _openDetailsOfSelection(provider)
               : null,
         ),
-        IconButton(
-          tooltip: 'Copiar',
-          icon: const Icon(Icons.content_copy),
+        SelectionAction(
+          icon: Icons.content_copy,
+          label: 'Copiar para…',
           onPressed: () => _pickDestination(copy: true),
         ),
-        IconButton(
-          tooltip: 'Mover',
-          icon: const Icon(Icons.drive_file_move_outline),
+        SelectionAction(
+          icon: Icons.drive_file_move_outline,
+          label: 'Mover para…',
           onPressed: () => _pickDestination(copy: false),
         ),
-        IconButton(
-          tooltip: 'Compactar em ZIP',
-          icon: const Icon(Icons.folder_zip_outlined),
+        SelectionAction(
+          icon: Icons.folder_zip_outlined,
+          label: 'Compactar em ZIP',
           onPressed: () => _showZipDialog(),
         ),
-        IconButton(
-          tooltip: 'Compartilhar',
-          icon: const Icon(Icons.share_outlined),
+        SelectionAction(
+          icon: Icons.share_outlined,
+          label: 'Compartilhar',
           onPressed: () => _shareSelected(),
+        ),
+        SelectionAction(
+          icon: Icons.swap_horiz,
+          label: 'Inverter seleção',
+          onPressed: () => provider.toggleSelectAllVisible(),
         ),
       ],
     );

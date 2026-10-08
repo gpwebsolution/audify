@@ -382,19 +382,83 @@ void main() {
       expect(find.byIcon(Icons.delete_outline), findsNothing);
     });
 
-    testWidgets('ações extras aparecem na barra', (WidgetTester tester) async {
+    testWidgets('ações extras vão para o menu de 3 pontinhos', (
+      WidgetTester tester,
+    ) async {
+      int share = 0;
       await pump(
         tester,
         SelectionBar(
           label: '2 selecionadas',
           onSelectAll: () {},
           onClear: () {},
-          actions: <Widget>[
-            IconButton(icon: const Icon(Icons.playlist_add), onPressed: () {}),
+          actions: <SelectionAction>[
+            SelectionAction(
+              icon: Icons.share_outlined,
+              label: 'Compartilhar selecionadas',
+              onPressed: () => share++,
+            ),
+            SelectionAction(
+              icon: Icons.swap_horiz,
+              label: 'Inverter seleção',
+              onPressed: () {},
+            ),
           ],
         ),
       );
-      expect(find.byIcon(Icons.playlist_add), findsOneWidget);
+
+      // Nada de ícone de ação espalhado pela barra: só o menu.
+      expect(find.byIcon(Icons.more_vert), findsOneWidget);
+      expect(find.byIcon(Icons.share_outlined), findsNothing);
+
+      // Abrindo o menu, as ações aparecem COM RÓTULO (não adivinháveis).
+      await tester.tap(find.byIcon(Icons.more_vert));
+      await tester.pumpAndSettle();
+      expect(find.text('Compartilhar selecionadas'), findsOneWidget);
+      expect(find.text('Inverter seleção'), findsOneWidget);
+
+      await tester.tap(find.text('Compartilhar selecionadas'));
+      await tester.pumpAndSettle();
+      expect(share, 1);
+    });
+
+    testWidgets('ação desabilitada aparece esmaecida, não some', (
+      WidgetTester tester,
+    ) async {
+      await pump(
+        tester,
+        SelectionBar(
+          label: '3 selecionados',
+          onSelectAll: () {},
+          onClear: () {},
+          actions: <SelectionAction>[
+            SelectionAction(
+              icon: Icons.info_outline,
+              label: 'Detalhes (selecione 1 arquivo)',
+              onPressed: null,
+            ),
+          ],
+        ),
+      );
+
+      await tester.tap(find.byIcon(Icons.more_vert));
+      await tester.pumpAndSettle();
+      // Visível para o usuário entender que o recurso existe.
+      expect(find.text('Detalhes (selecione 1 arquivo)'), findsOneWidget);
+    });
+
+    testWidgets('sem ações extras não há botão de menu', (
+      WidgetTester tester,
+    ) async {
+      await pump(
+        tester,
+        SelectionBar(
+          label: '1 selecionada',
+          onSelectAll: () {},
+          onClear: () {},
+        ),
+      );
+      expect(find.byIcon(Icons.more_vert), findsNothing);
     });
   });
 

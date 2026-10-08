@@ -11,10 +11,8 @@ import '../providers/gallery_provider.dart';
 import '../providers/settings_provider.dart';
 import '../services/gallery_query_service.dart';
 import '../utils/motion.dart';
-import '../widgets/exif_sheet.dart';
 import '../widgets/grid_zoom.dart';
 import '../widgets/media_actions.dart';
-import '../widgets/media_details_sheet.dart';
 import '../widgets/selection_bar.dart';
 import 'photo_viewer_screen.dart';
 
@@ -86,11 +84,18 @@ class _GalleryScreenState extends State<GalleryScreen>
             ),
             onClear: clearSelection,
             onDelete: () => deleteSelectedImages(context, provider),
-            actions: <Widget>[
-              IconButton(
-                tooltip: 'Compartilhar selecionadas',
-                icon: const Icon(Icons.share_outlined),
+            actions: <SelectionAction>[
+              SelectionAction(
+                icon: Icons.share_outlined,
+                label: 'Compartilhar selecionadas',
                 onPressed: () => _shareSelected(context, provider),
+              ),
+              SelectionAction(
+                icon: Icons.swap_horiz,
+                label: 'Inverter seleção',
+                onPressed: () => invertSelection(
+                  provider.visibleImages.map((GalleryImage i) => i.id),
+                ),
               ),
             ],
           ),
@@ -231,9 +236,12 @@ class _GalleryScreenState extends State<GalleryScreen>
                 ),
               );
             },
-            // Long-press marca; as ações ficam no botão do tile.
+            // Long-press marca para o lote. As ações ficam na tela cheia
+            // (toque normal abre o visualizador, que tem o menu) — o botão
+            // de 3 pontinhos sobre a miniatura era um problema de tamanho: com
+            // 10 colunas o tile tem ~36dp e um botão de 48dp cobria a foto
+            // inteira.
             onLongPress: () => toggleSelect(visible[index].id),
-            onMenuTap: () => _showImageActions(context, provider, index),
           );
         },
       ),
@@ -292,73 +300,17 @@ class _GalleryScreenState extends State<GalleryScreen>
       },
     );
   }
-
-  /// Menu de ações da foto: compartilhar / detalhes / excluir (long-press).
-  Future<void> _showImageActions(
-    BuildContext context,
-    GalleryProvider provider,
-    int index,
-  ) async {
-    final GalleryImage image = provider.visibleImages[index];
-    await MediaActions.show(
-      context,
-      ref: MediaRef.fromImage(image),
-      label: image.name,
-      sharePath: image.path,
-      shareName: image.name,
-      shareMimeType: _imageMimeType(image.path),
-      extraTiles: <Widget>[
-        ListTile(
-          leading: const Icon(Icons.info_outline),
-          title: const Text('Detalhes'),
-          subtitle: const Text('Tamanho, dimensões e caminho'),
-          onTap: () {
-            Navigator.of(context).pop();
-            MediaDetailsSheet.showImage(
-              context,
-              image,
-              onShowExif: () => showExifSheet(context, image.path),
-              onOpenFullscreen: () => Navigator.of(context).push(
-                MaterialPageRoute<void>(
-                  builder: (_) => PhotoViewerScreen(
-                    images: provider.visibleImages,
-                    initialIndex: index,
-                  ),
-                ),
-              ),
-            );
-          },
-        ),
-      ],
-      onDeleted: (List<MediaRef> removed) async {
-        // Só some da grade se o nativo confirmar a remoção.
-        if (removed.any(
-          (MediaRef r) => r.key == MediaRef.fromImage(image).key,
-        )) {
-          provider.handleImagesDeleted(<GalleryImage>[image]);
-        }
-      },
-    );
-  }
-
-  /// MIME pela extensão do arquivo (fallback JPEG).
-  static String _imageMimeType(String path) {
-    final String lower = path.toLowerCase();
-    if (lower.endsWith('.png')) return 'image/png';
-    if (lower.endsWith('.gif')) return 'image/gif';
-    if (lower.endsWith('.webp')) return 'image/webp';
-    if (lower.endsWith('.bmp')) return 'image/bmp';
-    return 'image/jpeg';
-  }
 }
 
+/// Miniatura da foto na grade.
+///
+/// Sem botão de ações sobreposto de propósito: com o zoom em 10 colunas o tile
+/// tem cerca de 36dp, e um botão de 48dp cobriria a foto inteira. As ações
+/// ficam na tela cheia — o toque normal abre o visualizador, que tem o menu.
 class _ImageTile extends StatelessWidget {
   final GalleryImage image;
   final VoidCallback onTap;
   final VoidCallback onLongPress;
-
-  /// Abre as ações da foto (menu compartilhamento/detalhes/exclusão).
-  final VoidCallback onMenuTap;
   final bool selected;
   final bool selectionMode;
 
@@ -366,7 +318,6 @@ class _ImageTile extends StatelessWidget {
     required this.image,
     required this.onTap,
     required this.onLongPress,
-    required this.onMenuTap,
     this.selected = false,
     this.selectionMode = false,
   });
@@ -388,7 +339,7 @@ class _ImageTile extends StatelessWidget {
         clipBehavior: Clip.antiAlias,
         child: Stack(
           fit: StackFit.expand,
-          children: [
+          children: <Widget>[
             InkWell(
               onTap: onTap,
               onLongPress: onLongPress,
@@ -415,28 +366,6 @@ class _ImageTile extends StatelessWidget {
                       ],
                     ),
                   ),
-                ),
-              )
-            else
-              // Botão de ações sobre a miniatura: o long-press pertence à
-              // seleção, então o menu precisa de um alvo visível.
-              Align(
-                alignment: Alignment.topRight,
-                child: IconButton(
-                  tooltip: 'Ações da foto',
-                  padding: EdgeInsets.zero,
-                  // Alvo mínimo de 48dp: com padding de 4dp o botão ficava
-                  // com 24dp, metade do recomendado — difícil de acertar.
-                  constraints: const BoxConstraints(
-                    minWidth: 48,
-                    minHeight: 48,
-                  ),
-                  style: IconButton.styleFrom(
-                    backgroundColor: Colors.black.withValues(alpha: 0.45),
-                    foregroundColor: Colors.white,
-                  ),
-                  icon: const Icon(Icons.more_vert, size: 20),
-                  onPressed: onMenuTap,
                 ),
               ),
           ],
@@ -618,6 +547,7 @@ class _BrokenThumb extends StatelessWidget {
   }
 }
 
+/// Estado vazio genérico (sem fotos, sem resultado de busca).
 class _EmptyState extends StatelessWidget {
   final IconData icon;
   final String message;

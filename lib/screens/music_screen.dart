@@ -281,19 +281,26 @@ class _MusicScreenState extends State<MusicScreen> with MediaSelection<String> {
                 toggleSelectAll(provider.visibleSongs.map((Song s) => s.id)),
             onClear: clearSelection,
             onDelete: () => deleteSelectedSongs(context, provider),
-            actions: <Widget>[
-              IconButton(
-                tooltip: 'Compartilhar selecionadas',
-                icon: const Icon(Icons.share_outlined),
+            actions: <SelectionAction>[
+              SelectionAction(
+                icon: Icons.share_outlined,
+                label: 'Compartilhar selecionadas',
                 onPressed: () => _shareSelected(context, provider),
               ),
-              IconButton(
-                tooltip: 'Adicionar à playlist',
-                icon: const Icon(Icons.playlist_add),
+              SelectionAction(
+                icon: Icons.playlist_add,
+                label: 'Adicionar à playlist',
                 onPressed: () => _addSelectedToPlaylist(
                   context,
                   provider,
                   selectedFrom(provider.visibleSongs, (Song s) => s.id),
+                ),
+              ),
+              SelectionAction(
+                icon: Icons.swap_horiz,
+                label: 'Inverter seleção',
+                onPressed: () => invertSelection(
+                  provider.visibleSongs.map((Song s) => s.id),
                 ),
               ),
             ],
