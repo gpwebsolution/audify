@@ -1550,6 +1550,38 @@ class MainActivity : AudioServiceActivity() {
 
     /// Metadados de APK solto no disco (nome do pacote, versão, label).
     /// getPackageArchiveInfo parseia o binário AndroidManifest embutido.
+    /// Converte o ícone do APK (um Drawable do manifesto) em bytes PNG.
+    ///
+    /// O caminho feliz é um `BitmapDrawable`; para ícone vetorial/adaptativo o
+    /// SO entrega um `Drawable` que precisa ser desenhado num Canvas — daí os
+    /// dois ramos. Falha de carga devolve null: ícone faltando é cosmético e
+    /// não pode derrubar a leitura dos outros metadados.
+    private fun apkIconPng(
+        applicationInfo: android.content.pm.ApplicationInfo?,
+        pm: android.content.pm.PackageManager
+    ): ByteArray? {
+        if (applicationInfo == null) return null
+        return try {
+            val drawable = applicationInfo.loadIcon(pm) ?: return null
+            val size = 144
+            val bitmap = (drawable as? android.graphics.drawable.BitmapDrawable)
+                ?.bitmap
+                ?.let { Bitmap.createScaledBitmap(it, size, size, true) }
+                ?: run {
+                    val created = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
+                    val canvas = android.graphics.Canvas(created)
+                    drawable.setBounds(0, 0, size, size)
+                    drawable.draw(canvas)
+                    created
+                }
+            val out = java.io.ByteArrayOutputStream()
+            bitmap.compress(Bitmap.CompressFormat.PNG, 100, out)
+            out.toByteArray()
+        } catch (e: Exception) {
+            null
+        }
+    }
+
     private fun queryApkInfo(path: String): Map<String, Any?>? {
         return try {
             val pm = packageManager
@@ -1568,7 +1600,11 @@ class MainActivity : AudioServiceActivity() {
                     (if (Build.VERSION.SDK_INT >= 28) info.longVersionCode else @Suppress("DEPRECATION") info.versionCode.toLong()),
                 "appName" to label,
                 "minSdkVersion" to (info.applicationInfo?.minSdkVersion ?: 0),
-                "targetSdkVersion" to (info.applicationInfo?.targetSdkVersion ?: 0)
+                "targetSdkVersion" to (info.applicationInfo?.targetSdkVersion ?: 0),
+                // Ícone do app embutido no APK, em PNG. Vem null quando o
+                // manifesto não declara ícone ou a carga falha — a UI cai no
+                // ícone genérico em vez de quebrar.
+                "icon" to apkIconPng(info.applicationInfo, pm)
             )
         } catch (e: Exception) {
             null

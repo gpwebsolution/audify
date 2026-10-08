@@ -49,8 +49,9 @@ class FileQueryService {
   static Future<List<StorageVolume>> loadStorageVolumes() async {
     if (!isSupported) return const [];
     try {
-      final List<dynamic>? raw =
-          await _channel.invokeMethod<List<dynamic>>('getStorageVolumes');
+      final List<dynamic>? raw = await _channel.invokeMethod<List<dynamic>>(
+        'getStorageVolumes',
+      );
       if (raw == null || raw.isEmpty) return _fallbackVolumes();
       return raw
           .map((e) => StorageVolume.fromChannel(e as Map<dynamic, dynamic>))
@@ -61,15 +62,15 @@ class FileQueryService {
   }
 
   static List<StorageVolume> _fallbackVolumes() => const [
-        StorageVolume(
-          path: '/storage/emulated/0',
-          name: 'Armazenamento interno',
-          isPrimary: true,
-          isRemovable: false,
-          totalSpace: 0,
-          freeSpace: 0,
-        ),
-      ];
+    StorageVolume(
+      path: '/storage/emulated/0',
+      name: 'Armazenamento interno',
+      isPrimary: true,
+      isRemovable: false,
+      totalSpace: 0,
+      freeSpace: 0,
+    ),
+  ];
 
   // =========================================================================
   // LISTAGEM PAGINADA
@@ -197,10 +198,11 @@ class FileQueryService {
     bool overwrite = false,
   }) async {
     try {
-      final String target =
-          overwrite ? destPath : await _uniquePath(destPath);
+      final String target = overwrite ? destPath : await _uniquePath(destPath);
       return await compute(
-          _copyJob, _TwoPaths(source: sourcePath, dest: target));
+        _copyJob,
+        _TwoPaths(source: sourcePath, dest: target),
+      );
     } catch (e) {
       debugPrint('[FileQueryService] copy: $e');
       return false;
@@ -215,10 +217,11 @@ class FileQueryService {
     bool overwrite = false,
   }) async {
     try {
-      final String target =
-          overwrite ? destPath : await _uniquePath(destPath);
+      final String target = overwrite ? destPath : await _uniquePath(destPath);
       return await compute(
-          _moveJob, _TwoPaths(source: sourcePath, dest: target));
+        _moveJob,
+        _TwoPaths(source: sourcePath, dest: target),
+      );
     } catch (e) {
       debugPrint('[FileQueryService] move: $e');
       return false;
@@ -233,8 +236,7 @@ class FileQueryService {
     try {
       final String parent = path.substring(0, path.lastIndexOf('/'));
       final String target = await _uniquePath('$parent/$newName');
-      return await compute(
-          _renameJob, _TwoPaths(source: path, dest: target));
+      return await compute(_renameJob, _TwoPaths(source: path, dest: target));
     } catch (e) {
       debugPrint('[FileQueryService] rename: $e');
       return false;
@@ -254,10 +256,13 @@ class FileQueryService {
       }
       final Directory trashRoot = await _trashDir();
       final String stamp = DateTime.now().microsecondsSinceEpoch.toString();
-      final String inside = '${trashRoot.path}/files/${stamp}_'
+      final String inside =
+          '${trashRoot.path}/files/${stamp}_'
           '${path.split('/').where((s) => s.isNotEmpty).last}';
       final bool moved = await compute(
-          _moveJob, _TwoPaths(source: path, dest: inside));
+        _moveJob,
+        _TwoPaths(source: path, dest: inside),
+      );
       if (!moved) return false;
       await _appendToManifest(path, inside, DateTime.now());
       return true;
@@ -290,7 +295,10 @@ class FileQueryService {
       File('${trashRoot.path}/manifest.jsonl');
 
   static Future<void> _appendToManifest(
-      String originalPath, String trashPath, DateTime at) async {
+    String originalPath,
+    String trashPath,
+    DateTime at,
+  ) async {
     final Directory support = await getApplicationSupportDirectory();
     final File manifest = _manifestFile(Directory('${support.path}/trash'));
     final Map<String, Object?> entry = <String, Object?>{
@@ -309,8 +317,7 @@ class FileQueryService {
   static Future<List<TrashEntry>> listTrash() async {
     try {
       final Directory support = await getApplicationSupportDirectory();
-      final File manifest =
-          File('${support.path}/trash/manifest.jsonl');
+      final File manifest = File('${support.path}/trash/manifest.jsonl');
       if (!manifest.existsSync()) return const [];
       final List<TrashEntry> result = <TrashEntry>[];
       for (final String line in manifest.readAsLinesSync()) {
@@ -323,17 +330,20 @@ class FileQueryService {
               !Directory(trashPath).existsSync()) {
             continue;
           }
-          final FileSystemEntityType kind =
-              FileSystemEntity.typeSync(trashPath);
+          final FileSystemEntityType kind = FileSystemEntity.typeSync(
+            trashPath,
+          );
           final int size = kind == FileSystemEntityType.file
               ? File(trashPath).lengthSync()
               : 0;
-          result.add(TrashEntry(
-            originalPath: map['original'] as String,
-            trashPath: trashPath,
-            deletedAtMs: (map['deletedAtMs'] as num).toInt(),
-            sizeBytes: size,
-          ));
+          result.add(
+            TrashEntry(
+              originalPath: map['original'] as String,
+              trashPath: trashPath,
+              deletedAtMs: (map['deletedAtMs'] as num).toInt(),
+              sizeBytes: size,
+            ),
+          );
         } catch (_) {
           continue;
         }
@@ -347,8 +357,7 @@ class FileQueryService {
   /// Devolve o item ao local original (recriando pastas se necessário).
   static Future<bool> restoreFromTrash(TrashEntry entry) async {
     try {
-      final bool moved = await compute(
-          _restoreJob, _RestoreArgs(entry: entry));
+      final bool moved = await compute(_restoreJob, _RestoreArgs(entry: entry));
       if (moved) await _removeFromManifest(entry.trashPath);
       return moved;
     } catch (e) {
@@ -446,7 +455,9 @@ class FileQueryService {
     final String ext = _extOf(archivePath);
     if (ext != 'zip') return false;
     try {
-      final Directory out = Directory('$destPath/.${_baseName(archivePath)}_extracted');
+      final Directory out = Directory(
+        '$destPath/.${_baseName(archivePath)}_extracted',
+      );
       final bool ok = await compute(
         _extractJob,
         _ExtractArgs(zipPath: archivePath, destPath: out.path),
@@ -507,7 +518,38 @@ class FileQueryService {
 
   /// Nome do pacote/versão/label de um APK solto no disco — só o Android
   /// consegue parsear o binário AndroidManifest.xml embutido.
-  static Future<ApkInfo?> getApkInfo(String path) async {
+  /// Cache de metadados (e ícone) por caminho de APK.
+  ///
+  /// Sem isso, o `FutureBuilder` da tela criava um Future NOVO a cada rebuild
+  /// (marcar/desmarc um APK bastava) e o nativo reparseava o AndroidManifest
+  /// binário do APK — trabalho pesado repetido sem necessidade.
+  static final Map<String, ApkInfo> _apkInfoCache = <String, ApkInfo>{};
+
+  /// Consultas em voo, para dois widgets do mesmo APK compartilharem uma ida.
+  static final Map<String, Future<ApkInfo?>> _apkInfoPending =
+      <String, Future<ApkInfo?>>{};
+
+  static Future<ApkInfo?> getApkInfo(String path) {
+    final ApkInfo? cached = _apkInfoCache[path];
+    if (cached != null) return Future<ApkInfo?>.value(cached);
+
+    final Future<ApkInfo?>? inflight = _apkInfoPending[path];
+    if (inflight != null) return inflight;
+
+    final Future<ApkInfo?> future = _loadApkInfo(path)
+        .then((ApkInfo? info) {
+          if (info != null) _apkInfoCache[path] = info;
+          return info;
+        })
+        .whenComplete(() => _apkInfoPending.remove(path));
+    _apkInfoPending[path] = future;
+    return future;
+  }
+
+  /// Descarta o cache de um APK (usado quando o arquivo é excluído).
+  static void clearApkInfo(String path) => _apkInfoCache.remove(path);
+
+  static Future<ApkInfo?> _loadApkInfo(String path) async {
     if (!isSupported) return null;
     try {
       final Map<dynamic, dynamic>? raw = await _channel
@@ -528,7 +570,8 @@ class FileQueryService {
   /// excluídas + lixeira) rodando em isolate — pode levar segundos em
   /// armazenamentos cheios; a tela mostra loading.
   static Future<StorageUsage> getStorageUsage({String? rootPath}) async {
-    final StorageVolume volume = (await loadStorageVolumes()).firstOrNull ??
+    final StorageVolume volume =
+        (await loadStorageVolumes()).firstOrNull ??
         const StorageVolume(
           path: '/storage/emulated/0',
           name: '',
@@ -569,10 +612,7 @@ class FileQueryService {
     try {
       return await compute(
         _largestJob,
-        _LargestArgs(
-          rootPath: rootPath ?? '/storage/emulated/0',
-          limit: limit,
-        ),
+        _LargestArgs(rootPath: rootPath ?? '/storage/emulated/0', limit: limit),
       );
     } catch (_) {
       return const [];
@@ -596,11 +636,9 @@ class FileQueryService {
         _DupArgs(rootPath: rootPath, minSize: minSize),
       );
       return raw
-          .map((g) => DuplicateGroup(
-                hash: g.hash,
-                size: g.size,
-                files: g.items,
-              ))
+          .map(
+            (g) => DuplicateGroup(hash: g.hash, size: g.size, files: g.items),
+          )
           .toList()
         ..sort((a, b) => b.size.compareTo(a.size));
     } catch (e) {
@@ -692,11 +730,8 @@ class FileListResult {
     required this.hasMore,
   });
 
-  factory FileListResult.empty() => const FileListResult(
-        items: [],
-        totalCount: 0,
-        hasMore: false,
-      );
+  factory FileListResult.empty() =>
+      const FileListResult(items: [], totalCount: 0, hasMore: false);
 }
 
 class StorageVolume {
@@ -768,29 +803,35 @@ class ApkInfo {
   final String versionName;
   final int versionCode;
   final String appName;
-  final String? iconPath;
   final int minSdkVersion;
   final int targetSdkVersion;
+
+  /// Ícone embutido no APK, já em PNG (vem do lado nativo).
+  ///
+  /// Null quando o manifesto não declara ícone ou a carga falhou — a UI usa
+  /// o ícone genérico nesse caso.
+  final Uint8List? icon;
 
   const ApkInfo({
     required this.packageName,
     required this.versionName,
     required this.versionCode,
     required this.appName,
-    this.iconPath,
     required this.minSdkVersion,
     required this.targetSdkVersion,
+    this.icon,
   });
 
   factory ApkInfo.fromChannel(Map<dynamic, dynamic> map) {
+    final Object? rawIcon = map['icon'];
     return ApkInfo(
       packageName: map['packageName'] as String? ?? '?',
       versionName: map['versionName'] as String? ?? '?',
       versionCode: (map['versionCode'] as num?)?.toInt() ?? 0,
       appName: map['appName'] as String? ?? '?',
-      iconPath: map['iconPath'] as String?,
       minSdkVersion: (map['minSdkVersion'] as num?)?.toInt() ?? 0,
       targetSdkVersion: (map['targetSdkVersion'] as num?)?.toInt() ?? 0,
+      icon: rawIcon is Uint8List ? rawIcon : null,
     );
   }
 }
@@ -895,8 +936,7 @@ _ListResult _listDirJob(_ListArgs args) {
       final FileStat stat = entity.statSync();
       if (stat.type == FileSystemEntityType.notFound) continue;
       final String path = entity.path;
-      final String name =
-          path.split('/').where((s) => s.isNotEmpty).last;
+      final String name = path.split('/').where((s) => s.isNotEmpty).last;
       if (!args.includeHidden && name.startsWith('.')) continue;
 
       final bool isDir = stat.type == FileSystemEntityType.directory;
@@ -910,13 +950,15 @@ _ListResult _listDirJob(_ListArgs args) {
         continue;
       }
 
-      matched.add(FileItem.fromStat(
-        path: path,
-        isDirectory: isDir,
-        size: stat.size,
-        modifiedSeconds: stat.modified.millisecondsSinceEpoch ~/ 1000,
-        createdSeconds: stat.changed.millisecondsSinceEpoch ~/ 1000,
-      ));
+      matched.add(
+        FileItem.fromStat(
+          path: path,
+          isDirectory: isDir,
+          size: stat.size,
+          modifiedSeconds: stat.modified.millisecondsSinceEpoch ~/ 1000,
+          createdSeconds: stat.changed.millisecondsSinceEpoch ~/ 1000,
+        ),
+      );
     } catch (_) {
       continue;
     }
@@ -986,8 +1028,10 @@ List<FileItem> _searchJob(_SearchArgs args) {
     }
     for (final FileSystemEntity entity in entries) {
       try {
-        final String name =
-            entity.path.split('/').where((s) => s.isNotEmpty).last;
+        final String name = entity.path
+            .split('/')
+            .where((s) => s.isNotEmpty)
+            .last;
         final bool isDir = FileSystemEntity.isDirectorySync(entity.path);
         if (isDir) {
           if (!_isExcluded(entity.path)) stack.add(entity.path);
@@ -995,19 +1039,20 @@ List<FileItem> _searchJob(_SearchArgs args) {
         }
         if (!name.toLowerCase().contains(args.query)) continue;
         if (args.filterType != null &&
-            FileTypeMap.fromExtension(_jobExt(name)).name !=
-                args.filterType) {
+            FileTypeMap.fromExtension(_jobExt(name)).name != args.filterType) {
           continue;
         }
         final FileStat stat = entity.statSync();
         if (found.length >= args.limit) break;
-        found.add(FileItem.fromStat(
-          path: entity.path,
-          isDirectory: false,
-          size: stat.size,
-          modifiedSeconds: stat.modified.millisecondsSinceEpoch ~/ 1000,
-          createdSeconds: stat.changed.millisecondsSinceEpoch ~/ 1000,
-        ));
+        found.add(
+          FileItem.fromStat(
+            path: entity.path,
+            isDirectory: false,
+            size: stat.size,
+            modifiedSeconds: stat.modified.millisecondsSinceEpoch ~/ 1000,
+            createdSeconds: stat.changed.millisecondsSinceEpoch ~/ 1000,
+          ),
+        );
       } catch (_) {
         continue;
       }
@@ -1061,8 +1106,9 @@ void _copyRecursive(String source, String dest) {
   final FileSystemEntityType type = FileSystemEntity.typeSync(source);
   if (type == FileSystemEntityType.directory) {
     Directory(dest).createSync(recursive: true);
-    for (final FileSystemEntity child
-        in Directory(source).listSync(followLinks: false)) {
+    for (final FileSystemEntity child in Directory(
+      source,
+    ).listSync(followLinks: false)) {
       _copyRecursive(child.path, '$dest/${child.path.split('/').last}');
     }
     return;
@@ -1122,8 +1168,10 @@ class _RestoreArgs {
 bool _restoreJob(_RestoreArgs args) {
   try {
     final TrashEntry entry = args.entry;
-    final String parent =
-        entry.originalPath.substring(0, entry.originalPath.lastIndexOf('/'));
+    final String parent = entry.originalPath.substring(
+      0,
+      entry.originalPath.lastIndexOf('/'),
+    );
     Directory(parent).createSync(recursive: true);
     final bool isDir = FileSystemEntity.isDirectorySync(entry.trashPath);
     if (isDir) {
@@ -1150,8 +1198,9 @@ void _deleteRecursiveSync(String path) {
   final FileSystemEntityType type = FileSystemEntity.typeSync(path);
   if (type == FileSystemEntityType.notFound) return;
   if (type == FileSystemEntityType.directory) {
-    for (final FileSystemEntity child
-        in Directory(path).listSync(followLinks: false)) {
+    for (final FileSystemEntity child in Directory(
+      path,
+    ).listSync(followLinks: false)) {
       _deleteRecursiveSync(child.path);
     }
     Directory(path).deleteSync(recursive: false);
@@ -1179,11 +1228,14 @@ bool _zipJob(_ZipArgs args) {
   try {
     final Archive archive = Archive();
     void addPath(String fsPath, String arcName) {
-      final FileSystemEntityType type =
-          FileSystemEntity.typeSync(fsPath, followLinks: true);
+      final FileSystemEntityType type = FileSystemEntity.typeSync(
+        fsPath,
+        followLinks: true,
+      );
       if (type == FileSystemEntityType.directory) {
-        for (final FileSystemEntity child
-            in Directory(fsPath).listSync(followLinks: true)) {
+        for (final FileSystemEntity child in Directory(
+          fsPath,
+        ).listSync(followLinks: true)) {
           addPath(child.path, '$arcName/${child.path.split('/').last}');
         }
         return;
@@ -1219,12 +1271,15 @@ bool _extractJob(_ExtractArgs args) {
   try {
     final List<int> bytes = File(args.zipPath).readAsBytesSync();
     final Archive archive = ZipDecoder().decodeBytes(bytes);
-    final String normalizedDest =
-        Directory(args.destPath).absolute.path.replaceAll(r'\', '/');
+    final String normalizedDest = Directory(
+      args.destPath,
+    ).absolute.path.replaceAll(r'\', '/');
 
     for (final ArchiveFile entry in archive) {
-      final String outPath =
-          '$normalizedDest/${entry.name}'.replaceAll(r'\', '/');
+      final String outPath = '$normalizedDest/${entry.name}'.replaceAll(
+        r'\',
+        '/',
+      );
       // Defesa contra zip-slip: nenhuma entrada pode escapar do destino.
       if (!outPath.startsWith(normalizedDest)) continue;
       if (entry.isFile) {
@@ -1283,11 +1338,11 @@ Future<_DetailsData> _detailsJob(String path) async {
   final FileType type = FileTypeMap.fromExtension(_jobExt(name));
   if (type == FileType.image && stat.size > 0 && stat.size < 60 * 1024 * 1024) {
     try {
-      final Map<String, IfdTag> tags =
-          await readExifFromFile(File(path));
+      final Map<String, IfdTag> tags = await readExifFromFile(File(path));
       exif = <String, dynamic>{
         for (final MapEntry<String, IfdTag> e in tags.entries)
-          e.key.replaceFirst('EXIF ', '').replaceFirst('Image ', ''): e.value
+          e.key.replaceFirst('EXIF ', '').replaceFirst('Image ', ''): e
+              .value
               .printable
               .trim(),
       };
@@ -1314,10 +1369,13 @@ int _dirSizeJob(String path) {
   while (stack.isNotEmpty) {
     final String current = stack.removeLast();
     try {
-      for (final FileSystemEntity entity
-          in Directory(current).listSync(followLinks: false)) {
-        final FileSystemEntityType type =
-            FileSystemEntity.typeSync(entity.path, followLinks: false);
+      for (final FileSystemEntity entity in Directory(
+        current,
+      ).listSync(followLinks: false)) {
+        final FileSystemEntityType type = FileSystemEntity.typeSync(
+          entity.path,
+          followLinks: false,
+        );
         if (type == FileSystemEntityType.directory) {
           stack.add(entity.path);
         } else if (type == FileSystemEntityType.file) {
@@ -1331,8 +1389,7 @@ int _dirSizeJob(String path) {
   return total;
 }
 
-FileType _categoryOf(String name) =>
-    FileTypeMap.fromExtension(_jobExt(name));
+FileType _categoryOf(String name) => FileTypeMap.fromExtension(_jobExt(name));
 
 class _WalkArgs {
   final String rootPath;
@@ -1361,8 +1418,10 @@ Map<String, int> _usageJob(_WalkArgs args) {
     }
     for (final FileSystemEntity entity in entries) {
       try {
-        final FileSystemEntityType type =
-            FileSystemEntity.typeSync(entity.path, followLinks: false);
+        final FileSystemEntityType type = FileSystemEntity.typeSync(
+          entity.path,
+          followLinks: false,
+        );
         if (type == FileSystemEntityType.directory) {
           if (!_isExcluded(entity.path)) stack.add(entity.path);
           continue;
@@ -1419,8 +1478,10 @@ List<FileItem> _largestJob(_LargestArgs args) {
     }
     for (final FileSystemEntity entity in entries) {
       try {
-        final FileSystemEntityType type =
-            FileSystemEntity.typeSync(entity.path, followLinks: false);
+        final FileSystemEntityType type = FileSystemEntity.typeSync(
+          entity.path,
+          followLinks: false,
+        );
         if (type == FileSystemEntityType.directory) {
           if (!_isExcluded(entity.path)) stack.add(entity.path);
           continue;
@@ -1477,8 +1538,10 @@ Future<List<_DupRaw>> _duplicatesJob(_DupArgs args) async {
     }
     for (final FileSystemEntity entity in entries) {
       try {
-        final FileSystemEntityType type =
-            FileSystemEntity.typeSync(entity.path, followLinks: false);
+        final FileSystemEntityType type = FileSystemEntity.typeSync(
+          entity.path,
+          followLinks: false,
+        );
         if (type == FileSystemEntityType.directory) {
           if (!_isExcluded(entity.path)) stack.add(entity.path);
           continue;
@@ -1486,13 +1549,15 @@ Future<List<_DupRaw>> _duplicatesJob(_DupArgs args) async {
         if (type != FileSystemEntityType.file) continue;
         final FileStat stat = entity.statSync();
         if (stat.size < args.minSize) continue;
-        (bySize[stat.size] ??= <FileItem>[]).add(FileItem.fromStat(
-          path: entity.path,
-          isDirectory: false,
-          size: stat.size,
-          modifiedSeconds: stat.modified.millisecondsSinceEpoch ~/ 1000,
-          createdSeconds: stat.changed.millisecondsSinceEpoch ~/ 1000,
-        ));
+        (bySize[stat.size] ??= <FileItem>[]).add(
+          FileItem.fromStat(
+            path: entity.path,
+            isDirectory: false,
+            size: stat.size,
+            modifiedSeconds: stat.modified.millisecondsSinceEpoch ~/ 1000,
+            createdSeconds: stat.changed.millisecondsSinceEpoch ~/ 1000,
+          ),
+        );
       } catch (_) {
         continue;
       }
@@ -1506,8 +1571,9 @@ Future<List<_DupRaw>> _duplicatesJob(_DupArgs args) async {
     final Map<String, List<FileItem>> byHash = <String, List<FileItem>>{};
     for (final FileItem item in entry.value) {
       try {
-        final Digest digest =
-            await sha256.bind(File(item.path).openRead()).first;
+        final Digest digest = await sha256
+            .bind(File(item.path).openRead())
+            .first;
         (byHash[digest.toString()] ??= <FileItem>[]).add(item);
       } catch (_) {
         continue;
@@ -1515,8 +1581,7 @@ Future<List<_DupRaw>> _duplicatesJob(_DupArgs args) async {
     }
     for (final MapEntry<String, List<FileItem>> hashed in byHash.entries) {
       if (hashed.value.length >= 2) {
-        groups.add(
-            _DupRaw(hashed.key, entry.key, hashed.value));
+        groups.add(_DupRaw(hashed.key, entry.key, hashed.value));
       }
     }
   }

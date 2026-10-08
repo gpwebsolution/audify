@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 
 import '../models/file_item.dart';
@@ -51,9 +53,17 @@ class _ApkManagerScreenState extends State<ApkManagerScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text(_selectionMode ? '${_selected.length} selecionado(s)' : 'Gerenciador de APKs'),
+        title: Text(
+          _selectionMode
+              ? '${_selected.length} selecionado(s)'
+              : 'Gerenciador de APKs',
+        ),
         actions: [
-          IconButton(icon: const Icon(Icons.refresh), onPressed: _scan, tooltip: 'Reescanear'),
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            onPressed: _scan,
+            tooltip: 'Reescanear',
+          ),
           if (_selectionMode) ...[
             IconButton(
               icon: const Icon(Icons.delete_outline),
@@ -109,29 +119,51 @@ class _ApkManagerScreenState extends State<ApkManagerScreen> {
     final bool isSelected = _selected.contains(apk.path);
     return ListTile(
       leading: _selectionMode
-          ? Checkbox(
-              value: isSelected,
-              onChanged: (_) => _toggle(apk.path),
-            )
-          : const Icon(Icons.android, size: 32),
+          ? Checkbox(value: isSelected, onChanged: (_) => _toggle(apk.path))
+          // Ícone real do app, embutido no APK (lido do manifesto pelo
+          // nativo). Cai no ícone genérico quando o APK não tem ícone — o
+          // `FutureBuilder` fica durante o carregamento, então o placeholder
+          // evita o "salto" de layout.
+          : FutureBuilder<ApkInfo?>(
+              future: FileQueryService.getApkInfo(apk.path),
+              builder: (context, snapshot) {
+                final Uint8List? icon = snapshot.data?.icon;
+                if (icon == null || icon.isEmpty) {
+                  return const Icon(Icons.android, size: 32);
+                }
+                return ClipRRect(
+                  borderRadius: BorderRadius.circular(8),
+                  child: Image.memory(
+                    icon,
+                    width: 32,
+                    height: 32,
+                    fit: BoxFit.contain,
+                    // Ícone de app costuma ter cantos arredondados próprios;
+                    // sem isso um PNG quadrado fica solto no tile.
+                    filterQuality: FilterQuality.medium,
+                    gaplessPlayback: true,
+                  ),
+                );
+              },
+            ),
       title: Text(apk.name, maxLines: 1, overflow: TextOverflow.ellipsis),
       subtitle: FutureBuilder<ApkInfo?>(
         future: FileQueryService.getApkInfo(apk.path),
         builder: (context, snapshot) {
           final info = snapshot.data;
-          final String pkg = info == null ? '' : '${info.appName} • v${info.versionName}';
+          final String pkg = info == null
+              ? ''
+              : '${info.appName} • v${info.versionName}';
           return Text(
-            [
-              apk.displaySize,
-              if (pkg.isNotEmpty) pkg,
-            ].join(' • '),
+            [apk.displaySize, if (pkg.isNotEmpty) pkg].join(' • '),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
           );
         },
       ),
       trailing: _selectionMode ? null : const Icon(Icons.chevron_right),
-      onTap: () => _selectionMode ? _toggle(apk.path) : _showActions(context, apk),
+      onTap: () =>
+          _selectionMode ? _toggle(apk.path) : _showActions(context, apk),
       onLongPress: () {
         if (!_selectionMode) setState(() => _selectionMode = true);
         _toggle(apk.path);
@@ -161,11 +193,15 @@ class _ApkManagerScreenState extends State<ApkManagerScreen> {
                 Navigator.pop(sheetContext);
                 final bool ok = await FileQueryService.openFile(apk.path);
                 if (context.mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                    content: Text(ok
-                        ? 'Instalação iniciada'
-                        : 'Não foi possível iniciar a instalação'),
-                  ));
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(
+                        ok
+                            ? 'Instalação iniciada'
+                            : 'Não foi possível iniciar a instalação',
+                      ),
+                    ),
+                  );
                 }
               },
             ),
@@ -180,23 +216,34 @@ class _ApkManagerScreenState extends State<ApkManagerScreen> {
                   context: context,
                   builder: (_) => AlertDialog(
                     title: Text(apk.name),
-                    content: Text(info == null
-                        ? 'Metadados indisponíveis para este APK.'
-                        : 'App: ${info.appName}\n'
-                            'Pacote: ${info.packageName}\n'
-                            'Versão: ${info.versionName} (${info.versionCode})\n'
-                            'Tamanho: ${apk.displaySize}\n'
-                            'Caminho: ${apk.path}'),
+                    content: Text(
+                      info == null
+                          ? 'Metadados indisponíveis para este APK.'
+                          : 'App: ${info.appName}\n'
+                                'Pacote: ${info.packageName}\n'
+                                'Versão: ${info.versionName} (${info.versionCode})\n'
+                                'Tamanho: ${apk.displaySize}\n'
+                                'Caminho: ${apk.path}',
+                    ),
                     actions: [
-                      TextButton(onPressed: () => Navigator.pop(context), child: const Text('OK')),
+                      TextButton(
+                        onPressed: () => Navigator.pop(context),
+                        child: const Text('OK'),
+                      ),
                     ],
                   ),
                 );
               },
             ),
             ListTile(
-              leading: Icon(Icons.delete_outline, color: Theme.of(context).colorScheme.error),
-              title: Text('Excluir', style: TextStyle(color: Theme.of(context).colorScheme.error)),
+              leading: Icon(
+                Icons.delete_outline,
+                color: Theme.of(context).colorScheme.error,
+              ),
+              title: Text(
+                'Excluir',
+                style: TextStyle(color: Theme.of(context).colorScheme.error),
+              ),
               onTap: () async {
                 Navigator.pop(sheetContext);
                 await FileQueryService.delete(path: apk.path, useTrash: true);
@@ -216,10 +263,15 @@ class _ApkManagerScreenState extends State<ApkManagerScreen> {
         title: const Text('Excluir APKs?'),
         content: Text('${_selected.length} arquivo(s) vão para a lixeira.'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('Cancelar')),
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Cancelar'),
+          ),
           FilledButton(
             onPressed: () => Navigator.pop(dialogContext, true),
-            style: FilledButton.styleFrom(backgroundColor: Theme.of(context).colorScheme.error),
+            style: FilledButton.styleFrom(
+              backgroundColor: Theme.of(context).colorScheme.error,
+            ),
             child: const Text('Excluir'),
           ),
         ],
@@ -233,7 +285,11 @@ class _ApkManagerScreenState extends State<ApkManagerScreen> {
     }
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('$okCount de ${_selected.length} excluído(s). Restaurável na Lixeira.')),
+      SnackBar(
+        content: Text(
+          '$okCount de ${_selected.length} excluído(s). Restaurável na Lixeira.',
+        ),
+      ),
     );
     setState(() {
       _selected.clear();
