@@ -1,4 +1,5 @@
-import 'dart:io' show Platform;
+import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
@@ -44,7 +45,7 @@ class DeleteResult {
   /// Erro de plataforma/canal ( impede qualquer conclusão confiável).
   final String? error;
 
-  const DeleteResult({
+  DeleteResult({
     required this.deleted,
     required this.failed,
     this.notFound = const <MediaRef>[],
@@ -54,7 +55,7 @@ class DeleteResult {
   });
 
   /// Resultado vazio (nada foi pedido).
-  const DeleteResult.empty()
+  DeleteResult.empty()
     : deleted = const [],
       notFound = const [],
       failed = const [],
@@ -65,9 +66,45 @@ class DeleteResult {
   /// Total de itens informados pelo nativo (apagados + ausentes + com falha).
   int get total => deleted.length + notFound.length + failed.length;
 
-  /// Itens que saíram do aparelho, por exclusão confirmada ou por já não
-  /// existirem. É este conjunto que a UI pode limpar com segurança.
-  List<MediaRef> get removed => <MediaRef>[...deleted, ...notFound];
+  /// Itens que a UI pode limpar do seu estado com segurança.
+  ///
+  /// Inclui [deleted] e [notFound], mas [notFound] só entra depois de
+  /// [confirmAbsent]: ver [confirmationSet].
+  ///
+  /// [cancelled], [failed] e [permissionRequired] NUNCA entram aqui — são os
+  /// casos em que o arquivo continua no aparelho e limpar a lista produziria
+  /// um item fantasma (aparência de exclusão sem exclusão).
+  List<MediaRef> get removed => <MediaRef>[
+    ...deleted,
+    ...notFound.where((MediaRef r) => _absentConfirmed.contains(r.key)),
+  ];
+
+  /// Chaves de [notFound] que foram reconfirmadas como realmente ausentes.
+  final Set<String> _absentConfirmed = <String>{};
+
+  /// Autoriza a limpeza de estado para os itens `notFound` informados.
+  ///
+  /// A checagem autoritativa é do nativo (consultou o MediaStore). Ainda
+  /// assim, [notFound] é revalidado contra o disco: se o arquivo estiver
+  /// acessível e presente, o item NÃO é limpo e volta a ser falha.
+  ///
+  /// O teste é unilateral de propósito: `existsSync() == true` é prova de
+  /// que o arquivo existe; `false` NÃO prova que sumiu (pode ser só falta de
+  /// permissão de leitura), e nesse caso o nativo já Respond e a confiança é
+  /// dele.
+  void confirmAbsent(List<MediaRef> candidates) {
+    for (final MediaRef ref in candidates) {
+      final String? path = ref.path;
+      if (path != null && path.isNotEmpty) {
+        try {
+          if (File(path).existsSync()) continue; // existe de verdade: não limpa
+        } on FileSystemException {
+          // Sem permissão para stat: mantém o veredito do nativo.
+        }
+      }
+      _absentConfirmed.add(ref.key);
+    }
+  }
 
   /// True somente quando tudo que foi pedido saiu do aparelho.
   bool get isComplete =>
@@ -118,21 +155,41 @@ class DeleteResult {
 class MediaDeleteService {
   static const MethodChannel _channel = MethodChannel('audify/media_delete');
 
+  /// Tempo máximo que o app espera o SO concluir a exclusão.
+  ///
+  /// A exclusão é assíncrona e passa por um diálogo do sistema: se algo
+  /// travar do lado nativo (uma exceção depois do diálogo aberto, por
+  /// exemplo), o Future ficaria pendurado para sempre e a tela pareceria
+  /// travada. Com o timeout, o app sempre volta com uma resposta — e como
+  /// volta com `failed`, NENHUMA lista é alterada.
+  ///
+  /// Generoso de propósito: o usuário pode demorar no diálogo do SO.
+  /// Exposto para os testes poderem usar um valor pequeno.
+  static Duration timeout = const Duration(seconds: 90);
+
   /// A exclusão via MediaStore só existe no Android.
-  static bool get isSupported => !kIsWeb && Platform.isAndroid;
+  ///
+  /// [isSupportedOverride] existe só para os testes: o runner roda em Linux,
+  /// então sem a costura o canal nativo nunca seria exercitado e o teste
+  /// passaria a testar apenas o caminho "não suportado".
+  @visibleForTesting
+  static bool? isSupportedOverride;
+
+  static bool get isSupported =>
+      isSupportedOverride ?? (!kIsWeb && Platform.isAndroid);
 
   /// Exclui [items] do aparelho. Suporta lote com UM único diálogo do
   /// sistema (Android 11+).
   static Future<DeleteResult> deleteMedia(List<MediaRef> items) async {
-    if (items.isEmpty) return const DeleteResult.empty();
+    if (items.isEmpty) return DeleteResult.empty();
 
     final List<MediaRef> resolvable = items
         .where((MediaRef i) => i.isResolvable)
         .toList();
     if (resolvable.isEmpty) {
-      return const DeleteResult(
-        deleted: [],
-        failed: [],
+      return DeleteResult(
+        deleted: <MediaRef>[],
+        failed: <DeleteFailure>[],
         error: 'Não foi possível identificar o arquivo no aparelho.',
       );
     }
@@ -158,7 +215,10 @@ class MediaDeleteService {
             'items': resolvable
                 .map((MediaRef i) => i.toPayload())
                 .toList(growable: false),
-          });
+          })
+          // Sem `onTimeout`: o padrão de Future.timeout lança TimeoutException,
+          // capturada logo abaixo com a mensagem que o usuário entende.
+          .timeout(timeout);
       if (raw == null) {
         return DeleteResult(
           deleted: const [],
@@ -171,6 +231,27 @@ class MediaDeleteService {
         );
       }
       return parseResult(raw, resolvable);
+    } on TimeoutException catch (e) {
+      // Todo item volta como `failed`: sem confirmação do SO, a UI não pode
+      // limpar lista, fila, playlist nem sessão. O usuário recebe o motivo.
+      debugPrint('[MediaDelete] timeout: $e');
+      ErrorLogService.logSync(
+        'media/delete',
+        e,
+        StackTrace.current,
+      );
+      return DeleteResult(
+        deleted: const [],
+        failed: resolvable
+            .map(
+              (MediaRef i) => DeleteFailure(
+                i,
+                'O Android não respondeu a tempo. '
+                'Nada foi excluído — tente novamente.',
+              ),
+            )
+            .toList(),
+      );
     } on PlatformException catch (e, s) {
       debugPrint('[MediaDelete] falha de plataforma: ${e.message}');
       ErrorLogService.logSync('media/delete', e, s);
