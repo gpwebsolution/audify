@@ -1,16 +1,16 @@
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
-import 'package:on_audio_query/on_audio_query.dart';
-
 import '../models/song_model.dart';
+import '../services/album_artwork_cache.dart';
 
 /// Capa de álbum da faixa (MediaStore) com ícone fallback.
 ///
-/// Reutilizada na lista e no player em tela cheia. O on_audio_query lê a
-/// arte embutida no arquivo via MediaMetadataRetriever; o cache interno
-/// dele evita re-leitura a cada rebuild.
-class AlbumArtwork extends StatelessWidget {
+/// Reutilizada na lista e no player em tela cheia. A arte vem por
+/// [AlbumArtworkCache]: o `on_audio_query` não cacheia nada, e o player
+/// reconstrói a cada frame durante a reprodução — sem cache, eram centenas de
+/// leituras nativas de JPEG por segundo.
+class AlbumArtwork extends StatefulWidget {
   final Song song;
   final double size;
   final BorderRadius? borderRadius;
@@ -27,21 +27,35 @@ class AlbumArtwork extends StatelessWidget {
   });
 
   @override
+  State<AlbumArtwork> createState() => _AlbumArtworkState();
+}
+
+class _AlbumArtworkState extends State<AlbumArtwork> {
+  /// Future da capa guardado entre rebuilds (ver [AlbumArtworkCache]).
+  final AlbumArtworkLoader _art = AlbumArtworkLoader();
+
+  @override
+  void didUpdateWidget(covariant AlbumArtwork oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.song.mediaId != widget.song.mediaId) _art.reset();
+  }
+
+  @override
   Widget build(BuildContext context) {
     final ColorScheme colors = Theme.of(context).colorScheme;
-    final int? mediaId = song.mediaId;
-    final Radius radius = Radius.circular(size * 0.12);
+    final int? mediaId = widget.song.mediaId;
+    final Radius radius = Radius.circular(widget.size * 0.12);
 
     final Widget placeholder = Container(
-      width: size,
-      height: size,
+      width: widget.size,
+      height: widget.size,
       decoration: BoxDecoration(
-        color: fallbackColor ?? colors.surfaceContainerHighest,
-        borderRadius: borderRadius ?? BorderRadius.all(radius),
+        color: widget.fallbackColor ?? colors.surfaceContainerHighest,
+        borderRadius: widget.borderRadius ?? BorderRadius.all(radius),
       ),
       child: Icon(
-        fallbackIcon,
-        size: size * 0.4,
+        widget.fallbackIcon,
+        size: widget.size * 0.4,
         color: colors.onSurfaceVariant,
       ),
     );
@@ -49,16 +63,16 @@ class AlbumArtwork extends StatelessWidget {
     if (mediaId == null) return placeholder;
 
     return FutureBuilder<Uint8List?>(
-      future: OnAudioQuery().queryArtwork(mediaId, ArtworkType.AUDIO),
+      future: _art.load(mediaId),
       builder: (context, snapshot) {
         final Uint8List? data = snapshot.data;
         if (data == null || data.isEmpty) return placeholder;
         return ClipRRect(
-          borderRadius: borderRadius ?? BorderRadius.all(radius),
+          borderRadius: widget.borderRadius ?? BorderRadius.all(radius),
           child: Image.memory(
             data,
-            width: size,
-            height: size,
+            width: widget.size,
+            height: widget.size,
             fit: BoxFit.cover,
             gaplessPlayback: true,
           ),
