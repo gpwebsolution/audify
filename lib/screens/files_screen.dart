@@ -10,6 +10,7 @@ import '../models/pdf_file_model.dart';
 import '../models/video_model.dart';
 import '../providers/file_provider.dart';
 import '../services/file_query_service.dart';
+import '../services/text_file_service.dart';
 import '../services/media_share_service.dart';
 import 'apk_manager_screen.dart';
 import 'duplicate_files_screen.dart';
@@ -17,6 +18,7 @@ import 'file_details_screen.dart';
 import 'pdf_viewer_screen.dart';
 import 'photo_viewer_screen.dart';
 import 'storage_analyzer_screen.dart';
+import 'text_editor_screen.dart';
 import 'trash_screen.dart';
 import '../widgets/selection_bar.dart';
 import 'video_player_screen.dart';
@@ -36,6 +38,35 @@ class FilesScreen extends StatefulWidget {
 class _FilesScreenState extends State<FilesScreen> {
   final TextEditingController _searchController = TextEditingController();
   String? _lastShownError;
+
+  /// Quantidade de itens na lixeira, mostrada como badge no menu: é o que
+  /// transforma "Lixeira" em algo que o usuário percebe.
+  int _trashCount = 0;
+  String _trashSizeLabel = '';
+
+  @override
+  void initState() {
+    super.initState();
+    _refreshTrashBadge();
+  }
+
+  /// Recalcula o contador da lixeira.
+  ///
+  /// Roda em background e ignora o resultado se a tela já foi fechada — o
+  /// `FileQueryService` é lento (lê o manifesto e stat de cada arquivo) e
+  /// não pode travar a abertura da aba.
+  Future<void> _refreshTrashBadge() async {
+    final List<TrashEntry> entries = await FileQueryService.listTrash();
+    if (!mounted) return;
+    final int bytes = entries.fold<int>(
+      0,
+      (int sum, TrashEntry e) => sum + e.sizeBytes,
+    );
+    setState(() {
+      _trashCount = entries.length;
+      _trashSizeLabel = bytes > 0 ? formatBytes(bytes) : '';
+    });
+  }
 
   @override
   void dispose() {
@@ -293,18 +324,44 @@ class _FilesScreenState extends State<FilesScreen> {
               ),
             ),
             PopupMenuItem(
-              value: 'shortcuts',
+              value: 'new_file',
               child: ListTile(
-                leading: Icon(Icons.bookmarks_outlined),
-                title: Text('Pastas do sistema'),
+                leading: Icon(Icons.note_add_outlined),
+                title: Text('Novo arquivo de texto'),
+                subtitle: Text('HTML, CSS, JS, JSON, TXT, MD…'),
                 contentPadding: EdgeInsets.zero,
               ),
             ),
             PopupMenuItem(
+              value: 'shortcuts',
+              child: ListTile(
+                leading: Icon(Icons.bookmarks_outlined),
+                title: Text('Atalhos do aparelho'),
+                // "Pastas do sistema" sugeria CRIAÇÃO de pasta do sistema, que
+                // o app não faz (e não pode fazer). É navegação: atalhos para
+                // Download, DCIM, Android/data...
+                subtitle: Text('Ir para Download, DCIM, Música…'),
+                contentPadding: EdgeInsets.zero,
+              ),
+            ),
+            // Lixeira com CONTAGEM: o item era invisível na prática porque
+            // "Lixeira" sozinho não diz se há algo ali — e o usuário não
+            // descobre o que deletou até ir procurar.
+            PopupMenuItem(
               value: 'trash',
               child: ListTile(
-                leading: Icon(Icons.delete_outline),
-                title: Text('Lixeira'),
+                leading: Badge(
+                  isLabelVisible: _trashCount > 0,
+                  label: Text('$_trashCount'),
+                  child: const Icon(Icons.delete_outline),
+                ),
+                title: const Text('Lixeira'),
+                subtitle: Text(
+                  _trashCount == 0
+                      ? 'vazia'
+                      : '$_trashCount ${_trashCount == 1 ? 'item' : 'itens'}'
+                            '${_trashSizeLabel.isEmpty ? '' : ' • $_trashSizeLabel'}',
+                ),
                 contentPadding: EdgeInsets.zero,
               ),
             ),
@@ -621,6 +678,17 @@ class _FilesScreenState extends State<FilesScreen> {
         );
         return;
       default:
+        // Arquivo de texto abre no editor EMBUTIDO, antes de qualquer app
+        // externo: quem cria um index.html no Audify espera editar no Audify,
+        // não ser jogado para um editor de terceiro.
+        if (TextFileService.isTextFile(item.path)) {
+          Navigator.of(context).push(
+            MaterialPageRoute<void>(
+              builder: (_) => TextEditorScreen(path: item.path),
+            ),
+          );
+          return;
+        }
         final bool ok = await FileQueryService.openFile(item.path);
         if (!ok && mounted) {
           ScaffoldMessenger.of(this.context).showSnackBar(
@@ -631,6 +699,44 @@ class _FilesScreenState extends State<FilesScreen> {
         }
     }
   }
+
+  /// Cria um arquivo de texto na pasta atual e abre o editor.
+  Future<void> _createTextFile(FileProvider provider) async {
+    final String? name = await showDialog<String>(
+      context: context,
+      builder: (BuildContext dialogContext) => const _NewFileDialog(),
+    );
+    if (name == null || name.trim().isEmpty || !mounted) return;
+
+    final ScaffoldMessengerState messenger = ScaffoldMessenger.of(context);
+    final Color errorColor = Theme.of(context).colorScheme.error;
+    final TextFileResult result = await TextFileService.create(
+      directory: provider.currentPath,
+      name: name,
+      content: TextFileService.starterContent(
+        TextFileService.extensionOf(name) ?? '',
+      ),
+    );
+    if (!result.success) {
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(result.error ?? 'Não foi possível criar o arquivo.'),
+          backgroundColor: errorColor,
+        ),
+      );
+      return;
+    }
+
+    await provider.load(refresh: true);
+    if (!mounted) return;
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => TextEditorScreen(path: result.path),
+      ),
+    );
+  }
+
+  /// Diálogo de "novo arquivo": nome + extensão, com motivo de recusa.
 
   // =========================================================================
   // AÇÕES
@@ -710,6 +816,8 @@ class _FilesScreenState extends State<FilesScreen> {
     if (confirm != true || !mounted) return;
     final messenger = ScaffoldMessenger.of(context);
     final bool ok = await provider.deleteSelected(useTrash: true);
+    // O contador da lixeira no menu precisa acompanhar a exclusão.
+    await _refreshTrashBadge();
     messenger.showSnackBar(
       SnackBar(
         content: Text(
@@ -811,12 +919,16 @@ class _FilesScreenState extends State<FilesScreen> {
     switch (action) {
       case 'new_folder':
         _showCreateFolderDialog();
+      case 'new_file':
+        _createTextFile(provider);
       case 'shortcuts':
         _showSystemFolders(provider);
       case 'trash':
-        Navigator.of(
-          context,
-        ).push(MaterialPageRoute(builder: (_) => const TrashScreen()));
+        // `.then` para recarregar o badge: restaurar/apagar dentro da lixeira
+        // muda o contador, e voltar sem atualizar mostraria um número velho.
+        Navigator.of(context)
+            .push(MaterialPageRoute<void>(builder: (_) => const TrashScreen()))
+            .then((_) => _refreshTrashBadge());
       case 'analyzer':
         Navigator.of(context).push(
           MaterialPageRoute(builder: (_) => const StorageAnalyzerScreen()),
@@ -1258,6 +1370,119 @@ class _EmptyState extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+/// Diálogo "novo arquivo de texto".
+///
+/// A extensão é escolhida por um seletor em vez de ser digitada: os tipos
+/// aceitos são poucos, e digitar ".htlm" e errar numa lista livre seria
+/// descobrir o problema só ao abrir o arquivo em outro programa.
+class _NewFileDialog extends StatefulWidget {
+  const _NewFileDialog();
+
+  @override
+  State<_NewFileDialog> createState() => _NewFileDialogState();
+}
+
+class _NewFileDialogState extends State<_NewFileDialog> {
+  final TextEditingController _name = TextEditingController();
+  String _extension = 'html';
+  String? _error;
+
+  @override
+  void dispose() {
+    _name.dispose();
+    super.dispose();
+  }
+
+  void _submit() {
+    final String fullName = '${_name.text.trim()}.$_extension';
+    final String? problem = TextFileService.validateName(fullName);
+    if (problem != null) {
+      setState(() => _error = problem);
+      return;
+    }
+    Navigator.pop(context, fullName);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Novo arquivo de texto'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              Expanded(
+                child: TextField(
+                  controller: _name,
+                  autofocus: true,
+                  textCapitalization: TextCapitalization.none,
+                  decoration: const InputDecoration(
+                    labelText: 'Nome',
+                    hintText: 'index',
+                  ),
+                  onChanged: (_) {
+                    if (_error != null) setState(() => _error = null);
+                  },
+                  onSubmitted: (_) => _submit(),
+                ),
+              ),
+              const SizedBox(width: 10),
+              DropdownButton<String>(
+                value: _extension,
+                underline: const SizedBox.shrink(),
+                items: <DropdownMenuItem<String>>[
+                  for (final String ext in TextFileService.textExtensions)
+                    DropdownMenuItem<String>(value: ext, child: Text('.$ext')),
+                ],
+                onChanged: (String? value) {
+                  if (value == null) return;
+                  setState(() {
+                    _extension = value;
+                    _error = null;
+                  });
+                },
+              ),
+            ],
+          ),
+          if (_error != null) ...<Widget>[
+            const SizedBox(height: 10),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                Icon(
+                  Icons.error_outline,
+                  size: 16,
+                  color: Theme.of(context).colorScheme.error,
+                ),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    _error!,
+                    style: TextStyle(
+                      fontSize: 12.5,
+                      color: Theme.of(context).colorScheme.error,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ],
+      ),
+      actions: <Widget>[
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancelar'),
+        ),
+        FilledButton(onPressed: _submit, child: const Text('Criar e editar')),
+      ],
     );
   }
 }

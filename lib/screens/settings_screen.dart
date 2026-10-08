@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 
 import '../providers/settings_provider.dart';
 import '../services/error_log_service.dart';
+import '../screens/trash_screen.dart';
 import '../services/permission_service.dart';
 
 /// Aba de Configurações: tema, reprodução, permissões (com status real),
@@ -27,9 +28,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
   @override
   void initState() {
     super.initState();
-    PackageInfo.fromPlatform().then((info) {
-      if (mounted) setState(() => _version = info.version);
-    }).catchError((Object _) {});
+    PackageInfo.fromPlatform()
+        .then((info) {
+          if (mounted) setState(() => _version = info.version);
+        })
+        .catchError((Object _) {});
   }
 
   @override
@@ -74,6 +77,32 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
           value: settings.resumePlayback,
           onChanged: settings.setResumePlayback,
+        ),
+
+        // ---- Lixeira ----
+        const _SectionHeader(title: 'Lixeira'),
+        ListTile(
+          leading: const Icon(Icons.auto_delete_outlined),
+          title: const Text('Prazo de exclusão'),
+          subtitle: Text(
+            'Itens excluídos ficam na lixeira por '
+            '${settings.trashRetentionLabel.toLowerCase()}.'
+            '\nDepois disso são apagados sozinhos, sem aviso —'
+            ' o resto fica disponível em Arquivos → Mais opções → Lixeira.',
+          ),
+          trailing: const Icon(Icons.chevron_right),
+          onTap: () => _pickTrashRetention(context, settings),
+        ),
+        ListTile(
+          leading: const Icon(Icons.delete_outline),
+          title: const Text('Ver lixeira'),
+          subtitle: const Text('Restaurar ou apagar definitivamente'),
+          trailing: const Icon(Icons.chevron_right),
+          onTap: () => Navigator.of(context)
+              .push(
+                MaterialPageRoute<void>(builder: (_) => const TrashScreen()),
+              )
+              .then((_) => setState(() {})),
         ),
 
         // ---- Permissões (status real do sistema) ----
@@ -182,6 +211,54 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   /// Dialog com o conteúdo do log de erros local (crash_log.txt).
   /// 100% offline — útil para diagnosticar um crash que aconteceu antes.
+  /// Escolhe o prazo da lixeira.
+  ///
+  /// Diálogo com opções discretas em vez de slider: os valores são poucos
+  /// (1, 7, 15, 30, 90 dias ou para sempre) e um controle contínuo faria o
+  /// usuário acreditar numa precisão que não existe.
+  Future<void> _pickTrashRetention(
+    BuildContext context,
+    SettingsProvider settings,
+  ) async {
+    await showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (BuildContext sheetContext) => SafeArea(
+        child: ListView(
+          shrinkWrap: true,
+          children: <Widget>[
+            for (final int days in SettingsProvider.trashRetentionOptions)
+              RadioListTile<int>(
+                value: days,
+                // ignore: deprecated_member_use
+                groupValue: settings.trashRetentionDays,
+                title: Text(
+                  days == 0
+                      ? 'Para sempre'
+                      : days == 1
+                      ? '1 dia'
+                      : '$days dias',
+                ),
+                subtitle: Text(
+                  days == 0
+                      ? 'Nada é apagado sozinho; você esvazia manualmente.'
+                      : 'O que for excluído hoje será apagado em $days '
+                            '${days == 1 ? 'dia' : 'dias'}.',
+                ),
+                // ignore: deprecated_member_use
+                onChanged: (int? value) async {
+                  if (value == null) return;
+                  await settings.setTrashRetentionDays(value);
+                  if (sheetContext.mounted) Navigator.pop(sheetContext);
+                  if (context.mounted) setState(() {});
+                },
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Future<void> _showErrorLog() async {
     final String? content = await ErrorLogService.read();
     if (!mounted) return;
@@ -298,10 +375,10 @@ class _SectionHeader extends StatelessWidget {
             child: Text(
               title.toUpperCase(),
               style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                    color: Theme.of(context).colorScheme.primary,
-                    fontWeight: FontWeight.bold,
-                    letterSpacing: 0.8,
-                  ),
+                color: Theme.of(context).colorScheme.primary,
+                fontWeight: FontWeight.bold,
+                letterSpacing: 0.8,
+              ),
             ),
           ),
           ?trailing,

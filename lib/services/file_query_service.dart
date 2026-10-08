@@ -377,6 +377,43 @@ class FileQueryService {
     }
   }
 
+  /// Apaga da lixeira o que já passou do prazo.
+  ///
+  /// A lixeira vivia sem política nenhuma: `deletedAtMs` era gravado no
+  /// manifesto e nunca lido, então os arquivos ficavam lá para sempre e o
+  /// espaço nunca era devolvido. É o pior dos dois mundos — o usuário não
+  /// sabe que a lixeira está ocupando GB, e não consegue liberar sem ir item
+  /// por item.
+  ///
+  /// Devolve quantos itens foram expurgados (para a UI avisar).
+  static Future<int> purgeExpired(int retentionDays) async {
+    if (retentionDays <= 0) return 0; // 0 = manter para sempre
+    final List<TrashEntry> all = await listTrash();
+    final DateTime cutoff = DateTime.now().subtract(
+      Duration(days: retentionDays),
+    );
+    int purged = 0;
+    for (final TrashEntry entry in all) {
+      if (DateTime.fromMillisecondsSinceEpoch(
+        entry.deletedAtMs,
+      ).isAfter(cutoff)) {
+        continue;
+      }
+      if (await deleteForever(entry.trashPath)) purged++;
+    }
+    return purged;
+  }
+
+  /// Espaço ocupado pela lixeira agora, em bytes.
+  ///
+  /// A lixeira é invisível no gerenciador de arquivos do sistema (fica no
+  /// diretório de suporte do app), então sem isto o usuário não tem como
+  /// saber que ela está ocupando espaço.
+  static Future<int> trashSize() async {
+    final List<TrashEntry> entries = await listTrash();
+    return entries.fold<int>(0, (int sum, TrashEntry e) => sum + e.sizeBytes);
+  }
+
   static Future<void> emptyTrash() async {
     try {
       final Directory trashRoot = await _trashDir();
@@ -713,6 +750,49 @@ class TrashEntry {
     return '${dt.day.toString().padLeft(2, '0')}/'
         '${dt.month.toString().padLeft(2, '0')}/${dt.year}';
   }
+
+  /// "3 dias" / "hoje" — usado na lista e na confirmação.
+  String get ageLabel {
+    final Duration age = DateTime.now().difference(
+      DateTime.fromMillisecondsSinceEpoch(deletedAtMs),
+    );
+    if (age.inMinutes < 1) return 'agora';
+    if (age.inHours < 1) return 'há ${age.inMinutes} min';
+    if (age.inDays < 1) return 'há ${age.inHours} h';
+    if (age.inDays == 1) return 'há 1 dia';
+    return 'há ${age.inDays} dias';
+  }
+
+  /// Quando este item será expurgado, dado o prazo em dias.
+  ///
+  /// `retentionDays <= 0` significa "manter para sempre" e devolve null — a UI
+  /// então mostra "pra sempre", que é informação útil por si só.
+  DateTime? expiryWith(int retentionDays) {
+    if (retentionDays <= 0) return null;
+    return DateTime.fromMillisecondsSinceEpoch(
+      deletedAtMs,
+    ).add(Duration(days: retentionDays));
+  }
+
+  /// "expira em 5 dias" / "expira hoje" / "pra sempre".
+  String expiryLabel(int retentionDays) {
+    final DateTime? expiry = expiryWith(retentionDays);
+    if (expiry == null) return 'fica na lixeira até você apagar';
+    final int days = expiry.difference(DateTime.now()).inDays;
+    if (days <= 0) return 'expira hoje';
+    if (days == 1) return 'expira amanhã';
+    return 'expira em $days dias';
+  }
+
+  /// Verdadeiro quando o prazo já passou — o expurgo remove.
+  bool isExpired(int retentionDays) {
+    if (retentionDays <= 0) return false;
+    return DateTime.fromMillisecondsSinceEpoch(
+      deletedAtMs,
+    ).isBefore(DateTime.now().subtract(Duration(days: retentionDays)));
+  }
+
+  String get displaySize => formatBytes(sizeBytes);
 }
 
 // =============================================================================

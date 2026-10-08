@@ -468,11 +468,90 @@ porque a miniatura 16:9 encolhe e o texto precisava de mais altura.
 
 ---
 
+## 8. Lixeira com prazo, seleção múltipla e criação de arquivos de texto
+
+### Lixeira: onde ela estava escondida
+
+A lixeira vivia num item de menu escrito só "Lixeira", sem nenhuma pista de
+que havia algo ali. O usuário excluía um arquivo e não tinha como descobrir
+onde ele tinha ido sem procurar no menu.
+
+- **Badge com a contagem** no item do menu, mais o tamanho ocupado. A lixeira
+  fica no diretório de suporte do app — **invisível ao gerenciador de arquivos
+  do sistema** — então sem esse número o usuário não tem como saber que ela
+  está ocupando espaço.
+- **Entrada direta em Configurações** ("Ver lixeira"), ao lado do ajuste de
+  prazo.
+- O badge é recalculado ao excluir em lote e ao voltar da lixeira (restaurar ou
+  apagar lá dentro muda o número).
+
+### Lixeira: prazo de exclusão
+
+A lixeira **não tinha política nenhuma**. `deletedAtMs` era gravado no manifesto
+e nunca lido: os arquivos ficavam lá para sempre e o espaço nunca era
+devolvido. Pior dos dois mundos — o usuário não sabe que a lixeira ocupa GB e
+não consegue liberar sem ir item por item.
+
+Agora há um prazo ajustável em **Configurações → Lixeira → Prazo de
+exclusão**: para sempre, 1, 7, 15, 30 ou 90 dias (padrão: 30). O expurgo roda
+**ao abrir a lixeira**, antes da lista ser desenhada, e o app avisa quantos
+itens foram recolhidos.
+
+Cada item mostra **quando expira** ("expira em 5 dias", "expira amanhã",
+"fica na lixeira até você apagar"), e o cabeçalho resume o total e o prazo.
+
+### Lixeira: seleção múltipla
+
+Só havia um `PopupMenuButton` por item — restaurar ou apagar uma lixeira com 50
+entradas significava 50 operações, com risco de esquecer alguma.
+
+Long-press marca, e a barra de lote restaura ou apaga **vários de uma vez**:
+selecionar tudo, inverter seleção, restaurar selecionados, excluir
+definitivamente. Restaurar é feito **um a um** de propósito: o destino pode ter
+sido ocupado por outro arquivo, e só aquele item falha — a SnackBar informa
+quantos voltaram e quantos falharam, em vez de engolir.
+
+Sair do modo de seleção pelo botão voltar não fecha a tela.
+
+### "Pastas do sistema" → "Atalhos do aparelho"
+
+O menu dizia "Pastas do sistema", que sugere **criar** pasta de sistema — que o
+app não faz e não pode fazer. O que existia era uma lista de **atalhos de
+navegação** (Download, DCIM, Android/data, Música...). Renomeado para "Atalhos
+do aparelho" com a descrição "Ir para Download, DCIM, Música…".
+
+### Criar e editar arquivos de texto (a lacuna real)
+
+Falta era esse: o app só tinha "Nova pasta". Para criar um `index.html` era
+preciso sair do app, abrir o Bloco de Notas do sistema e voltar — e o arquivo
+só aparecia na lista depois de um "Atualizar" manual.
+
+- **Novo arquivo de texto** no menu: escolhe a extensão (HTML, CSS, JS, JSON,
+  MD, XML, TXT, LOG, CSV, YAML, INI, CONF) e o nome. O arquivo nasce com um
+  **esqueleto utilizável** — um `index.html` em branco não serve para nada.
+- **Editor embutido** para arquivo de texto: fonte monoespaçada, salvar pelo
+  botão ou Ctrl+S, contador de linhas/caracteres, e aviso antes de sair com
+  alteração não salva.
+- **JSON é validado ao salvar**: com erro de sintaxe o app avisa e **não
+  grava** — evita o arquivo quebrado que só falharia em outro programa.
+- Tocar num `.html`/`.css`/`.json` abre o editor do Audify, em vez de chutar
+  para um app de terceiros.
+
+O editor tem **limite de 2 MB**: acima disso a tela viraria uma parede de
+texto, e o usuário quase sempre quis outra coisa.
+
+Dois detalhes que evitam desastre:
+- lista **fechada** de extensões de texto — abrir um `.mp4`/`.apk`/banco no
+  editor mostraria lixo e, ao salvar, **corruptiria o arquivo**;
+- criar arquivo **nunca sobrescreve**: nome repetido vira "nome (1).ext".
+
+---
+
 ## Como validar (APK de release)
 
 ```bash
 flutter analyze        # 0 issues
-flutter test           # 185 testes passando
+flutter test           # 209 testes passando
 flutter build apk --release
 adb install -r build/app/outputs/flutter-apk/app-release.apk
 ```

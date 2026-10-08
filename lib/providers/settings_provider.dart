@@ -10,6 +10,20 @@ class SettingsProvider extends ChangeNotifier {
   static const String _resumeKey = 'resume_playback';
   static const String _galleryColumnsKey = 'gallery_columns';
   static const String _videoColumnsKey = 'video_columns';
+  static const String _trashDaysKey = 'trash_retention_days';
+
+  /// Opções de prazo da lixeira, em dias. `0` = manter para sempre.
+  static const List<int> trashRetentionOptions = <int>[
+    0, // para sempre
+    1,
+    7,
+    15,
+    30,
+    90,
+  ];
+
+  /// Prazo padrão: 30 dias é o padrão de mercado (Google Fotos, Drive).
+  static const int defaultTrashRetentionDays = 30;
 
   /// Limite de colunas escolhido pelo usuário (zoom da grade).
   ///
@@ -29,6 +43,7 @@ class SettingsProvider extends ChangeNotifier {
   bool _resumePlayback = true;
   int _galleryColumns = 3;
   int _videoColumns = 2;
+  int _trashRetentionDays = defaultTrashRetentionDays;
   bool _isDisposed = false;
 
   ThemeMode get themeMode => _themeMode;
@@ -39,6 +54,15 @@ class SettingsProvider extends ChangeNotifier {
 
   /// Colunas desejadas em Vídeos (zoom do usuário).
   int get videoColumns => _videoColumns;
+
+  /// Quantos dias um item fica na lixeira antes de ser apagado.
+  ///
+  /// `0` significa "até o usuário apagar" — sem expurgo automático.
+  int get trashRetentionDays => _trashRetentionDays;
+
+  /// Rótulo curto do prazo, para a UI.
+  String get trashRetentionLabel =>
+      _trashRetentionDays == 0 ? 'Para sempre' : '$_trashRetentionDays dias';
 
   /// Colunas EFETIVAS para uma largura de tela.
   ///
@@ -61,6 +85,21 @@ class SettingsProvider extends ChangeNotifier {
       _setColumns(value, _videoColumns, _videoColumnsKey, (int v) {
         _videoColumns = v;
       });
+
+  /// Define o prazo da lixeira. Usa a MESMA tela de expurgo automático para
+  /// qualquer valor, então trocar o prazo nunca deixa lixo antigo paradoxicalo.
+  Future<void> setTrashRetentionDays(int days) async {
+    if (!trashRetentionOptions.contains(days)) return;
+    if (_trashRetentionDays == days) return;
+    _trashRetentionDays = days;
+    _notify();
+    try {
+      final SharedPreferences prefs = await SharedPreferences.getInstance();
+      await prefs.setInt(_trashDaysKey, days);
+    } catch (e) {
+      // Falha de escrita não quebra a sessão atual.
+    }
+  }
 
   Future<void> _setColumns(
     int value,
