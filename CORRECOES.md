@@ -323,13 +323,63 @@ importante: **um item que o nativo não confirmou vira falha, nunca sucesso**;
 `test/playback_queue_test.dart` ganhou 10 casos de remoção de faixa da fila;
 `test/session_repository_test.dart` ganhou o caso de limpeza da sessão.
 
+### Endurecimento (2ª rodada)
+
+Sete ajustes de robustez sobre o mesmo caminho de exclusão:
+
+1. **Resposta exatamente uma vez.** `finishDelete` agora reserva o direito de
+   responder (`AtomicBoolean.compareAndSet`) antes de qualquer outro efeito.
+   Responder duas vezes fazia o Flutter lançar `reply already submitted` e
+   derrubar o isolate do canal.
+2. **O `Result` nunca fica sem resposta.** Todo o trabalho em background de
+   `deleteBatch` passou a `try/catch/finally`: uma exceção em qualquer etapa
+   deixava o Future do Dart pendurado para sempre (a tela parecia travada). No
+   `catch`, só os itens **sem** desfecho viram `failed` — quem já foi
+   confirmado como removido continua `deleted`, porque sobrescrever seria
+   mentir sobre um arquivo que saiu do aparelho. O `finally` libera a reserva,
+   de forma condicional: com um diálogo do SO em tela a reserva **precisa**
+   continuar, senão um segundo pedido abriria outro diálogo por cima.
+3. **URI validada antes do `createDeleteRequest`.** O SO só aceita
+   `content://media/...`; uma URI `file://` ou de outra authority fazia o SO
+   recusar o pedido **inteiro**, derrubando os itens válidos do mesmo lote.
+   Agora cada URI é conferida e, se inválida, reconstruída pelo `id`+tipo ou
+   pelo caminho em `MediaStore.Files`; só sem nenhuma das três o item cai para
+   exclusão direta no disco — nunca reprovado junto com o lote.
+4. **Timeout de 90 s no Dart** (`MediaDeleteService.timeout`). A exclusão passa
+   por um diálogo do sistema e é assíncrona; se o nativo travar, o Future
+   ficava pendurado. No timeout volta `failed` com motivo claro, e como nada
+   foi confirmado **nenhuma lista é alterada**.
+5. **Só `deleted` limpa estado.** `cancelled`, `failed` e `permissionRequired`
+   nunca limpam lista, fila, playlist, sessão nem cache — nesses casos o
+   arquivo continua no aparelho e limpar viraria item fantasma. `notFound`
+   também não limpa sozinho: precisa passar por `DeleteResult.confirmAbsent`,
+   que revalida contra o disco. O teste é unilateral de propósito —
+   `existsSync() == true` é prova de que o arquivo existe, enquanto `false`
+   pode ser só falta de permissão de leitura, e aí a confiança é do nativo (que
+   consultou o MediaStore).
+6. **Player liberado antes de excluir.** Com o handle de áudio ou o decoder de
+   vídeo abertos, a remoção falha **sem erro visível** — o diálogo aparece, o
+   arquivo sobrevive. Música agora para antes de pedir a exclusão e retoma se o
+   usuário desistir; vídeo descarta o `VideoPlayerController` depois do
+   "Excluir" e antes da chamada nativa (antes rodava antes do diálogo e
+   congelava a imagem enquanto o usuário decidia).
+7. **`MediaActions.onBeforeDelete`** — gancho único para o item 6, para a tela
+   não precisar orchestrar a liberação do player por fora.
+
+**Testes desta rodada** — `test/media_delete_channel_test.dart` (novo, 14 casos)
+exercita o canal com um MethodChannel falso, o que é bem mais perto do defeito
+real do que testar só `parseResult`: `deleted`, `failed`, `cancelled`,
+`permissionRequired`, `notFound` (inclusive com um arquivo **real** em disco que
+continua existindo, provando o veto), timeout com um handler que nunca responde,
+resposta `null` do SO e `PlatformException`.
+
 ---
 
 ## Como validar (APK de release)
 
 ```bash
 flutter analyze        # 0 issues
-flutter test           # 107 testes passando
+flutter test           # 169 testes passando
 flutter build apk --release
 adb install -r build/app/outputs/flutter-apk/app-release.apk
 ```
