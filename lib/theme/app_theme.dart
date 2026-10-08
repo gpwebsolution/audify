@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../utils/motion.dart';
+
 /// Tema centralizado do app.
 ///
 /// Responsabilidade: TODA a configuração visual vive aqui. Nenhum widget
@@ -27,6 +29,17 @@ class AppTheme {
       useMaterial3: true,
       colorScheme: colorScheme,
       scaffoldBackgroundColor: colorScheme.surface,
+      // Transição de página padronizada (fade + deslocamento curto) para que
+      // navegar entre abas e telas não dê um corte seco.
+      pageTransitionsTheme: const PageTransitionsTheme(
+        builders: <TargetPlatform, PageTransitionsBuilder>{
+          TargetPlatform.android: Motion.pageTransition,
+          TargetPlatform.iOS: Motion.pageTransition,
+          TargetPlatform.macOS: Motion.pageTransition,
+          TargetPlatform.windows: Motion.pageTransition,
+          TargetPlatform.linux: Motion.pageTransition,
+        },
+      ),
       appBarTheme: AppBarTheme(
         backgroundColor: colorScheme.surface,
         foregroundColor: colorScheme.onSurface,
@@ -39,6 +52,8 @@ class AppTheme {
         thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 8),
         overlayShape: const RoundSliderOverlayShape(overlayRadius: 16),
       ),
+      // Feedback de toque e seleção com a mesma cadência do resto do app.
+      splashFactory: InkSparkle.splashFactory,
     );
   }
 }
