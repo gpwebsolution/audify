@@ -213,7 +213,7 @@ void main() {
 
   group('DeleteResult.message', () {
     test('erro de plataforma tem prioridade sobre tudo', () {
-      const DeleteResult result = DeleteResult(
+      DeleteResult result = DeleteResult(
         deleted: <MediaRef>[],
         failed: <DeleteFailure>[],
         error: 'Falha inesperada',
@@ -295,10 +295,14 @@ void main() {
 
       expect(result.failed, isEmpty);
       expect(result.notFound.single.key, 'audio:7');
-      // Não conta como "excluído", mas some do aparelho.
+      // Não conta como "excluído"...
       expect(result.deleted, isEmpty);
+      // ...e ainda NÃO limpa o estado: notFound só vale depois de
+      // reconfirmado contra o disco (ver o grupo de confirmAbsent).
+      expect(result.removed, isEmpty);
+
+      result.confirmAbsent(result.notFound);
       expect(result.removed.single.key, 'audio:7');
-      expect(result.message, 'Arquivo excluído.');
     });
 
     test('payload antigo sem o campo notFound continua sendo lido', () {
@@ -331,6 +335,11 @@ void main() {
       expect(result.notFound.length, 1);
       expect(result.failed.length, 1);
       expect(result.failed.single.reason, 'Arquivo protegido.');
+      // Antes de reconfirmar, só o `deleted` conta.
+      expect(result.message, '1 excluído, 1 não pôde ser excluído.');
+
+      result.confirmAbsent(result.notFound);
+      expect(result.removed.length, 2);
       expect(result.message, '2 excluídos, 1 sem sucesso.');
       // Cancelou nada, mas houve falha: não é completo.
       expect(result.isComplete, isFalse);
