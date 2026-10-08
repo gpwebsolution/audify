@@ -12,7 +12,16 @@ enum FileViewMode { list, grid }
 
 enum FileSortBy { name, dateModified, size, type }
 
-enum FileFilterType { all, images, videos, audio, documents, apk, archives, other }
+enum FileFilterType {
+  all,
+  images,
+  videos,
+  audio,
+  documents,
+  apk,
+  archives,
+  other,
+}
 
 /// Estado da aba "Arquivos": navegação real pelo sistema de arquivos,
 /// seleção múltipla, busca com escopo e operações em lote.
@@ -239,7 +248,9 @@ class FileProvider extends ChangeNotifier {
   // =========================================================================
 
   Future<void> navigateTo(String path) async {
-    path = path.endsWith('/') && path != '/' ? path.substring(0, path.length - 1) : path;
+    path = path.endsWith('/') && path != '/'
+        ? path.substring(0, path.length - 1)
+        : path;
     if (path == _currentPath) {
       await load(refresh: true);
       return;
@@ -374,6 +385,31 @@ class FileProvider extends ChangeNotifier {
     _notify();
   }
 
+  /// Marca/desmarca tudo o que está visível num toque só.
+  ///
+  /// [selectAllVisible] só somava: um segundo toque não fazia nada, enquanto o
+  /// botão dizia "Selecionar tudo" — o usuário não conseguia desmarcar sem
+  /// limpar item por item.
+  void toggleSelectAllVisible() {
+    final List<FileItem> visible = visibleItems;
+    if (visible.isEmpty) return;
+    final bool allSelected = visible.every(
+      (FileItem item) => _selectedPaths.contains(item.path),
+    );
+    if (allSelected) {
+      for (final FileItem item in visible) {
+        _selectedPaths.remove(item.path);
+      }
+      if (_selectedPaths.isEmpty) _isSelectionMode = false;
+    } else {
+      for (final FileItem item in visible) {
+        _selectedPaths.add(item.path);
+      }
+      _isSelectionMode = true;
+    }
+    _notify();
+  }
+
   void clearSelection() {
     _selectedPaths.clear();
     _isSelectionMode = false;
@@ -389,8 +425,9 @@ class FileProvider extends ChangeNotifier {
 
   Future<bool> createDirectory(String name) async {
     if (name.trim().isEmpty) return false;
-    final bool ok =
-        await FileQueryService.createDirectory('$_currentPath/$name');
+    final bool ok = await FileQueryService.createDirectory(
+      '$_currentPath/$name',
+    );
     if (ok) await load(refresh: true);
     return ok;
   }
@@ -409,7 +446,10 @@ class FileProvider extends ChangeNotifier {
 
     bool allOk = true;
     for (final String path in targets) {
-      final bool ok = await FileQueryService.delete(path: path, useTrash: useTrash);
+      final bool ok = await FileQueryService.delete(
+        path: path,
+        useTrash: useTrash,
+      );
       if (!ok) allOk = false;
     }
     _selectedPaths.clear();
@@ -419,7 +459,10 @@ class FileProvider extends ChangeNotifier {
   }
 
   Future<bool> deleteSingle(String path, {bool useTrash = true}) async {
-    final bool ok = await FileQueryService.delete(path: path, useTrash: useTrash);
+    final bool ok = await FileQueryService.delete(
+      path: path,
+      useTrash: useTrash,
+    );
     await load(refresh: true);
     return ok;
   }
@@ -464,7 +507,8 @@ class FileProvider extends ChangeNotifier {
     if (_selectedPaths.isEmpty) return false;
     final bool ok = await FileQueryService.createZip(
       sourcePaths: _selectedPaths.toList(),
-      zipPath: '$_currentPath/'
+      zipPath:
+          '$_currentPath/'
           '${zipName.endsWith('.zip') ? zipName : '$zipName.zip'}',
     );
     if (ok) {
@@ -513,11 +557,10 @@ class FileProvider extends ChangeNotifier {
   Future<List<DuplicateGroup>> findDuplicates({
     String? rootPath,
     int minSize = 1024,
-  }) =>
-      FileQueryService.findDuplicates(
-        rootPath: rootPath ?? FileProvider.rootPath,
-        minSize: minSize,
-      );
+  }) => FileQueryService.findDuplicates(
+    rootPath: rootPath ?? FileProvider.rootPath,
+    minSize: minSize,
+  );
 
   Future<bool> requestAllFilesAccess() async {
     final bool granted = await PermissionService.requestAllFilesAccess();
