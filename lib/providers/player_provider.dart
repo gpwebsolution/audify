@@ -20,9 +20,11 @@ enum AudioPermissionState { unknown, granted, denied, permanentlyDenied }
 /// assets) e a fila de reprodução, expondo à UI um único modelo consumível
 /// via `context.watch<PlayerProvider>()`.
 ///
-/// Fila: a lista "visível" (após busca) é a fila de reprodução. Tocar uma
-/// faixa monta a ordem — sequencial ou embaralhada (shuffle) — e próximo/
-/// anterior navegam nela, com avanço automático no fim da faixa.
+/// Fila: a lista "visível" (após busca) é o que a UI mostra — NÃO é a
+/// fila de reprodução. A fila ativa só muda quando o usuário toca uma
+/// faixa/grupo ([playVisibleAt]/[playQueue]): digitar na busca não
+/// reordena nem encolhe a fila em uso (a reprodução continua na mesma
+/// ordem, com as mesmas próximas faixas).
 class PlayerProvider extends ChangeNotifier {
   final AudioService _audioService;
   final SettingsProvider? settings;
@@ -161,7 +163,12 @@ class PlayerProvider extends ChangeNotifier {
     }
   }
 
-  /// Atualiza o termo de busca e reaplica o filtro na lista/fila.
+  /// Atualiza o termo de busca e reaplica o filtro na lista exibida.
+  ///
+  /// Apenas a LISTA VISÍVEL é filtrada — a fila de reprodução
+  /// ativa não é tocada aqui (ver [playVisibleAt]): digitar na
+  /// busca não pode reordenar nem encolher a fila que está
+  /// tocando.
   void setSearchQuery(String query) {
     _searchQuery = query.trim();
     _applySearchFilter();
@@ -177,7 +184,6 @@ class PlayerProvider extends ChangeNotifier {
             final inAlbum = (s.album ?? '').toLowerCase().contains(q);
             return inTitle || inArtist || inAlbum;
           }).toList();
-    _rebuildQueue();
   }
 
   /// Reconstrói a fila de reprodução na ordem atual (respeita shuffle).
@@ -186,6 +192,11 @@ class PlayerProvider extends ChangeNotifier {
   }
 
   /// Toca a faixa da lista visível pelo índice da UI.
+  ///
+  /// AQUI a fila muda (ação do usuário): reconstrói a fila a
+  /// partir da lista visível atual (respeita shuffle) e
+  /// seleciona a faixa tocada. Buscar NÃO faz isso — só
+  /// tocar uma faixa monta/atualiza a fila.
   Future<void> playVisibleAt(int index) async {
     if (index < 0 || index >= _visibleSongs.length) return;
     _rebuildQueue();
@@ -407,21 +418,15 @@ class PlayerProvider extends ChangeNotifier {
     final Song? playing = _currentSong;
     final bool removedCurrent = playing != null && ids.contains(playing.id);
 
-    // Sucessor escolhido ANTES de remover, para não depender do índice
-    // antigo nem da lista já filtrada.
-    final List<Song> survivors = _playbackQueue.queue
-        .where((Song s) => !ids.contains(s.id))
-        .toList();
-    Song? successor;
-    if (removedCurrent && survivors.isNotEmpty) {
-      final int current = _playbackQueue.queueIndex;
-      successor = current < 0 || _playbackQueue.shuffle
-          ? survivors.first
-          : survivors[current.clamp(0, survivors.length - 1)];
-    }
-
     _songs = _songs.where((Song s) => !ids.contains(s.id)).toList();
-    _applySearchFilter(); // refiltra e reconstrói a fila (notify incluso)
+    // Só refiltra a lista visível — a fila ativa é ajustada
+    // abaixo via removeSongs (preserva filas vindas de
+    // playlist, não só da lista visível).
+    _applySearchFilter();
+
+    // Remove da fila ativa (ordem preservada; reencaixa o
+    // índice corrente na próxima sobrevivente).
+    _playbackQueue.removeSongs(ids);
 
     if (removedCurrent) {
       // A sessão salva aponta para um arquivo morto: some com ela. Só quando
@@ -437,15 +442,16 @@ class PlayerProvider extends ChangeNotifier {
       _lastSessionSave = DateTime.fromMillisecondsSinceEpoch(0);
       _notify();
 
-      final int nextIndex = successor == null
-          ? -1
-          : _visibleSongs.indexWhere((Song s) => s.id == successor!.id);
-      if (nextIndex >= 0) await playVisibleAt(nextIndex);
+      // Segue para a próxima sobrevivente na fila (já reencaixada
+      // pelo removeSongs), se ainda houver o que tocar.
+      if (_playbackQueue.current != null) {
+        await _playCurrent();
+      }
       return;
     }
 
-    // A faixa que tocava sobreviveu: a fila já foi reencaixada, mas o
-    // objeto corrente precisa voltar a ser o da lista nova.
+    // A faixa que tocava sobreviveu: o objeto corrente precisa
+    // voltar a ser o do catálogo novo.
     if (playing != null) {
       final int idx = _songs.indexWhere((Song s) => s.id == playing.id);
       if (idx >= 0) _currentSong = _songs[idx];
