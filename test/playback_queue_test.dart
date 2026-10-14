@@ -106,8 +106,9 @@ void main() {
       queue.setQueue(_threeSongs(), 0);
       queue.toggleShuffle();
       expect(queue.shuffle, isTrue);
-      // A faixa atual continua na fila (possivelmente em outra posição).
+      // A faixa atual continua na fila (no início da embaralhada).
       expect(queue.current, _song(1));
+      expect(queue.queueIndex, 0);
     });
 
     test('desativar shuffle restaura a ordem original', () {
@@ -116,12 +117,82 @@ void main() {
       queue.setQueue(original, 0);
       queue.toggleShuffle();
       final List<Song> shuffled = List.of(queue.queue);
-      expect(shuffled, isNot(equals(original)));
+      // É uma permutação da original (mesmas faixas).
+      expect(shuffled.length, original.length);
+      for (final Song s in original) {
+        expect(shuffled.contains(s), isTrue);
+      }
 
       queue.toggleShuffle();
       expect(queue.shuffle, isFalse);
       expect(queue.queue, original);
       expect(queue.current, _song(1));
+    });
+
+    test('shuffle: percorre TODAS as faixas antes de repetir '
+        '(repeat off)', () {
+      final PlaybackQueue queue = PlaybackQueue(random: Random(42));
+      final List<Song> songs = List.generate(10, _song);
+      queue.setQueue(songs, 0);
+      queue.toggleShuffle();
+
+      final List<Song> visited = <Song>[queue.current!];
+      int? next = queue.nextIndex();
+      while (next != null) {
+        queue.setIndex(next);
+        visited.add(queue.current!);
+        next = queue.nextIndex();
+      }
+
+      // Termina com repeat off...
+      expect(next, isNull);
+      // ...após tocar cada faixa EXATAMENTE uma vez:
+      // sem repetição consecutiva nem faixa pulada.
+      expect(visited.length, songs.length);
+      expect(visited.toSet().length, songs.length);
+      // A faixa que tocava permanece no início da ordem.
+      expect(visited.first, songs.first);
+    });
+
+    test('shuffle: próxima nunca repete a faixa consecutiva '
+        '(repeat all)', () {
+      final PlaybackQueue queue = PlaybackQueue(random: Random(123));
+      final List<Song> songs = List.generate(8, _song);
+      queue.setQueue(songs, 0);
+      queue.toggleShuffle();
+      queue.cycleRepeat(); // off -> all (wrap no fim)
+
+      Song? previous;
+      final Set<String> seenInCycle = <String>{};
+      // Um ciclo completo = uma passada por todas as faixas.
+      for (int step = 0; step < songs.length; step++) {
+        final int? next = queue.nextIndex();
+        expect(next, isNotNull);
+        queue.setIndex(next!);
+        final Song current = queue.current!;
+        expect(current.id, isNot(equals(previous?.id)));
+        seenInCycle.add(current.id);
+        previous = current;
+      }
+      // O ciclo cobriu a fila inteira sem pular ninguém.
+      expect(seenInCycle.length, songs.length);
+    });
+
+    test('shuffle: anterior volta na mesma ordem embaralhada', () {
+      final PlaybackQueue queue = PlaybackQueue(random: Random(42));
+      final List<Song> songs = List.generate(6, _song);
+      queue.setQueue(songs, 0);
+      queue.toggleShuffle();
+
+      final List<Song> order = List.of(queue.queue);
+      // Do fim até o início: "anterior" desfaz exatamente
+      // a ordem que "próxima" faria.
+      queue.setIndex(order.length - 1);
+      for (int i = order.length - 2; i >= 0; i--) {
+        expect(queue.previousIndex(), i);
+        queue.setIndex(i);
+      }
+      expect(queue.current, order.first);
     });
 
     test('rebuild reencaixa keepCurrent na nova fila', () {
@@ -130,6 +201,19 @@ void main() {
       queue.rebuild([_song(4), _song(1), _song(2)], keepCurrent: _song(2));
       expect(queue.current, _song(2));
       expect(queue.queueIndex, 2);
+    });
+
+    test('rebuild com shuffle coloca a faixa atual no início', () {
+      final PlaybackQueue queue = PlaybackQueue(random: Random(5));
+      queue.setQueue(_threeSongs(), 1);
+      queue.toggleShuffle(); // atual = faixa 2 no início
+
+      queue.rebuild([_song(4), _song(1), _song(2)], keepCurrent: _song(2));
+
+      expect(queue.queueIndex, 0);
+      expect(queue.current, _song(2));
+      // As demais vêm atrás, todas presentes.
+      expect(queue.queue.length, 3);
     });
 
     test('rebuild sem keepCurrent mantém índice anterior', () {

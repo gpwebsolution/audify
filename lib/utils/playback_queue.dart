@@ -46,18 +46,53 @@ class PlaybackQueue {
 
   /// Reconstrói a fila a partir da lista visível (respeita shuffle) e
   /// reencaixa a faixa [keepCurrent] na nova posição, se existir.
+  ///
+  /// Com shuffle ATIVO, a ordem é embaralhada UMA vez
+  /// (Fisher-Yates) com a faixa atual no início. A navegação
+  /// (próxima/anterior) é sempre LINEAR na ordem da fila —
+  /// assim o shuffle percorre toda a lista sem repetir faixa
+  /// antes do ciclo acabar, termina com repeat off e "anterior"
+  /// volta na mesma ordem embaralhada.
   void rebuild(List<Song> visibleSongs, {Song? keepCurrent}) {
     if (_shuffle) {
-      // Mantém a "ordem original" sincronizada com a lista visível para
-      // que desativar o shuffle restaure a ordem certa (ex.: após busca).
+      // Mantém a "ordem original" sincronizada com a lista visível
+      // para que desativar o shuffle restaure a ordem certa
+      // (ex.: após busca).
       _originalOrder = List.of(visibleSongs);
+      final List<Song> rest = keepCurrent == null
+          ? List.of(visibleSongs)
+          : visibleSongs
+              .where((Song s) => s.id != keepCurrent.id)
+              .toList();
+      _fisherYates(rest);
+      _queue = <Song>[
+        ?keepCurrent,
+        ...rest,
+      ];
+      // A faixa atual lidera a fila embaralhada; se ela não
+      // existir mais na lista visível, a fila fica sem seleção
+      // (-1) — mesma semântica de antes.
+      _queueIndex = keepCurrent == null
+          ? (_queue.isEmpty ? -1 : 0)
+          : _queue.indexWhere((Song s) => s.id == keepCurrent.id);
+      return;
     }
-    final List<Song> ordered = List.of(visibleSongs);
-    if (_shuffle) ordered.shuffle(_random);
-    _queue = ordered;
+    _queue = List.of(visibleSongs);
     if (keepCurrent != null) {
-      final int idx = _queue.indexWhere((s) => s.id == keepCurrent.id);
+      final int idx = _queue.indexWhere((Song s) => s.id == keepCurrent.id);
       _queueIndex = idx >= 0 ? idx : -1;
+    }
+  }
+
+  /// Embaralha [list] no lugar (Fisher-Yates) com o [Random]
+  /// injetável — determinístico nos testes.
+  void _fisherYates(List<Song> list) {
+    for (int i = list.length - 1; i > 0; i--) {
+      final int j = _random.nextInt(i + 1);
+      if (i == j) continue;
+      final Song tmp = list[i];
+      list[i] = list[j];
+      list[j] = tmp;
     }
   }
 
@@ -74,19 +109,26 @@ class PlaybackQueue {
     if (index >= 0 && index < _queue.length) _queueIndex = index;
   }
 
-  /// Índice da próxima faixa conforme repeat/shuffle, ou null se a fila
+  /// Índice da próxima faixa conforme repeat, ou null se a fila
   /// termina (repeat off) ou está vazia.
+  ///
+  /// A navegação é sempre linear na ordem da fila — com shuffle
+  /// ativo, a própria fila JÁ está embaralhada (ver [rebuild]),
+  /// então "próxima" segue a ordem aleatória sem sortear um novo
+  /// índice a cada chamada (o que podia repetir a mesma faixa e
+  /// nunca terminar com repeat off).
   int? nextIndex() {
     if (_queue.isEmpty) return null;
     if (_repeat == RepeatMode.one) return _queueIndex;
-    if (_shuffle) return _random.nextInt(_queue.length);
-    if (_queueIndex >= _queue.length - 1) {
-      return _repeat == RepeatMode.all ? 0 : null;
-    }
-    return _queueIndex + 1;
+    if (_queueIndex < _queue.length - 1) return _queueIndex + 1;
+    return _repeat == RepeatMode.all ? 0 : null;
   }
 
-  /// Índice da faixa anterior (com wrap), ou null se a fila tem <= 1.
+  /// Índice da faixa anterior (ou wrap no início), ou null se a
+  /// fila tem <= 1.
+  ///
+  /// Volta na MESMA ordem da fila (embaralhada ou não) — coerente
+  /// com [nextIndex], que também é linear.
   int? previousIndex() {
     if (_queue.length <= 1) return null;
     return (_queueIndex - 1 + _queue.length) % _queue.length;
