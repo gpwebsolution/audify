@@ -67,13 +67,19 @@ class AudioService extends BaseAudioHandler {
   Future<void> Function()? onSkipToNext;
   Future<void> Function()? onSkipToPrevious;
 
+  /// Leitura ao vivo da preferência "pausar ao desconectar fones"
+  /// ([SettingsProvider.pauseOnNoisy]). É um getter (não bool) para
+  /// refletir mudanças feitas em Configurações sem recriar o serviço.
+  /// Nulo = padrão (ligado).
+  bool Function()? pauseOnNoisyEnabled;
+
   /// Tipo da interrupção que pausou a reprodução (null = nenhuma).
   ///
   /// Diferencia PERDA TEMPORÁRIA (ligação/notificação -> retoma sozinho)
   /// de PERDA PERMANENTE (outro app assumiu o áudio -> NÃO retoma).
   AudioInterruptionType? _interruptionPause;
 
-  AudioService({this.degradedMode = false}) {
+  AudioService({this.degradedMode = false, this.pauseOnNoisyEnabled}) {
     _configureAudioSession();
 
     // Subscrições nos streams nativos do plugin. Guardamos cada uma na
@@ -142,6 +148,16 @@ class AudioService extends BaseAudioHandler {
               ErrorLogService.logSync('audio/interruption', e, s),
         ),
       );
+      // "Becoming noisy" = fone desconectado (ou Bluetooth de áudio
+      // desligado): pausa, sem auto-retomada. A decisão (se deve
+      // pausar) é função pura testável — ver [shouldPauseOnNoisy].
+      _subscriptions.add(
+        session.becomingNoisyEventStream.listen(
+          (_) => _handleBecomingNoisy(),
+          onError: (Object e, StackTrace s) =>
+              ErrorLogService.logSync('audio/becomingNoisy', e, s),
+        ),
+      );
     } catch (e, s) {
       // Plataforma sem suporte (desktop/web/testes): segue sem pausa
       // automática — comportamento esperado, log discreto.
@@ -182,6 +198,34 @@ class AudioService extends BaseAudioHandler {
       }
     } catch (e, s) {
       ErrorLogService.logSync('audio/interruption', e, s);
+    }
+  }
+
+  /// Decisão PURA: pausar ao receber "becoming noisy"?
+  ///
+  /// Extraída assim (sem tocar em plugins/estado) para ser
+  /// testável em unidade: só pausa se a música estiver
+  /// tocando E o usuário não desligou a preferência.
+  /// Nunca retoma sozinho — quem retoma é o usuário.
+  static bool shouldPauseOnNoisy({
+    required bool isPlaying,
+    required bool settingEnabled,
+  }) =>
+      isPlaying && settingEnabled;
+
+  /// Reage ao evento "becoming noisy" (fone desconectado):
+  /// pausa a reprodução se [shouldPauseOnNoisy] disser sim.
+  /// Falhas viram log local — o evento do sistema nunca
+  /// pode derrubar o app.
+  void _handleBecomingNoisy() {
+    try {
+      final bool shouldPause = shouldPauseOnNoisy(
+        isPlaying: status.value == PlayerStatus.playing,
+        settingEnabled: pauseOnNoisyEnabled?.call() ?? true,
+      );
+      if (shouldPause) pause();
+    } catch (e, s) {
+      ErrorLogService.logSync('audio/becomingNoisy', e, s);
     }
   }
 

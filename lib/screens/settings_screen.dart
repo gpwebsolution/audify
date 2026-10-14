@@ -78,6 +78,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
           value: settings.resumePlayback,
           onChanged: settings.setResumePlayback,
         ),
+        SwitchListTile(
+          secondary: const Icon(Icons.headphones_outlined),
+          title: const Text('Pausar ao desconectar fones'),
+          subtitle: const Text(
+            'Ao tirar o fone (com fio ou Bluetooth), a música '
+            'pausa — sem retomada automática.',
+          ),
+          value: settings.pauseOnNoisy,
+          onChanged: settings.setPauseOnNoisy,
+        ),
 
         // ---- Lixeira ----
         const _SectionHeader(title: 'Lixeira'),

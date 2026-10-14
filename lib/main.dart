@@ -72,7 +72,11 @@ Future<void> _bootstrap() async {
   AudioService audioService;
   try {
     audioService = await audio_service.AudioService.init(
-      builder: () => AudioService(),
+      builder: () => AudioService(
+        // Leitura ao vivo da preferência "pausar ao desconectar
+        // fones" (Configurações → Reprodução).
+        pauseOnNoisyEnabled: () => settingsProvider.pauseOnNoisy,
+      ),
       config: const audio_service.AudioServiceConfig(
         androidNotificationChannelId: 'com.example.music_app.audio',
         androidNotificationChannelName: 'Audify',

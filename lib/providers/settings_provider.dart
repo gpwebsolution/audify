@@ -11,6 +11,7 @@ class SettingsProvider extends ChangeNotifier {
   static const String _galleryColumnsKey = 'gallery_columns';
   static const String _videoColumnsKey = 'video_columns';
   static const String _trashDaysKey = 'trash_retention_days';
+  static const String _pauseOnNoisyKey = 'pause_on_noisy';
 
   /// Opções de prazo da lixeira, em dias. `0` = manter para sempre.
   static const List<int> trashRetentionOptions = <int>[
@@ -41,6 +42,13 @@ class SettingsProvider extends ChangeNotifier {
   /// "Continuar de onde parou": ao abrir o app, restaura a última faixa
   /// e posição (pausada) tocadas na sessão anterior.
   bool _resumePlayback = true;
+
+  /// Pausar a reprodução ao desconectar os fones (evento
+  /// "becoming noisy" do AudioSession). Padrão ligado: música
+  /// tocando alto de repente no alto-falante do aparelho é
+  /// constrangedor e gasta bateria. Sem auto-retomada — o
+  /// usuário decide quando plugar de novo e retomar.
+  bool _pauseOnNoisy = true;
   int _galleryColumns = 3;
   int _videoColumns = 2;
   int _trashRetentionDays = defaultTrashRetentionDays;
@@ -48,6 +56,9 @@ class SettingsProvider extends ChangeNotifier {
 
   ThemeMode get themeMode => _themeMode;
   bool get resumePlayback => _resumePlayback;
+
+  /// Pausar ao desconectar fones (becoming noisy).
+  bool get pauseOnNoisy => _pauseOnNoisy;
 
   /// Colunas desejadas na Galeria (zoom do usuário).
   int get galleryColumns => _galleryColumns;
@@ -130,6 +141,7 @@ class SettingsProvider extends ChangeNotifier {
         _ => ThemeMode.system,
       };
       _resumePlayback = prefs.getBool(_resumeKey) ?? true;
+      _pauseOnNoisy = prefs.getBool(_pauseOnNoisyKey) ?? true;
       _galleryColumns = (prefs.getInt(_galleryColumnsKey) ?? 3).clamp(
         minColumns,
         maxColumns,
@@ -167,6 +179,19 @@ class SettingsProvider extends ChangeNotifier {
     try {
       final SharedPreferences prefs = await SharedPreferences.getInstance();
       await prefs.setBool(_resumeKey, enabled);
+    } catch (e) {
+      // Falha de escrita não quebra a sessão atual.
+    }
+  }
+
+  /// Ativa/desativa a pausa ao desconectar os fones.
+  Future<void> setPauseOnNoisy(bool enabled) async {
+    if (_pauseOnNoisy == enabled) return;
+    _pauseOnNoisy = enabled;
+    _notify();
+    try {
+      final SharedPreferences prefs = await SharedPreferences.getInstance();
+      await prefs.setBool(_pauseOnNoisyKey, enabled);
     } catch (e) {
       // Falha de escrita não quebra a sessão atual.
     }
