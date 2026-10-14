@@ -159,6 +159,19 @@
                 <action android:name="android.media.browse.MediaBrowserService" />
             </intent-filter>
         </service>
+        <!-- Botões de mídia (fone com fio/Bluetooth) com o app em
+             segundo plano: sem este receiver, os eventos MEDIA_BUTTON
+             do sistema (play/pause do fone) nunca chegam ao
+             MediaSession quando a Activity não está em primeiro
+             plano. Trecho da documentação do audio_service 0.18.19. -->
+        <receiver
+            android:name="com.ryanheise.audioservice.MediaButtonReceiver"
+            android:exported="true"
+            tools:ignore="Instantiatable">
+            <intent-filter>
+                <action android:name="android.intent.action.MEDIA_BUTTON" />
+            </intent-filter>
+        </receiver>
         <!-- Impeller desabilitado: em GPUs Adreno antigas/restritas (ex.:
              leitores industriais MINDEO/MS8389) o raster thread do Impeller
              morre com SIGSEGV. Skia renderiza em qualquer hardware e é o
