@@ -144,6 +144,137 @@ class _PlayerScreenState extends State<PlayerScreen> {
     );
   }
 
+  /// Item 3.1 — seletor do timer de sono: 15/30/45/60, personalizado e
+  /// "ao fim da faixa". O estado mora no AudioService (sobrevive a
+  /// segundo plano); aqui só delega ao provider.
+  Future<void> _showSleepMenu(
+    BuildContext context,
+    PlayerProvider provider,
+  ) async {
+    await showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (BuildContext sheetContext) => SafeArea(
+        child: ListView(
+          shrinkWrap: true,
+          children: <Widget>[
+            if (provider.sleepTimerActive)
+              ListTile(
+                leading: const Icon(Icons.timer_outlined),
+                title: Text(
+                  provider.sleepMode == SleepTimerMode.trackEnd
+                      ? 'Dormindo ao fim da faixa'
+                      : 'Dormindo em '
+                            '${formatDuration(provider.sleepRemaining)}',
+                ),
+                subtitle: const Text('O áudio dá fade e para sozinho.'),
+              ),
+            for (final int minutes in const <int>[15, 30, 45, 60])
+              ListTile(
+                leading: const Icon(Icons.timer),
+                title: Text('$minutes minutos'),
+                onTap: () {
+                  Navigator.pop(sheetContext);
+                  provider.startSleepTimer(Duration(minutes: minutes));
+                },
+              ),
+            ListTile(
+              leading: const Icon(Icons.edit_outlined),
+              title: const Text('Personalizado'),
+              subtitle: const Text('De 1 a 720 minutos'),
+              onTap: () {
+                Navigator.pop(sheetContext);
+                _pickCustomSleep(context, provider);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.queue_music_outlined),
+              title: const Text('Ao fim da faixa'),
+              subtitle: const Text(
+                'Para no fim desta faixa, sem pular para a próxima',
+              ),
+              onTap: () {
+                Navigator.pop(sheetContext);
+                provider.startSleepAtTrackEnd();
+              },
+            ),
+            if (provider.sleepTimerActive) ...<Widget>[
+              const Divider(height: 1),
+              ListTile(
+                leading: const Icon(Icons.timer_off_outlined),
+                title: const Text('Desligar timer'),
+                onTap: () {
+                  Navigator.pop(sheetContext);
+                  provider.cancelSleepTimer();
+                },
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Item 3.1 — duração personalizada do timer de sono (1–720 minutos).
+  Future<void> _pickCustomSleep(
+    BuildContext context,
+    PlayerProvider provider,
+  ) async {
+    final TextEditingController controller = TextEditingController();
+    String? error;
+    final int? minutes = await showDialog<int>(
+      context: context,
+      builder: (BuildContext dialogContext) => StatefulBuilder(
+        builder: (
+          BuildContext innerContext,
+          void Function(void Function()) setState,
+        ) =>
+            AlertDialog(
+          title: const Text('Timer personalizado'),
+          content: TextField(
+            controller: controller,
+            autofocus: true,
+            keyboardType: TextInputType.number,
+            decoration: InputDecoration(
+              labelText: 'Minutos',
+              hintText: 'Ex.: 20',
+              errorText: error,
+            ),
+            onSubmitted: (_) {
+              final int? value = int.tryParse(controller.text.trim());
+              if (value != null && value >= 1 && value <= 720) {
+                Navigator.pop(dialogContext, value);
+              } else {
+                setState(() => error = 'Informe um número de 1 a 720.');
+              }
+            },
+          ),
+          actions: <Widget>[
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('Cancelar'),
+            ),
+            FilledButton(
+              onPressed: () {
+                final int? value = int.tryParse(controller.text.trim());
+                if (value != null && value >= 1 && value <= 720) {
+                  Navigator.pop(dialogContext, value);
+                } else {
+                  setState(() => error = 'Informe um número de 1 a 720.');
+                }
+              },
+              child: const Text('Agendar'),
+            ),
+          ],
+        ),
+      ),
+    );
+    controller.dispose();
+    if (minutes != null) {
+      provider.startSleepTimer(Duration(minutes: minutes));
+    }
+  }
+
   /// Adiciona a faixa em reprodução a uma playlist escolhida.
   Future<void> _addCurrentToPlaylist(
     BuildContext context,
@@ -194,6 +325,20 @@ class _PlayerScreenState extends State<PlayerScreen> {
       appBar: AppBar(
         title: const Text('Agora tocando'),
         actions: [
+          // Item 3.1: timer de sono — ícone aceso quando agendado; o
+          // tempo restante aparece no chip acima do slider. Sem faixa
+          // corrente não há o que dormir, então some junto com as ações.
+          if (song != null)
+            IconButton(
+              tooltip: 'Timer de sono',
+              icon: Icon(
+                provider.sleepTimerActive
+                    ? Icons.bedtime
+                    : Icons.bedtime_outlined,
+              ),
+              color: provider.sleepTimerActive ? colors.primary : null,
+              onPressed: () => _showSleepMenu(context, provider),
+            ),
           if (song != null)
             // Menu de 3 pontinhos: as ações da faixa que TOCA ficam aqui, que
             // é onde o usuário já está. A lixeira isolada foi substituída por
@@ -269,6 +414,40 @@ class _PlayerScreenState extends State<PlayerScreen> {
                 return Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
+                    // Item 3.1: chip do timer de sono — vive dentro do
+                    // builder de posição, então a contagem regressiva
+                    // atualiza a cada tick enquanto toca (e a cada rebuild
+                    // da tela, ex.: faixa pausada, ao iniciar/cancelar).
+                    if (song != null && provider.sleepTimerActive)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 8),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: <Widget>[
+                            Icon(
+                              Icons.timer_outlined,
+                              size: 16,
+                              color: colors.primary,
+                            ),
+                            const SizedBox(width: 6),
+                            Text(
+                              provider.sleepMode == SleepTimerMode.trackEnd
+                                  ? 'Dormir ao fim da faixa'
+                                  : 'Dormir em '
+                                        '${formatDuration(provider.sleepRemaining)}',
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .labelMedium
+                                  ?.copyWith(color: colors.primary),
+                            ),
+                            IconButton(
+                              tooltip: 'Desligar timer',
+                              icon: const Icon(Icons.close, size: 16),
+                              onPressed: provider.cancelSleepTimer,
+                            ),
+                          ],
+                        ),
+                      ),
                     Slider(
                       value: sliderValue,
                       max: maxMs,

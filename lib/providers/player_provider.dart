@@ -167,6 +167,17 @@ class PlayerProvider extends ChangeNotifier {
 
   bool get hasCurrentSong => _currentSong != null;
 
+  // ---- Item 3.1 — timer de sono (estado mora no AudioService) ----
+
+  /// Modo do timer (para a UI marcar a opção ativa no seletor).
+  SleepTimerMode get sleepMode => _audioService.sleepMode;
+
+  /// True quando há um sono agendado.
+  bool get sleepTimerActive => _audioService.sleepTimerActive;
+
+  /// Tempo restante (relógio de parede, recalculado a cada leitura).
+  Duration get sleepRemaining => _audioService.sleepRemaining;
+
   /// Se há uma próxima faixa na fila (respecta repeat/shuffle).
   bool get hasNext => _playbackQueue.nextIndex() != null;
 
@@ -207,6 +218,10 @@ class PlayerProvider extends ChangeNotifier {
     // Faixa que FALHOU ao abrir: decide aqui (quem conhece a fila)
     // se pula para a próxima — com teto de falhas seguidas.
     _audioService.onPlaybackFailed = _onPlaybackFailed;
+    // Item 3.1: o timer de sono pode disparar sozinho (relógio) com o
+    // player já parado — sem mudança de status, quem reemite a UI é este
+    // callback. `_notify` é guardado contra dispose.
+    _audioService.onSleepTimerChanged = _notify;
     _audioService.position.addListener(_onPositionChanged);
     _audioService.duration.addListener(_onDurationChanged);
     _audioService.status.addListener(_onStatusChanged);
@@ -681,6 +696,26 @@ class PlayerProvider extends ChangeNotifier {
     _notify();
   }
 
+  // ---- Item 3.1 — timer de sono (delegação + notificação da UI) ----
+
+  /// Agenda o sono por [duration] a partir de agora.
+  void startSleepTimer(Duration duration) {
+    _audioService.startSleepTimer(duration);
+    _notify();
+  }
+
+  /// Agenda o sono para o fim da faixa corrente (sem avançar a fila).
+  void startSleepAtTrackEnd() {
+    _audioService.startSleepAtTrackEnd();
+    _notify();
+  }
+
+  /// Cancela o timer sem parar a música.
+  void cancelSleepTimer() {
+    _audioService.cancelSleepTimer();
+    _notify();
+  }
+
   // ------------------------------------------------------------------
   // Comandos vindos do SISTEMA (Bluetooth/Android Auto/relógio)
   // ------------------------------------------------------------------
@@ -778,6 +813,10 @@ class PlayerProvider extends ChangeNotifier {
 
   /// Fim natural da faixa: avança na fila (repeat one = toca de novo).
   Future<void> _onTrackCompleted() async {
+    // Item 3.1 — sono "ao fim da faixa": o serviço consome o evento, para a
+    // reprodução e o provider NÃO avança a fila (senão a próxima faixa
+    // começaria a tocar junto com o disparo do timer).
+    if (_audioService.consumeSleepAtTrackEnd()) return;
     if (_playbackQueue.repeat == RepeatMode.one) {
       await _playCurrent();
       return;

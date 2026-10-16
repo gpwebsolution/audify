@@ -13,6 +13,16 @@ import 'notification_art_cache.dart';
 /// Estados de reprodução expostos para a UI (abstração sobre PlayerState).
 enum PlayerStatus { idle, playing, paused, stopped, completed }
 
+/// Modos do timer de sono (item 3.1).
+///
+/// - [off]: desligado.
+/// - [duration]: dispara quando o relógio passa do prazo (parede — segue
+///   mesmo com a faixa pausada; coerente com os sleep timers do mercado).
+/// - [trackEnd]: "ao fim da faixa" — dispara quando a faixa corrente
+///   termina, sem avançar a fila (o [PlayerProvider] pergunta ao serviço
+///   antes de pular para a próxima).
+enum SleepTimerMode { off, duration, trackEnd }
+
 /// Camada de serviço de áudio.
 ///
 /// Responsabilidade: isolar TODA a lógica do `AudioPlayer` do pacote
@@ -99,6 +109,29 @@ class AudioService extends BaseAudioHandler {
 
   /// Último broadcast efetivo — throttle do tick de posição (1x/s).
   DateTime _lastBroadcast = DateTime.fromMillisecondsSinceEpoch(0);
+
+  // ---------------------------------------------------------------------
+  // Item 3.1 — timer de sono (o estado vive AQUI, não em widget: sobrevive
+  // ao app em segundo plano, é cancelado por [stop] e exposto para a UI
+  // ler o tempo restante quando quiser).
+  // ---------------------------------------------------------------------
+
+  /// Janela do fade-out final ([sleepFadeDuration]) antes do disparo.
+  static const Duration sleepFadeDuration = Duration(seconds: 10);
+
+  /// Volume corrente (1.0 = normal). Notifier para a UI/teste; o valor é
+  /// espelhado no just_audio via [_applyVolume].
+  final ValueNotifier<double> volume = ValueNotifier<double>(1.0);
+
+  /// Modo ativo do timer (off = desligado).
+  SleepTimerMode _sleepMode = SleepTimerMode.off;
+
+  /// Prazo absoluto (relógio injetado) quando [_sleepMode] é duration.
+  DateTime? _sleepDeadline;
+
+  /// Guarda de reentrada: [_expireSleep] chama [stop], que pode gerar
+  /// novos eventos de stream que voltam a checar o timer.
+  bool _sleepExpiring = false;
 
   /// Intervalo mínimo entre broadcasts gerados pelo TICK DE POSIÇÃO.
   /// Mudanças de estado (play/pause/seek/troca de faixa) continuam
@@ -192,6 +225,11 @@ class AudioService extends BaseAudioHandler {
   /// Nulo = padrão (ligado).
   bool Function()? pauseOnNoisyEnabled;
 
+  /// Item 3.1: notificado quando o timer de sono DISPARA sozinho (o
+  /// provider reemite a UI mesmo sem mudança de status — ex.: expiração
+  /// com a faixa já parada, em que o chip sumiria sem rebuild).
+  VoidCallback? onSleepTimerChanged;
+
   /// Tipo da interrupção que pausou a reprodução (null = nenhuma).
   ///
   /// Diferencia PERDA TEMPORÁRIA (ligação/notificação -> retoma sozinho)
@@ -216,6 +254,10 @@ class AudioService extends BaseAudioHandler {
     _subscriptions.addAll(<StreamSubscription<dynamic>>[
       _player.positionStream.listen((Duration newPosition) {
         try {
+          // Item 3.1: o tick do posicionador é o "relógio de eventos" do
+          // timer de sono enquanto toca (a checagem é por relógio injetado,
+          // não pela posição). No-op barato quando o timer está off.
+          unawaited(checkSleepTimer());
           // Só ticks de reprodução: o just_audio re-emite a posição ATUAL
           // no primeiro listen (replay, chega assíncrona) e não emite com
           // o player parado — aceitar fora de `playing` setaria posição e
@@ -241,6 +283,11 @@ class AudioService extends BaseAudioHandler {
       }),
       _player.playerStateStream.listen((PlayerState state) {
         try {
+          // Item 3.1: qualquer mudança de estado é evento para checar o
+          // timer (cobre retomada/buffering — a expiração é por relógio de
+          // parede e precisa de um gatilho para disparar com o player
+          // parado).
+          unawaited(checkSleepTimer());
           final PlayerStatus before = status.value;
           _mapPlayerState(state);
           // Guarda: o just_audio re-emite o estado ATUAL no primeiro
@@ -526,6 +573,10 @@ class AudioService extends BaseAudioHandler {
   /// após `pause()`, então a posição é preservada.)
   Future<void> resume() async {
     try {
+      // Item 3.1: se o prazo do timer de sono já passou (ex.: faixa
+      // pausada durante o cronômetro), a retomada dispara o fade/stop em
+      // vez de começar a tocar de novo.
+      if (await checkSleepTimer()) return;
       await _player.play();
     } catch (e, s) {
       ErrorLogService.logSync('audio/resume', e, s);
@@ -534,9 +585,15 @@ class AudioService extends BaseAudioHandler {
   }
 
   /// Para a reprodução e volta o cursor para o início.
+  ///
+  /// Item 3.1: também CANCELA o timer de sono (stop explícito do usuário/
+  /// sistema desliga o cronômetro) e restaura o volume, caso o fade-out
+  /// tenha sido interrompido no meio.
   @override
   Future<void> stop() async {
     _interruptionPause = null;
+    _sleepMode = SleepTimerMode.off;
+    _sleepDeadline = null;
     try {
       await _player.stop();
       // O stop do just_audio NÃO zera o cursor (o do audioplayers zerava):
@@ -553,10 +610,148 @@ class AudioService extends BaseAudioHandler {
       // pode não emitir aqui (sem mudança percebida) e a notificação não
       // pode ficar mostrando "tocando".
       broadcastPlaybackState();
+      // Item 3.1: fade interrompido → próxima escuta começa em volume 1.0.
+      await _applyVolume(1.0);
       // Notifica o audio_service: processa o stop (remove controles e,
       // no Android, permite encerrar o foreground service limpo — cobre
       // o caso de o usuário deslizar o app fora dos recentes).
       await super.stop();
+    }
+  }
+
+  // ---------------------------------------------------------------------
+  // Item 3.1 — timer de sono: API do serviço.
+  //
+  // Design: o prazo é um deadline de RELÓGIO DE PAREDE (relógio injetável,
+  // testável sem fakeAsync) e a checagem é EVENT-DRIVEN nos listeners
+  // (tick de posição, mudança de estado, retomada). Isso mantém o timer
+  // vivo em segundo plano (Dart timers continuam sob o foreground service)
+  // sem depender de Timer.periodic de minutos reais em teste.
+  // ---------------------------------------------------------------------
+
+  /// Modo atual do timer (para a UI marcar a opção ativa).
+  SleepTimerMode get sleepMode => _sleepMode;
+
+  /// True quando há um sono agendado ([duration] ou [trackEnd]).
+  bool get sleepTimerActive => _sleepMode != SleepTimerMode.off;
+
+  /// Tempo restante do modo [SleepTimerMode.duration].
+  ///
+  /// Calculado a cada leitura pelo relógio injetado — a UI mostra o valor
+  /// certo mesmo sem tick de posição (ex.: faixa pausada).
+  Duration get sleepRemaining {
+    final DateTime? deadline = _sleepDeadline;
+    if (_sleepMode != SleepTimerMode.duration || deadline == null) {
+      return Duration.zero;
+    }
+    final Duration left = deadline.difference(_clock());
+    return left.isNegative ? Duration.zero : left;
+  }
+
+  /// Agenda o sono por [duration] a partir de agora (sobrescreve o anterior).
+  void startSleepTimer(Duration duration) {
+    try {
+      _sleepMode = SleepTimerMode.duration;
+      _sleepDeadline = _clock().add(duration);
+      if (duration <= Duration.zero) {
+        // Prazo já vencido: dispara imediatamente (sem esperar evento).
+        unawaited(checkSleepTimer());
+      }
+    } catch (e, s) {
+      ErrorLogService.logSync('audio/sleepStart', e, s);
+    }
+  }
+
+  /// Agenda o sono para o FIM da faixa corrente (sem avançar a fila —
+  /// o [PlayerProvider] consome o evento via [consumeSleepAtTrackEnd]).
+  void startSleepAtTrackEnd() {
+    try {
+      _sleepMode = SleepTimerMode.trackEnd;
+      _sleepDeadline = null;
+    } catch (e, s) {
+      ErrorLogService.logSync('audio/sleepTrackEnd', e, s);
+    }
+  }
+
+  /// Cancela o timer sem parar a reprodução; restaura o volume se o
+  /// fade já tivesse começado.
+  void cancelSleepTimer() {
+    try {
+      _sleepMode = SleepTimerMode.off;
+      _sleepDeadline = null;
+      unawaited(_applyVolume(1.0));
+    } catch (e, s) {
+      ErrorLogService.logSync('audio/sleepCancel', e, s);
+    }
+  }
+
+  /// Item 3.1 — "ao fim da faixa": chamado pelo [PlayerProvider] quando a
+  /// faixa termina. Retorna `true` se o timer consumiu o evento (para o
+  /// provider NÃO avançar a fila) e agenda o stop; `false` caso contrário.
+  bool consumeSleepAtTrackEnd() {
+    if (_sleepMode != SleepTimerMode.trackEnd) return false;
+    unawaited(_expireSleep());
+    return true;
+  }
+
+  /// Checagem do timer de sono (relógio injetado). Retorna `true` quando
+  /// o prazo venceu e o fade/stop já foram disparados.
+  ///
+  /// Chamada pelos listeners de posição/estado e pela [resume]; em teste é
+  /// chamada direto após avançar o relógio.
+  Future<bool> checkSleepTimer() async {
+    try {
+      if (_sleepMode != SleepTimerMode.duration) return false;
+      final DateTime? deadline = _sleepDeadline;
+      if (deadline == null) return false;
+      final DateTime now = _clock();
+      if (!now.isBefore(deadline)) {
+        await _expireSleep();
+        return true;
+      }
+      // Últimos [sleepFadeDuration]: rampa linear 1.0 → 0.0.
+      final Duration left = deadline.difference(now);
+      if (left <= sleepFadeDuration) {
+        final double target =
+            (left.inMilliseconds / sleepFadeDuration.inMilliseconds)
+                .clamp(0.0, 1.0)
+                .toDouble();
+        await _applyVolume(target);
+      }
+      return false;
+    } catch (e, s) {
+      ErrorLogService.logSync('audio/sleepCheck', e, s);
+      return false;
+    }
+  }
+
+  /// Dispara o sono: limpa o estado, PARA a reprodução (cancela e restaura
+  /// o volume via [stop]) e garante volume 1.0 para a próxima escuta.
+  Future<void> _expireSleep() async {
+    if (_sleepExpiring) return;
+    _sleepExpiring = true;
+    try {
+      _sleepMode = SleepTimerMode.off;
+      _sleepDeadline = null;
+      await stop();
+      await _applyVolume(1.0);
+      onSleepTimerChanged?.call();
+    } catch (e, s) {
+      ErrorLogService.logSync('audio/sleepExpire', e, s);
+    } finally {
+      _sleepExpiring = false;
+    }
+  }
+
+  /// Espelha o volume no notifier da UI e no just_audio (guardado:
+  /// fade a cada tick não deve gerar chamada de canal sem mudança).
+  Future<void> _applyVolume(double value) async {
+    if (volume.value == value) return;
+    volume.value = value;
+    try {
+      await _player.setVolume(value);
+    } catch (e, s) {
+      ErrorLogService.logSync('audio/setVolume', e, s);
     }
   }
 
@@ -703,6 +898,7 @@ class AudioService extends BaseAudioHandler {
     duration.dispose();
     status.dispose();
     errorMessage.dispose();
+    volume.dispose(); // item 3.1
 
     try {
       await _player.dispose();
