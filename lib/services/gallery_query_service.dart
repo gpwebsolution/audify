@@ -140,6 +140,21 @@ class ThumbnailDiskCache {
     }
   }
 
+  /// Caminho ABSOLUTO de uma entrada existente (null se não existir/
+  /// falhar).
+  ///
+  /// Existe para consumidores que precisam do arquivo em si (Uri.file
+  /// da capa da notificação) em vez dos bytes.
+  static Future<String?> pathOf(String key) async {
+    try {
+      final Directory dir = await _dir();
+      final String path = '${dir.path}/$key.jpg';
+      return File(path).existsSync() ? path : null;
+    } catch (e) {
+      return null;
+    }
+  }
+
   /// Grava uma miniatura no disco (podando quando necessário). A poda é
   /// agendada em isolate — nunca na UI thread.
   static Future<void> put(String key, Uint8List bytes) async {

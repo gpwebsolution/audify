@@ -7,6 +7,7 @@ import 'package:flutter/foundation.dart';
 
 import '../models/song_model.dart';
 import 'error_log_service.dart';
+import 'notification_art_cache.dart';
 
 /// Estados de reprodução expostos para a UI (abstração sobre PlayerState).
 enum PlayerStatus { idle, playing, paused, stopped, completed }
@@ -330,16 +331,17 @@ class AudioService extends BaseAudioHandler {
       await _player.resume();
 
       // Atualiza a notificação de mídia (título, artista, duração).
+      // A capa vem de um ARQUIVO no cache do app (Uri.file) — o
+      // content:// legado do albumart falha no Android 10+ e faixa de
+      // asset não tinha capa nenhuma. Ver [NotificationArtCache].
+      final Uri? artUri = await NotificationArtCache.uriFor(song);
       mediaItem.add(MediaItem(
         id: song.id,
         title: song.title,
         artist: song.displayArtist,
         album: song.album,
         duration: song.duration,
-        artUri: song.albumId != null
-            ? Uri.parse(
-                'content://media/external/audio/albumart/${song.albumId}')
-            : null,
+        artUri: artUri,
       ));
       _broadcastPlaybackState();
     } catch (e, s) {
