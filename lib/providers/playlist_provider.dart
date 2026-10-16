@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/foundation.dart';
 
 import '../models/song_model.dart';
@@ -21,6 +23,21 @@ class Playlist {
 
   /// Total de itens (músicas + vídeos).
   int get itemCount => songCount + videoCount;
+}
+
+/// Resultado da leitura de uma playlist RECONCILIADA com o catálogo
+/// (item 2.6).
+///
+/// O banco guarda um snapshot (title, artist, file_path, media_id...); se o
+/// arquivo for movido/apagado fora do app, a faixa fica na playlist sem tocar
+/// (fantasma). [songs] é o que toca — na ordem da playlist, com a instância
+/// ATUAL do catálogo quando existe; [missing] são as fantasmas (cinza na UI,
+/// com opção de remoção).
+class PlaylistSongsView {
+  final List<Song> songs;
+  final List<Song> missing;
+
+  const PlaylistSongsView({required this.songs, required this.missing});
 }
 
 /// Estado das playlists do usuário.
@@ -102,9 +119,93 @@ class PlaylistProvider extends ChangeNotifier {
     }
   }
 
-  /// Faixas salvas de uma playlist (para a tela de detalhe).
-  Future<List<Song>> songsOf(int playlistId) =>
-      _repository.getSongs(playlistId);
+  /// Faixas salvas de uma playlist, RECONCILIADAS com o catálogo atual
+  /// (item 2.6): a tela de detalhe marca as fantasma em cinza e o play nunca
+  /// enfileira arquivo que sumiu.
+  Future<PlaylistSongsView> songsOf(int playlistId) async {
+    final List<Song> stored = await _repository.getSongs(playlistId);
+    return reconcileSongs(stored, catalog: _player.songs);
+  }
+
+  /// Casa cada faixa salva com o catálogo atual (item 2.6).
+  ///
+  /// Ordem: por `song_id` (midia-id renasceu → instância nova), depois por
+  /// `file_path` (id mudou, arquivo é o mesmo). Fora do catálogo ainda não é
+  /// fantasma: o filtro de duração/pasta (2.5) esconde faixa viva — nesse
+  /// caso o arquivo existe em disco e passa no passe de verificação de path.
+  ///
+  /// Catálogo vazio (app ainda carregando, sem permissão...) → nada é
+  /// marcado como fantasma: marcar TUDO daria a "Remover indisponíveis" o
+  /// poder de apagar playlists inteiras à toa.
+  static Future<PlaylistSongsView> reconcileSongs(
+    List<Song> stored, {
+    required List<Song> catalog,
+  }) async {
+    if (stored.isEmpty) {
+      return const PlaylistSongsView(songs: [], missing: []);
+    }
+    if (catalog.isEmpty) {
+      return PlaylistSongsView(songs: stored, missing: const []);
+    }
+    final Map<String, Song> byId = <String, Song>{
+      for (final Song song in catalog) song.id: song,
+    };
+    final Map<String, Song> byPath = <String, Song>{
+      for (final Song song in catalog)
+        if (song.filePath != null && song.filePath!.isNotEmpty)
+          song.filePath!: song,
+    };
+    final List<Song> available = <Song>[];
+    final List<Song> missing = <Song>[];
+    for (final Song song in stored) {
+      final Song? sameId = byId[song.id];
+      if (sameId != null) {
+        available.add(sameId);
+        continue;
+      }
+      final String? path = song.filePath;
+      final Song? samePath =
+          (path == null || path.isEmpty) ? null : byPath[path];
+      if (samePath != null) {
+        available.add(samePath);
+        continue;
+      }
+      if (song.isAsset) {
+        // Asset vive no bundle do app — só some se o app mudar.
+        available.add(song);
+        continue;
+      }
+      if (path != null && await File(path).exists()) {
+        // Fora do catálogo mas o arquivo está no disco: escondida pelo
+        // filtro 2.5, não fantasma.
+        available.add(song);
+        continue;
+      }
+      missing.add(song);
+    }
+    return PlaylistSongsView(songs: available, missing: missing);
+  }
+
+  /// Remove as faixas INDISPONÍVEIS escolhidas na tela (item 2.6).
+  ///
+  /// Lote: vários DELETEs e **um** [reload] no fim (padrão de
+  /// [removeSongsFromAll] — um reload por faixa gastava queries e a contagem
+  /// das playlists ficava defasada).
+  Future<void> removeUnavailableSongs(
+    int playlistId,
+    List<Song> songs,
+  ) async {
+    if (songs.isEmpty) return;
+    try {
+      for (final Song song in songs) {
+        await _repository.removeSong(playlistId, song.id);
+      }
+      await reload();
+    } catch (e) {
+      _errorMessage = 'Não foi possível remover as faixas: $e';
+      _notify();
+    }
+  }
 
   /// Adiciona a faixa atual ou uma específica a uma playlist.
   Future<void> addSong(int playlistId, Song song) async {
@@ -175,8 +276,10 @@ class PlaylistProvider extends ChangeNotifier {
   }
 
   /// Toca uma playlist inteira a partir de uma faixa.
+  ///
+  /// Passa pela reconciliação (2.6): fantasma nunca entra na fila.
   Future<void> playPlaylist(int playlistId, Song startAt) async {
-    final List<Song> songs = await songsOf(playlistId);
+    final List<Song> songs = (await songsOf(playlistId)).songs;
     if (songs.isEmpty) return;
     final int startIndex = songs
         .indexWhere((s) => s.id == startAt.id)

@@ -30,6 +30,7 @@ class PlaylistDetailScreen extends StatefulWidget {
 
 class _PlaylistDetailScreenState extends State<PlaylistDetailScreen> {
   List<Song>? _songs;
+  List<Song> _missing = const [];
   List<Video>? _videos;
   bool _loading = true;
 
@@ -41,11 +42,14 @@ class _PlaylistDetailScreenState extends State<PlaylistDetailScreen> {
 
   Future<void> _load() async {
     final PlaylistProvider provider = context.read<PlaylistProvider>();
-    final List<Song> songs = await provider.songsOf(widget.playlistId);
+    // Item 2.6: reconcilia com o catálogo ao abrir — o que toca e as
+    // fantasma (arquivo saiu do aparelho) vêm juntos.
+    final PlaylistSongsView view = await provider.songsOf(widget.playlistId);
     final List<Video> videos = await provider.videosOf(widget.playlistId);
     if (mounted) {
       setState(() {
-        _songs = songs;
+        _songs = view.songs;
+        _missing = view.missing;
         _videos = videos;
         _loading = false;
       });
@@ -66,6 +70,7 @@ class _PlaylistDetailScreenState extends State<PlaylistDetailScreen> {
     final PlaylistProvider provider = context.watch<PlaylistProvider>();
     final ColorScheme colors = Theme.of(context).colorScheme;
     final List<Song> songs = _songs ?? const [];
+    final List<Song> missing = _missing;
     final List<Video> videos = _videos ?? const [];
 
     return Scaffold(
@@ -82,7 +87,7 @@ class _PlaylistDetailScreenState extends State<PlaylistDetailScreen> {
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
-          : songs.isEmpty && videos.isEmpty
+          : songs.isEmpty && videos.isEmpty && missing.isEmpty
               ? Center(
                   child: Padding(
                     padding: const EdgeInsets.all(24),
@@ -98,6 +103,36 @@ class _PlaylistDetailScreenState extends State<PlaylistDetailScreen> {
               : ListView(
                   padding: const EdgeInsets.symmetric(vertical: 8),
                   children: [
+                    // ---- Item 2.6: fantasma primeiro (problema a resolver)
+                    if (missing.isNotEmpty) ...[
+                      _SectionHeader(
+                        icon: Icons.warning_amber_outlined,
+                        title: 'Indisponíveis (${missing.length})',
+                      ),
+                      for (final Song song in missing)
+                        _MissingSongTile(
+                          song: song,
+                          onRemove: () => _confirmRemoveSong(
+                            context,
+                            provider,
+                            song,
+                          ),
+                        ),
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 4, 16, 4),
+                        child: Align(
+                          alignment: Alignment.centerRight,
+                          child: FilledButton.tonalIcon(
+                            icon: const Icon(Icons.delete_sweep_outlined),
+                            label: Text(
+                              'Remover indisponíveis (${missing.length})',
+                            ),
+                            onPressed: () =>
+                                _confirmRemoveMissing(context, provider),
+                          ),
+                        ),
+                      ),
+                    ],
                     if (songs.isNotEmpty) ...[
                       _SectionHeader(
                         icon: Icons.music_note_outlined,
@@ -207,6 +242,38 @@ class _PlaylistDetailScreenState extends State<PlaylistDetailScreen> {
     }
   }
 
+  /// Item 2.6: remoção em lote das faixas-fantasma (uma confirmação).
+  Future<void> _confirmRemoveMissing(
+    BuildContext context,
+    PlaylistProvider provider,
+  ) async {
+    final int count = _missing.length;
+    final bool? confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text('Remover $count indisponível${count > 1 ? 'is' : ''}?'),
+        content: const Text(
+          'Os arquivos não estão mais no aparelho. Elas saem apenas '
+          'desta playlist — a biblioteca não é afetada.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('Remover'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed == true) {
+      await provider.removeUnavailableSongs(widget.playlistId, _missing);
+      await _load();
+    }
+  }
+
   Future<void> _confirmRemoveVideo(
     BuildContext context,
     PlaylistProvider provider,
@@ -248,16 +315,18 @@ class _PlaylistDetailScreenState extends State<PlaylistDetailScreen> {
   }
 }
 
-/// Cabeçalho de seção com botão de reproduzir tudo.
+/// Cabeçalho de seção com botão de reproduzir tudo (opcional).
 class _SectionHeader extends StatelessWidget {
   final IconData icon;
   final String title;
-  final VoidCallback onPlay;
+
+  /// Nulo na seção "Indisponíveis" (2.6) — não há o que tocar lá.
+  final VoidCallback? onPlay;
 
   const _SectionHeader({
     required this.icon,
     required this.title,
-    required this.onPlay,
+    this.onPlay,
   });
 
   @override
@@ -277,12 +346,49 @@ class _SectionHeader extends StatelessWidget {
                   ?.copyWith(fontWeight: FontWeight.w700),
             ),
           ),
-          TextButton.icon(
-            onPressed: onPlay,
-            icon: const Icon(Icons.play_arrow, size: 20),
-            label: const Text('Reproduzir'),
-          ),
+          if (onPlay != null)
+            TextButton.icon(
+              onPressed: onPlay,
+              icon: const Icon(Icons.play_arrow, size: 20),
+              label: const Text('Reproduzir'),
+            ),
         ],
+      ),
+    );
+  }
+}
+
+/// Faixa-fantasma (item 2.6): snapshot na playlist, arquivo fora do aparelho.
+///
+/// Cinza e sem ação de toque (não toca) — só o botão de remover.
+class _MissingSongTile extends StatelessWidget {
+  final Song song;
+  final VoidCallback onRemove;
+
+  const _MissingSongTile({required this.song, required this.onRemove});
+
+  @override
+  Widget build(BuildContext context) {
+    final ColorScheme colors = Theme.of(context).colorScheme;
+    return ListTile(
+      leading: Icon(Icons.music_off_outlined, color: colors.onSurfaceVariant),
+      title: Text(
+        song.title,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: TextStyle(color: colors.onSurfaceVariant),
+      ),
+      subtitle: Text(
+        'Arquivo não encontrado',
+        style: TextStyle(fontSize: 12, color: colors.outline),
+      ),
+      trailing: IconButton(
+        tooltip: 'Remover da playlist',
+        icon: Icon(
+          Icons.remove_circle_outline,
+          color: colors.onSurfaceVariant,
+        ),
+        onPressed: onRemove,
       ),
     );
   }
