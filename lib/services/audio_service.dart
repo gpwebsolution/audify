@@ -92,6 +92,19 @@ class AudioService extends BaseAudioHandler {
   /// a defini-la junto com o controle de velocidade.
   final double _speed = 1.0;
 
+  /// Relógio injetável (testes: sem fakeAsync, controlamos o tempo na mão).
+  final DateTime Function() _clock;
+
+  /// Último broadcast efetivo — throttle do tick de posição (1x/s).
+  DateTime _lastBroadcast = DateTime.fromMillisecondsSinceEpoch(0);
+
+  /// Intervalo mínimo entre broadcasts gerados pelo TICK DE POSIÇÃO.
+  /// Mudanças de estado (play/pause/seek/troca de faixa) continuam
+  /// broadcast imediato — o throttle cobre só o ~5x/s do onPositionChanged,
+  /// que enchia o canal nativo sem necessidade (o sistema projeta a
+  /// posição a partir de updatePosition + updateTime).
+  static const Duration broadcastInterval = Duration(seconds: 1);
+
   /// Fila do provider → MediaSession (Android Auto/Bluetooth/browse).
   ///
   /// A fila é enviada APENAS quando a lista muda de identidade (troca de
@@ -116,7 +129,7 @@ class AudioService extends BaseAudioHandler {
       }
       _publishedQueueIndex =
           (currentIndex < 0 || currentIndex >= songs.length) ? null : currentIndex;
-      _broadcastPlaybackState();
+      broadcastPlaybackState();
     } catch (e, s) {
       ErrorLogService.logSync('audio/publishQueue', e, s);
     }
@@ -128,7 +141,7 @@ class AudioService extends BaseAudioHandler {
     try {
       _publishedRepeat = repeat;
       _publishedShuffle = shuffle;
-      _broadcastPlaybackState();
+      broadcastPlaybackState();
     } catch (e, s) {
       ErrorLogService.logSync('audio/syncModes', e, s);
     }
@@ -182,7 +195,11 @@ class AudioService extends BaseAudioHandler {
   /// de PERDA PERMANENTE (outro app assumiu o áudio -> NÃO retoma).
   AudioInterruptionType? _interruptionPause;
 
-  AudioService({this.degradedMode = false, this.pauseOnNoisyEnabled}) {
+  AudioService({
+    this.degradedMode = false,
+    this.pauseOnNoisyEnabled,
+    DateTime Function()? clock,
+  }) : _clock = clock ?? DateTime.now {
     _configureAudioSession();
 
     // Subscrições nos streams nativos do plugin. Guardamos cada uma na
@@ -195,7 +212,10 @@ class AudioService extends BaseAudioHandler {
       _player.onPositionChanged.listen((Duration newPosition) {
         try {
           position.value = newPosition;
-          _broadcastPlaybackState();
+          // Tick de posição: broadcast com throttle (1x/s) — ver
+          // [broadcastInterval]. O sistema projeta o avanço real a partir
+          // de updatePosition/updateTime, então não precisa de tick.
+          broadcastPlaybackState(throttled: true);
         } catch (e, s) {
           ErrorLogService.logSync('audio/onPosition', e, s);
         }
@@ -210,7 +230,7 @@ class AudioService extends BaseAudioHandler {
       _player.onPlayerStateChanged.listen((state) {
         try {
           _mapPlayerState(state);
-          _broadcastPlaybackState();
+          broadcastPlaybackState();
         } catch (e, s) {
           ErrorLogService.logSync('audio/onState', e, s);
         }
@@ -219,7 +239,7 @@ class AudioService extends BaseAudioHandler {
         try {
           // Faixa chegou ao fim naturalmente.
           status.value = PlayerStatus.completed;
-          _broadcastPlaybackState();
+          broadcastPlaybackState();
         } catch (e, s) {
           ErrorLogService.logSync('audio/onComplete', e, s);
         }
@@ -440,7 +460,7 @@ class AudioService extends BaseAudioHandler {
         duration: song.duration,
         artUri: artUri,
       ));
-      _broadcastPlaybackState();
+      broadcastPlaybackState();
     } catch (e, s) {
       // Arquivo inválido/corrompido ou falha de plataforma (inclui canal
       // nativo morto): nunca crash — loga TÉCNICO no serviço de log e
@@ -520,7 +540,7 @@ class AudioService extends BaseAudioHandler {
     try {
       await _player.seek(target);
       position.value = target;
-      _broadcastPlaybackState();
+      broadcastPlaybackState();
     } catch (e, s) {
       ErrorLogService.logSync('audio/seek', e, s);
       errorMessage.value = userMessage('mudar a posição da faixa', e);
@@ -593,8 +613,19 @@ class AudioService extends BaseAudioHandler {
   /// fila corrente, índice dela, modos repeat/shuffle e velocidade —
   /// sem isso o lock screen mostra o estado errado (ex.: repeat aceso
   /// depois de desligar no app).
-  void _broadcastPlaybackState() {
+  ///
+  /// [throttled] = true só nos ticks de posição: no máximo 1 emitido por
+  /// [broadcastInterval] (relógio injetável). Demais chamadas (play,
+  /// pause, seek, troca de faixa, modos) são sempre imediatas — o
+  /// sistema não pode ficar com estado velho em mudança de controle.
+  void broadcastPlaybackState({bool throttled = false}) {
     try {
+      final DateTime now = _clock();
+      if (throttled &&
+          now.difference(_lastBroadcast) < broadcastInterval) {
+        return; // posição nova já será coberta pelo próximo tick
+      }
+      _lastBroadcast = now;
       final bool playing = status.value == PlayerStatus.playing;
       playbackState.add(PlaybackState(
         controls: [
@@ -613,10 +644,10 @@ class AudioService extends BaseAudioHandler {
         processingState: systemProcessingState(status.value),
         playing: playing,
         updatePosition: position.value,
-        // Posição projetada: `position + (now - updateTime)` — o default
-        // do construtor já usa o relógio atual, então o sistema calcula
-        // o avanço em tempo real sem precisar de rebroadcast por tick.
-        updateTime: DateTime.now(),
+        // Posição projetada: `position + (now - updateTime)` — o sistema
+        // calcula o avanço em tempo real, então o broadcast NÃO precisa de
+        // tick por atualização de cursor (o throttle acima é seguro).
+        updateTime: now,
         speed: _speed,
         repeatMode: systemRepeatMode(_publishedRepeat),
         shuffleMode: systemShuffleMode(_publishedShuffle),
