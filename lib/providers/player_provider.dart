@@ -394,7 +394,13 @@ class PlayerProvider extends ChangeNotifier {
   // Sessão: "continuar de onde parou" (preferência em Configurações).
   // ------------------------------------------------------------------
 
-  /// Restaura a última faixa tocada (posição salva, sem autoplay).
+  /// Restaura a última faixa tocada (posição salva, sem autoplay) e a
+  /// FILA ativa da sessão anterior (ids + índice).
+  ///
+  /// A fila salva é reconciliada com o catálogo atual: ids de arquivos
+  /// que saíram do aparelho são descartados UM A UM (a faixa que sumiu
+  /// não derruba o resto da fila). Sem fila salva (sessão antiga) ou com
+  /// fila válida vazia, cai no catálogo inteiro — comportamento antigo.
   Future<void> _restoreSession() async {
     final SettingsProvider? prefs = settings;
     if (prefs == null || !prefs.resumePlayback) return;
@@ -404,21 +410,64 @@ class PlayerProvider extends ChangeNotifier {
     final Song? saved = stored.$1;
     if (saved == null) return;
 
-    // Só restaura se a faixa ainda existir no catálogo atual.
-    final int idx = _songs.indexWhere((s) => s.id == saved.id);
-    if (idx < 0) return;
+    // Fila ativa salva (ids na ordem real de reprodução).
+    final (List<String> queueIds, _) = await _sessionRepository.loadQueue();
 
-    _currentSong = _songs[idx];
+    // Índice do catálogo para a faixa salva (referência de "onde parou").
+    final int catalogIdx = _songs.indexWhere((s) => s.id == saved.id);
+    if (catalogIdx < 0) {
+      // Faixa salva não existe mais: nada a retomar.
+      return;
+    }
+
+    List<Song> queue;
+    int idx;
+    if (queueIds.isEmpty) {
+      // Sessão antiga (gravada antes do 1.6): fila = catálogo inteiro.
+      queue = _songs;
+      idx = catalogIdx;
+    } else {
+      final Map<String, Song> byId = <String, Song>{
+        for (final Song s in _songs) s.id: s,
+      };
+      queue = <Song>[
+        for (final String id in queueIds)
+          if (byId[id] != null) byId[id]!, // some só o id morto
+      ];
+      idx = queue.indexWhere((s) => s.id == saved.id);
+      if (queue.isEmpty || idx < 0) {
+        // Fila salva inteiramente obsoleta (ou a faixa corrente ficou
+        // fora dela): volta ao catálogo para não perder a retomada.
+        queue = _songs;
+        idx = catalogIdx;
+      }
+      // A posição do índice salvo é ignorada de propósito: o encaixe
+      // é sempre pelo id da faixa — ids que sumiram da fila não podem
+      // deslocar o "onde parou".
+    }
+
+    _currentSong = queue[idx];
     _position = stored.$2;
-    _playbackQueue.setQueue(_songs, idx);
+    _playbackQueue.setQueue(queue, idx);
     _notify();
   }
 
-  /// Persiste faixa + posição (throttle de 5s durante a reprodução).
+  /// Persiste faixa + posição + fila ativa (throttle de 5s durante a
+  /// reprodução).
   Future<void> _saveSession() async {
     final Song? song = _currentSong;
     if (song == null) return;
     await _sessionRepository.save(song, _position);
+    // Fila ativa (ids + índice): permite retomar a MESMA fila
+    // (inclusive a ordem embaralhada), não só a faixa.
+    final List<Song> queue = _playbackQueue.queue;
+    final int qIndex = _playbackQueue.queueIndex;
+    if (queue.isNotEmpty && qIndex >= 0) {
+      await _sessionRepository.saveQueue(
+        queue.map((Song s) => s.id).toList(),
+        qIndex,
+      );
+    }
   }
 
   /// Arquivos de música foram EXCLUÍDOS do aparelho.

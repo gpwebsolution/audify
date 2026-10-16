@@ -103,6 +103,12 @@ class PlaybackQueue {
     _queueIndex = (startIndex < 0 || startIndex >= _queue.length)
         ? (songs.isEmpty ? -1 : 0)
         : startIndex;
+    if (_shuffle) {
+      // Sem isto, "desligar o shuffle" restauraria a ordem original
+      // de UMA SESSÃO ANTERIOR (ou a vazia, numa fila restaurada do
+      // disco) — a nova fila passa a ser a referência.
+      _originalOrder = List.of(songs);
+    }
   }
 
   void setIndex(int index) {
