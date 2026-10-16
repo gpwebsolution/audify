@@ -178,6 +178,9 @@ class PlayerProvider extends ChangeNotifier {
   /// Tempo restante (relógio de parede, recalculado a cada leitura).
   Duration get sleepRemaining => _audioService.sleepRemaining;
 
+  /// Velocidade de reprodução corrente (item 3.2; 1.0 = normal).
+  double get playbackSpeed => _audioService.playbackSpeed;
+
   /// Se há uma próxima faixa na fila (respecta repeat/shuffle).
   bool get hasNext => _playbackQueue.nextIndex() != null;
 
@@ -237,6 +240,11 @@ class PlayerProvider extends ChangeNotifier {
       _playbackQueue.setRepeat(prefs.repeatMode);
       if (prefs.shuffleEnabled) {
         _playbackQueue.toggleShuffle();
+      }
+      // Item 3.2: velocidade salva na sessão anterior → serviço (e daí
+      // para o just_audio/broadcast). 1.0 já é o padrão: pula a chamada.
+      if (prefs.playbackSpeed != 1.0) {
+        _audioService.setPlaybackSpeed(prefs.playbackSpeed);
       }
     }
 
@@ -714,6 +722,14 @@ class PlayerProvider extends ChangeNotifier {
   void cancelSleepTimer() {
     _audioService.cancelSleepTimer();
     _notify();
+  }
+
+  /// Item 3.2 — velocidade 0,5x–2,0x: aplica no serviço (just_audio +
+  /// broadcast do PlaybackState) e persiste para a próxima sessão.
+  Future<void> setPlaybackSpeed(double speed) async {
+    await _audioService.setPlaybackSpeed(speed);
+    _notify();
+    await settings?.setPlaybackSpeed(_audioService.playbackSpeed);
   }
 
   // ------------------------------------------------------------------

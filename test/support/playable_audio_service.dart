@@ -22,6 +22,24 @@ class PlayableAudioService extends AudioService {
   /// Faixas que "tocaram" até agora (útil para asserções).
   final List<Song> played = <Song>[];
 
+  /// Item 3.2: espelha [setPlaybackSpeed] sem tocar o just_audio.
+  ///
+  /// Sob FakeAsync (testWidgets) o AudioPlayer real nunca completa
+  /// setSpeed/setVolume (o futuro do just_audio não resolve nessa zona —
+  /// em test() puro resolve; ver testes do serviço em
+  /// playback_speed_test.dart). Aqui o duplo aplica o MESMO clamp e o
+  /// mesmo broadcast do serviço real, para a UI/provider verem o estado.
+  double _speed = 1.0;
+
+  @override
+  double get playbackSpeed => _speed;
+
+  @override
+  Future<void> setPlaybackSpeed(double value) async {
+    _speed = value.clamp(0.5, 2.0).toDouble();
+    broadcastPlaybackState();
+  }
+
   @override
   Future<void> playSong(Song song) async {
     played.add(song);

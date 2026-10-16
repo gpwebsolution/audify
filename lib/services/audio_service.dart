@@ -100,9 +100,9 @@ class AudioService extends BaseAudioHandler {
   /// fila inteira ao MediaSession a cada troca de faixa.
   List<Song>? _publishedQueue;
 
-  /// Velocidade de reprodução publicada (1.0 = normal). Item 3.2 passará
-  /// a defini-la junto com o controle de velocidade.
-  final double _speed = 1.0;
+  /// Velocidade de reprodução publicada no [PlaybackState] (1.0 =
+  /// normal). Item 3.2: mutable via [setPlaybackSpeed] (0,5–2,0).
+  double _speed = 1.0;
 
   /// Relógio injetável (testes: sem fakeAsync, controlamos o tempo na mão).
   final DateTime Function() _clock;
@@ -765,6 +765,29 @@ class AudioService extends BaseAudioHandler {
     } catch (e, s) {
       ErrorLogService.logSync('audio/seek', e, s);
       errorMessage.value = userMessage('mudar a posição da faixa', e);
+    }
+  }
+
+  /// Velocidade de reprodução corrente (1.0 = normal).
+  double get playbackSpeed => _speed;
+
+  /// Item 3.2 — velocidade de reprodução (0,5x–2,0x).
+  ///
+  /// O clamp vive AQUI (camada de serviço): o valor publicado no
+  /// [PlaybackState].speed e o aplicado no just_audio são o mesmo número.
+  /// O just_audio reaplica speed/volume ao reativar a plataforma
+  /// (setAudioSource), então a velocidade sobrevive a trocas de faixa
+  /// sem reenvio explícito.
+  Future<void> setPlaybackSpeed(double value) async {
+    try {
+      _speed = value.clamp(0.5, 2.0).toDouble();
+      await _player.setSpeed(_speed);
+      // Estado muda → broadcast imediato (não throttle): a notificação e
+      // a tela de bloqueio refletem o novo rate na hora.
+      broadcastPlaybackState();
+    } catch (e, s) {
+      ErrorLogService.logSync('audio/setSpeed', e, s);
+      errorMessage.value = userMessage('mudar a velocidade', e);
     }
   }
 

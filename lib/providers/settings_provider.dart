@@ -21,6 +21,7 @@ class SettingsProvider extends ChangeNotifier {
   static const String _repeatModeKey = 'repeat_mode';
   static const String _minDurationKey = 'library_min_duration_seconds';
   static const String _ignoredFoldersKey = 'library_ignored_folders';
+  static const String _playbackSpeedKey = 'playback_speed';
 
   /// Opções de prazo da lixeira, em dias. `0` = manter para sempre.
   static const List<int> trashRetentionOptions = <int>[
@@ -40,6 +41,18 @@ class SettingsProvider extends ChangeNotifier {
     30,
     60,
     120,
+  ];
+
+  /// Velocidades de reprodução do seletor (item 3.2) — mesma grade do
+  /// player de vídeo (video_player_screen). O clamp 0,5–2,0 é garantido
+  /// pela camada de serviço.
+  static const List<double> playbackSpeedOptions = <double>[
+    0.5,
+    0.75,
+    1.0,
+    1.25,
+    1.5,
+    2.0,
   ];
 
   /// Prazo padrão: 30 dias é o padrão de mercado (Google Fotos, Drive).
@@ -75,6 +88,9 @@ class SettingsProvider extends ChangeNotifier {
 
   /// Modo de repetição persistido (off/all/one).
   RepeatMode _repeatMode = RepeatMode.off;
+
+  /// Velocidade de reprodução persistida (item 3.2). `1.0` = normal.
+  double _playbackSpeed = 1.0;
   int _galleryColumns = 3;
   int _videoColumns = 2;
   int _trashRetentionDays = defaultTrashRetentionDays;
@@ -100,6 +116,9 @@ class SettingsProvider extends ChangeNotifier {
 
   /// Modo de repetição (persistido).
   RepeatMode get repeatMode => _repeatMode;
+
+  /// Velocidade de reprodução persistida (0,5–2,0; 1.0 = normal).
+  double get playbackSpeed => _playbackSpeed;
 
   /// Colunas desejadas na Galeria (zoom do usuário).
   int get galleryColumns => _galleryColumns;
@@ -262,6 +281,14 @@ class SettingsProvider extends ChangeNotifier {
         2 => RepeatMode.one,
         _ => RepeatMode.off,
       };
+      // Item 3.2: só aceita valor finito dentro da faixa; corrompido
+      // volta ao normal (1.0).
+      final double storedSpeed = prefs.getDouble(_playbackSpeedKey) ?? 1.0;
+      _playbackSpeed = storedSpeed.isFinite &&
+              storedSpeed >= 0.5 &&
+              storedSpeed <= 2.0
+          ? storedSpeed
+          : 1.0;
       _galleryColumns = (prefs.getInt(_galleryColumnsKey) ?? 3).clamp(
         minColumns,
         maxColumns,
@@ -348,6 +375,23 @@ class SettingsProvider extends ChangeNotifier {
     try {
       final SharedPreferences prefs = await SharedPreferences.getInstance();
       await prefs.setInt(_repeatModeKey, mode.index);
+    } catch (e) {
+      // Falha de escrita não quebra a sessão atual.
+    }
+  }
+
+  /// Persiste a velocidade de reprodução (item 3.2). Valores fora de
+  /// 0,5–2,0 ou não finitos caem no normal (1.0) — a mesma faixa que o
+  /// seletor oferece e que o serviço garante por clamp.
+  Future<void> setPlaybackSpeed(double speed) async {
+    final double valid =
+        speed.isFinite && speed >= 0.5 && speed <= 2.0 ? speed : 1.0;
+    if (_playbackSpeed == valid) return;
+    _playbackSpeed = valid;
+    _notify();
+    try {
+      final SharedPreferences prefs = await SharedPreferences.getInstance();
+      await prefs.setDouble(_playbackSpeedKey, valid);
     } catch (e) {
       // Falha de escrita não quebra a sessão atual.
     }

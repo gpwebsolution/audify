@@ -5,6 +5,7 @@ import '../models/media_ref.dart';
 import '../models/song_model.dart';
 import '../providers/player_provider.dart';
 import '../providers/playlist_provider.dart';
+import '../providers/settings_provider.dart';
 import '../services/audio_service.dart';
 import '../utils/format.dart';
 import '../widgets/album_artwork.dart';
@@ -338,6 +339,32 @@ class _PlayerScreenState extends State<PlayerScreen> {
               ),
               color: provider.sleepTimerActive ? colors.primary : null,
               onPressed: () => _showSleepMenu(context, provider),
+            ),
+          // Item 3.2: velocidade — mesma grade e mesmo rótulo do player
+          // de vídeo (video_player_screen): ícone de texto "1.5x".
+          if (song != null)
+            PopupMenuButton<double>(
+              tooltip: 'Velocidade ${provider.playbackSpeed}x',
+              icon: Text(
+                '${provider.playbackSpeed}x',
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 14,
+                  color: provider.playbackSpeed != 1.0
+                      ? colors.primary
+                      : null,
+                ),
+              ),
+              onSelected: provider.setPlaybackSpeed,
+              itemBuilder: (BuildContext menuContext) =>
+                  SettingsProvider.playbackSpeedOptions
+                      .map(
+                        (double s) => PopupMenuItem<double>(
+                          value: s,
+                          child: Text('${s}x'),
+                        ),
+                      )
+                      .toList(),
             ),
           if (song != null)
             // Menu de 3 pontinhos: as ações da faixa que TOCA ficam aqui, que
