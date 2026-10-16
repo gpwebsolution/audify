@@ -107,9 +107,11 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
 
     switch (MainTab.values[index]) {
       case MainTab.videos:
-        context.read<VideoProvider>().load();
+        final VideoProvider videos = context.read<VideoProvider>();
+        await _loadTabThenAsk(videos.load, videos.requestAccessOnTabOpen);
       case MainTab.gallery:
-        context.read<GalleryProvider>().load();
+        final GalleryProvider gallery = context.read<GalleryProvider>();
+        await _loadTabThenAsk(gallery.load, gallery.requestAccessOnTabOpen);
       case MainTab.files:
         await context.read<FileProvider>().refreshVolumes();
       case MainTab.pdfs:
@@ -119,6 +121,21 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
       case MainTab.settings:
         break;
     }
+  }
+
+  /// Abas de mídia (item 1.11): recarrega o status, espera a tela
+  /// explicativa montar e SÓ ENTÃO dispara o pedido do sistema —
+  /// permissão sensível é pedida no contexto da aba, nunca no boot e
+  /// nunca sem a explicação na tela.
+  Future<void> _loadTabThenAsk(
+    Future<void> Function() load,
+    Future<void> Function() ask,
+  ) async {
+    await load();
+    if (!mounted) return;
+    await WidgetsBinding.instance.endOfFrame;
+    if (!mounted) return;
+    await ask();
   }
 
   /// Dialog de criação de playlist (nome).

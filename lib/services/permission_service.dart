@@ -4,6 +4,8 @@ import 'package:flutter/foundation.dart';
 import 'package:on_audio_query/on_audio_query.dart';
 import 'package:permission_handler/permission_handler.dart';
 
+import 'error_log_service.dart';
+
 /// Resultado da solicitação de permissão de acesso a áudio.
 enum AudioAccessResult {
   /// Usuário concedeu a permissão.
@@ -69,36 +71,40 @@ class PermissionService {
   /// Abre as Configurações do sistema (para casos de negação permanente).
   static Future<bool> openSettings() => openAppSettings();
 
-  /// Solicita as permissões de mídia complementares (vídeo + galeria) via
-  /// permission_handler:
-  ///  - [Permission.videos] + [Permission.photos] + [Permission.notification]:
-  ///    UM dialog do sistema com fotos e vídeos (READ_MEDIA_VIDEO +
-  ///    READ_MEDIA_IMAGES) + a notificação de mídia do audio_service
-  ///    (tela de bloqueio);
-  ///  - Em Android <= 12 o permission_handler mapeia videos/photos para
-  ///    READ_EXTERNAL_STORAGE automaticamente (mesma permissão única).
-  ///
-  /// NÃO usamos a string do SO para decidir a versão: no MIUI/HyperOS o
-  /// `Platform.operatingSystemVersion` não contém "Android" (ex.:
-  /// "TKQ1.221114.001 test-keys") e a detecção por parsing falhava, pedindo
-  /// a permissão errada. O mapeamento correto por API level é interno do
-  /// permission_handler.
-  ///
-  /// A permissão de ÁUDIO já é resolvida pelo fluxo do on_audio_query
-  /// ([requestAudioAccess]); este grupo cobre o resto da biblioteca de mídia.
-  static Future<void> requestMediaGroup() async {
-    if (!Platform.isAndroid || kIsWeb) return;
+  // =====================================================================
+  // PEDIDOS POR CONTEXTO (item 1.11) — sem rajada no boot
+  // =====================================================================
+  //
+  // O boot pede APENAS áudio (on_audio_query, [requestAudioAccess]).
+  // Cada permissão sensível é pedida quando o usuário entra no contexto
+  // que a usa:
+  //  - fotos/vídeos: na própria aba, depois da tela explicativa da aba
+  //    ([requestPhotosAccess]/[requestVideosAccess]);
+  //  - POST_NOTIFICATIONS: no primeiro play ([requestNotificationAccess]).
+  //
+  // NÃO usamos a string do SO para decidir a versão: no MIUI/HyperOS o
+  // `Platform.operatingSystemVersion` não contém "Android" (ex.:
+  // "TKQ1.221114.001 test-keys") e a detecção por parsing falhava, pedindo
+  // a permissão errada. O mapeamento correto por API level é interno do
+  // permission_handler.
 
-    try {
-      await [
-        Permission.videos,
-        Permission.photos,
-        Permission.notification,
-      ].request();
-    } catch (e) {
-      debugPrint('[PermissionService] Falha ao pedir grupo de mídia: $e');
-    }
-  }
+  /// Lote pedido ao abrir a aba Galeria: SÓ fotos. A notificação de mídia
+  /// não entra (era pedida junto aqui e no boot — rajada); ela é pedida
+  /// no primeiro play, em [requestNotificationAccess].
+  static const List<Permission> photosTabPermissions = <Permission>[
+    Permission.photos,
+  ];
+
+  /// Lote pedido ao abrir a aba Vídeos: só vídeos (Android 13+ separa
+  /// READ_MEDIA_VIDEO; antes, o permission_handler mapeia para
+  /// READ_EXTERNAL_STORAGE — mesma permissão única).
+  static const List<Permission> videosTabPermissions = <Permission>[
+    Permission.videos,
+  ];
+
+  /// Lote do POST_NOTIFICATIONS: pedido UMA vez, no primeiro play.
+  static const List<Permission> firstPlayNotificationPermissions =
+      <Permission>[Permission.notification];
 
   /// True se o app pode LER as músicas do aparelho. Usa o mapeamento do
   /// permission_handler (READ_MEDIA_AUDIO no 13+, READ_EXTERNAL_STORAGE
@@ -114,17 +120,17 @@ class PermissionService {
     return Permission.photos.isGranted;
   }
 
-  /// Solicita APENAS o acesso às fotos (e a notificação de mídia).
+  /// Solicita APENAS o acesso às fotos ([photosTabPermissions]).
   ///
-  /// Espelha [requestVideosAccess]: o diálogo do sistema aparece na hora em
-  /// que o usuário abre a aba Galeria, sem depender de a aba de Música ter
-  /// sido aberta antes.
+  /// Espelha [requestVideosAccess]: o diálogo do sistema aparece na aba
+  /// Galeria (item 1.11), depois que a tela explicativa já foi montada —
+  /// nunca no boot. A notificação de mídia não acompanha mais este lote.
   static Future<bool> requestPhotosAccess() async {
     if (!Platform.isAndroid) return true;
     if (await hasPhotosAccess()) return true;
 
     try {
-      await [Permission.photos, Permission.notification].request();
+      await photosTabPermissions.request();
     } catch (e) {
       debugPrint('[PermissionService] Falha ao pedir fotos: $e');
     }
@@ -138,6 +144,45 @@ class PermissionService {
     return Permission.notification.isGranted;
   }
 
+  /// Cache de "já perguntou nesta sessão" (item 1.11): o POST_NOTIFICATIONS
+  /// é pedido uma única vez — no primeiro play — e nunca no boot.
+  static bool _notificationAsked = false;
+
+  /// Decide (função pura — testável) se o POST_NOTIFICATIONS deve ser
+  /// pedido AGORA: só no Android, só na primeira chance da sessão e só
+  /// se a permissão ainda não foi concedida.
+  static bool shouldRequestNotification({
+    required bool isAndroid,
+    required bool askedThisSession,
+    required bool granted,
+  }) =>
+      isAndroid && !askedThisSession && !granted;
+
+  /// Pede POST_NOTIFICATIONS — item 1.11: o PlayerProvider dispara no
+  /// primeiro play; o boot nunca pede (a notificação de mídia só faz
+  /// sentido quando o player está em uso). Idempotente por sessão e
+  /// tolerante a falha: permissão é conforto, não requisito.
+  static Future<void> requestNotificationAccess() async {
+    try {
+      final bool isAndroid = Platform.isAndroid && !kIsWeb;
+      // Fora do Android não há canal a tocar (e nada a pedir).
+      final bool granted =
+          isAndroid ? await Permission.notification.isGranted : true;
+      if (!shouldRequestNotification(
+        isAndroid: isAndroid,
+        askedThisSession: _notificationAsked,
+        granted: granted,
+      )) {
+        return;
+      }
+      _notificationAsked = true;
+      await firstPlayNotificationPermissions.request();
+    } catch (e, s) {
+      debugPrint('[PermissionService] Falha ao pedir notificação: $e');
+      ErrorLogService.logSync('perm/notification', e, s);
+    }
+  }
+
   /// True se o app pode LER os vídeos do aparelho (READ_MEDIA_VIDEO no
   /// Android 13+, READ_EXTERNAL_STORAGE antes — mapeado pelo plugin).
   static Future<bool> hasVideosAccess() async {
@@ -145,15 +190,16 @@ class PermissionService {
     return Permission.videos.isGranted;
   }
 
-  /// Solicita APENAS os vídeos (e a notificação de mídia). Usado quando o
+  /// Solicita APENAS os vídeos ([videosTabPermissions]). Usado quando o
   /// usuário abre a aba Vídeos sem permissão — o dialog do sistema aparece
-  /// na hora, sem depender da aba de Música ter sido aberta antes.
+  /// na aba (item 1.11), depois da tela explicativa, nunca no boot. A
+  /// notificação de mídia não acompanha este lote (vai no primeiro play).
   static Future<bool> requestVideosAccess() async {
     if (!Platform.isAndroid) return true;
     if (await hasVideosAccess()) return true;
 
     try {
-      await [Permission.videos, Permission.notification].request();
+      await videosTabPermissions.request();
     } catch (e) {
       debugPrint('[PermissionService] Falha ao pedir vídeos: $e');
     }

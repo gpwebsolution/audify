@@ -120,6 +120,23 @@ class GalleryProvider extends ChangeNotifier {
     return granted;
   }
 
+  /// Primeira abertura de aba da sessão já usada para o pedido
+  /// automático (item 1.11): re-pedir a cada troca de aba seria uma
+  /// rajada nova.
+  bool _tabAutoAsked = false;
+
+  /// Item 1.11 — chamado ao abrir a aba Galeria: pede a permissão UMA vez
+  /// por sessão e só se ela ainda faltar. A tela explicativa da aba já
+  /// está montada antes (o caller espera o frame) — o diálogo do sistema
+  /// não aparece sem contexto. O botão "Permitir" da tela segue
+  /// disponível para tentativas seguintes.
+  Future<void> requestAccessOnTabOpen() async {
+    if (_tabAutoAsked) return;
+    _tabAutoAsked = true;
+    if (!_permissionDenied) return;
+    await requestAccess();
+  }
+
   /// Remove fotos confirmadas como APAGADAS do aparelho.
   ///
   /// Filtra a página carregada, descarta as miniaturas (memória + disco) e

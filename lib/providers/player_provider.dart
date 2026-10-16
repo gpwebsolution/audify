@@ -5,6 +5,7 @@ import '../models/song_model.dart';
 import '../repositories/session_repository.dart';
 import '../repositories/song_repository.dart';
 import '../services/audio_service.dart';
+import '../services/error_log_service.dart';
 import '../services/permission_service.dart';
 import '../utils/playback_queue.dart';
 import 'settings_provider.dart';
@@ -48,6 +49,13 @@ class PlayerProvider extends ChangeNotifier {
   /// Teto de falhas seguidas antes de PARAR (e não pular mais). Com a
   /// fila toda morta, pular indefinidamente só aquece o aparelho.
   static const int maxConsecutivePlayFailures = 3;
+
+  /// POST_NOTIFICATIONS pedido nesta sessão (item 1.11 — só no primeiro
+  /// play, nunca no boot).
+  bool _notificationPermissionAsked = false;
+
+  /// Implementação do pedido de notificação (injetável para teste).
+  final Future<void> Function() _requestNotificationPermission;
 
   Song? _currentSong;
 
@@ -97,9 +105,12 @@ class PlayerProvider extends ChangeNotifier {
     SongRepository? songRepository,
     SessionRepository? sessionRepository,
     PlaybackQueue? playbackQueue,
+    Future<void> Function()? requestNotificationPermission,
   }) : _songRepository = songRepository ?? SongRepository(),
        _sessionRepository = sessionRepository ?? SessionRepository(),
-       _playbackQueue = playbackQueue ?? PlaybackQueue() {
+       _playbackQueue = playbackQueue ?? PlaybackQueue(),
+       _requestNotificationPermission = requestNotificationPermission ??
+           PermissionService.requestNotificationAccess {
     // Botões da notificação/tela de bloqueio (audio_service) delegam a
     // navegação da fila para este provider.
     _audioService.onSkipToNext = next;
@@ -140,9 +151,11 @@ class PlayerProvider extends ChangeNotifier {
     _notify();
 
     _permission = _mapResult(await PermissionService.requestAudioAccess());
-    // Permissões de vídeo + galeria (um dialog do sistema, não bloqueante
-    // para a biblioteca de música).
-    await PermissionService.requestMediaGroup();
+    // Item 1.11: o boot NÃO pede mais vídeo/galeria/notificação (rajada
+    // antes de o usuário abrir essas abas). Vídeo e galeria são pedidos
+    // na própria aba (VideoProvider/GalleryProvider.requestAccessOnTabOpen,
+    // com tela explicativa antes) e POST_NOTIFICATIONS no primeiro play
+    // (_maybeAskNotificationPermission).
     if (_permission != AudioPermissionState.granted) {
       // Sem permissão o app ainda funciona com os assets do bundle.
       await _loadSongs(includeDevice: false);
@@ -256,6 +269,10 @@ class PlayerProvider extends ChangeNotifier {
     _position = Duration.zero;
     _duration = Duration.zero;
     _notify(); // destaca a faixa imediatamente
+    // Item 1.11: POST_NOTIFICATIONS no primeiro play — fire-and-forget
+    // antes de tocar, para o sistema já ter a permissão quando a
+    // notificação de mídia for postada. Nunca atrasa a faixa.
+    _maybeAskNotificationPermission();
     await _audioService.playSong(song);
     // playSong limpa errorMessage no início e só o repreenche em falha:
     // abrir com sucesso zera o contador de falhas seguidas.
@@ -265,6 +282,29 @@ class PlayerProvider extends ChangeNotifier {
     // Mantém a fila/índice/modos do MediaSession sincronizados com o
     // que está tocando (Bluetooth/Android Auto leem daqui).
     _publishQueueToService();
+  }
+
+  /// Item 1.11 — POST_NOTIFICATIONS no primeiro play (nunca no boot).
+  /// Uma única tentativa por sessão; o pedido em si é fire-and-forget
+  /// com try/catch — permissão não pode travar nem derrubar a faixa.
+  void _maybeAskNotificationPermission() {
+    if (_notificationPermissionAsked) return;
+    _notificationPermissionAsked = true;
+    _askNotificationPermission();
+  }
+
+  Future<void> _askNotificationPermission() async {
+    try {
+      await _requestNotificationPermission();
+      // Concedida no MEIO da faixa: o sistema descarta notificações
+      // postadas sem permissão e não as recria sozinho — republica o
+      // estado para a notificação de mídia aparecer já com o grant.
+      if (!_isDisposed && await PermissionService.hasNotificationAccess()) {
+        _audioService.broadcastPlaybackState();
+      }
+    } catch (e, s) {
+      ErrorLogService.logSync('player/notification', e, s);
+    }
   }
 
   /// Chamado pelo [AudioService] quando uma faixa FALHOU ao abrir.
