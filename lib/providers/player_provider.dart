@@ -15,6 +15,23 @@ export '../models/repeat_mode.dart' show RepeatMode;
 /// Estado da permissão de acesso às músicas do aparelho.
 enum AudioPermissionState { unknown, granted, denied, permanentlyDenied }
 
+/// Modo de agrupamento da aba Música (item 2.2).
+///
+/// A lógica de chave e o agrupamento memoizado moram no provider
+/// ([PlayerProvider.visibleGroups]) porque o recálculo acontece SÓ na
+/// origem dos dados; a tela só desenha as linhas (lazy).
+enum MusicGroupMode { tracks, album, artist, folder }
+
+/// Um grupo do modo agrupado: chave do cabeçalho + faixas na ordem do
+/// catálogo. Imutável na prática — instância compartilhada entre rebuilds
+/// enquanto os entrarem do memo não mudarem (item 2.2).
+class SongGroup {
+  final String key;
+  final List<Song> songs;
+
+  const SongGroup({required this.key, required this.songs});
+}
+
 /// Gerenciamento de estado central do player.
 ///
 /// Responsabilidade: orquestrar a camada de áudio, o catálogo (MediaStore +
@@ -36,6 +53,15 @@ class PlayerProvider extends ChangeNotifier {
   List<Song> _songs = const [];
   List<Song> _visibleSongs = const [];
   String _searchQuery = '';
+
+  // ---- Memoização do modo agrupado (item 2.2) ----
+  // A tela recalculava o agrupamento + ordenação O(n log n) a cada build
+  // e montava TODOS os tiles (ListView eager). Agora o resultado fica
+  // guardado e só invalida quando muda a identidade da lista visível
+  // (catálogo/busca) ou o modo.
+  MusicGroupMode? _groupsMode;
+  List<Song>? _groupsSource;
+  List<SongGroup> _groups = const [];
   AudioPermissionState _permission = AudioPermissionState.unknown;
 
   /// Último instante em que a sessão foi persistida (throttle de 5s).
@@ -244,6 +270,61 @@ class PlayerProvider extends ChangeNotifier {
             final inAlbum = (s.album ?? '').toLowerCase().contains(q);
             return inTitle || inArtist || inAlbum;
           }).toList();
+  }
+
+  /// Grupos do modo agrupado — MEMOIZADO (item 2.2): recalcula apenas
+  /// quando mudam o catálogo/busca (identidade da lista visível) ou o
+  /// modo. A tela chamava isso a cada build; agora rebuilds que não
+  /// mexem nesses entradas reutilizam as mesmas instâncias.
+  List<SongGroup> visibleGroups(MusicGroupMode mode) {
+    final List<Song> source = _visibleSongs;
+    if (!identical(source, _groupsSource) || mode != _groupsMode) {
+      _groups = _groupSongs(source, mode);
+      _groupsSource = source;
+      _groupsMode = mode;
+    }
+    return _groups;
+  }
+
+  /// Agrupa por chave e ordena as chaves por minúsculas — MESMO
+  /// comportamento do código antigo da tela (só mudou o dono).
+  static List<SongGroup> _groupSongs(List<Song> songs, MusicGroupMode mode) {
+    final Map<String, List<Song>> byKey = <String, List<Song>>{};
+    for (final Song song in songs) {
+      byKey.putIfAbsent(_groupKeyOf(song, mode), () => <Song>[]).add(song);
+    }
+    final List<String> sortedKeys = byKey.keys.toList()
+      ..sort(
+        (String a, String b) => a.toLowerCase().compareTo(b.toLowerCase()),
+      );
+    return <SongGroup>[
+      for (final String key in sortedKeys)
+        SongGroup(key: key, songs: byKey[key]!),
+    ];
+  }
+
+  /// Chave de agrupamento da faixa (lógica movida da tela, idêntica:
+  /// álbum/artista com fallback amigável; pasta = diretório pai do
+  /// arquivo, assets agrupados em "Assets do app").
+  static String _groupKeyOf(Song song, MusicGroupMode mode) {
+    switch (mode) {
+      case MusicGroupMode.tracks:
+        return '';
+      case MusicGroupMode.album:
+        return song.album?.trim().isNotEmpty == true
+            ? song.album!.trim()
+            : 'Sem álbum';
+      case MusicGroupMode.artist:
+        return song.displayArtist;
+      case MusicGroupMode.folder:
+        final String? path = song.filePath;
+        if (path == null || path.isEmpty) return 'Assets do app';
+        final List<String> parts = path
+            .split('/')
+            .where((s) => s.isNotEmpty)
+            .toList();
+        return parts.length >= 2 ? parts[parts.length - 2] : '/';
+    }
   }
 
   /// Reconstrói a fila de reprodução na ordem atual (respeita shuffle).

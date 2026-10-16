@@ -1,5 +1,3 @@
-import 'dart:collection';
-
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -93,8 +91,6 @@ class MusicScreen extends StatefulWidget {
       'Faixa embutida no app, não pode ser excluída.';
 }
 
-enum _MusicGroupMode { tracks, album, artist, folder }
-
 /// Fatia do [PlayerProvider] exibida pela aba (item 2.1): um ÚNICO select
 /// estrutural — a tela reconstrói apenas quando um destes valores muda.
 /// Posição de reprodução não compõe a fatia: o progresso pertence ao mini
@@ -113,7 +109,7 @@ typedef _MusicView = ({
 class _MusicScreenState extends State<MusicScreen> with MediaSelection<String> {
   final TextEditingController _searchController = TextEditingController();
   String? _lastShownError;
-  _MusicGroupMode _groupMode = _MusicGroupMode.tracks;
+  MusicGroupMode _groupMode = MusicGroupMode.tracks;
   final Set<String> _collapsedGroups = {};
 
   @override
@@ -341,7 +337,7 @@ class _MusicScreenState extends State<MusicScreen> with MediaSelection<String> {
               scrollDirection: Axis.horizontal,
               padding: const EdgeInsets.symmetric(horizontal: 16),
               children: [
-                for (final mode in _MusicGroupMode.values)
+                for (final mode in MusicGroupMode.values)
                   Padding(
                     padding: const EdgeInsets.only(right: 8),
                     child: ChoiceChip(
@@ -370,51 +366,29 @@ class _MusicScreenState extends State<MusicScreen> with MediaSelection<String> {
     );
   }
 
-  static String _modeLabel(_MusicGroupMode mode) {
+  static String _modeLabel(MusicGroupMode mode) {
     switch (mode) {
-      case _MusicGroupMode.tracks:
+      case MusicGroupMode.tracks:
         return 'Faixas';
-      case _MusicGroupMode.album:
+      case MusicGroupMode.album:
         return 'Álbum';
-      case _MusicGroupMode.artist:
+      case MusicGroupMode.artist:
         return 'Artista';
-      case _MusicGroupMode.folder:
+      case MusicGroupMode.folder:
         return 'Pasta';
     }
   }
 
-  static IconData _modeIcon(_MusicGroupMode mode) {
+  static IconData _modeIcon(MusicGroupMode mode) {
     switch (mode) {
-      case _MusicGroupMode.tracks:
+      case MusicGroupMode.tracks:
         return Icons.music_note_outlined;
-      case _MusicGroupMode.album:
+      case MusicGroupMode.album:
         return Icons.album_outlined;
-      case _MusicGroupMode.artist:
+      case MusicGroupMode.artist:
         return Icons.person_outline;
-      case _MusicGroupMode.folder:
+      case MusicGroupMode.folder:
         return Icons.folder_outlined;
-    }
-  }
-
-  /// Chave de agrupamento da faixa no modo atual.
-  String _groupKeyOf(Song song) {
-    switch (_groupMode) {
-      case _MusicGroupMode.tracks:
-        return '';
-      case _MusicGroupMode.album:
-        return song.album?.trim().isNotEmpty == true
-            ? song.album!.trim()
-            : 'Sem álbum';
-      case _MusicGroupMode.artist:
-        return song.displayArtist;
-      case _MusicGroupMode.folder:
-        final String? path = song.filePath;
-        if (path == null || path.isEmpty) return 'Assets do app';
-        final List<String> parts = path
-            .split('/')
-            .where((s) => s.isNotEmpty)
-            .toList();
-        return parts.length >= 2 ? parts[parts.length - 2] : '/';
     }
   }
 
@@ -450,7 +424,7 @@ class _MusicScreenState extends State<MusicScreen> with MediaSelection<String> {
       return _buildEmptyState(context, view);
     }
 
-    if (_groupMode == _MusicGroupMode.tracks) {
+    if (_groupMode == MusicGroupMode.tracks) {
       return ListView.builder(
         padding: const EdgeInsets.symmetric(vertical: 8),
         itemCount: view.visibleSongs.length,
@@ -472,62 +446,61 @@ class _MusicScreenState extends State<MusicScreen> with MediaSelection<String> {
       );
     }
 
-    // ---- Modo agrupado (Álbum/Artista/Pasta) ----
-    final LinkedHashMap<String, List<Song>> groups = LinkedHashMap();
-    for (final Song song in view.visibleSongs) {
-      groups.putIfAbsent(_groupKeyOf(song), () => []).add(song);
-    }
-    final List<MapEntry<String, List<Song>>> sortedEntries =
-        groups.entries.toList()
-          ..sort((a, b) => a.key.toLowerCase().compareTo(b.key.toLowerCase()));
-
-    final List<Widget> sections = <Widget>[];
-    for (final entry in sortedEntries) {
-      final String key = entry.key;
-      final List<Song> songs = entry.value;
-      final bool collapsed = _collapsedGroups.contains(key);
-      sections.add(
-        _GroupHeader(
-          icon: _modeIcon(_groupMode),
-          title: key,
-          count: songs.length,
-          collapsed: collapsed,
-          onToggle: () => setState(() {
-            if (!collapsed) {
-              _collapsedGroups.add(key);
-            } else {
-              _collapsedGroups.remove(key);
-            }
-          }),
-          onPlayAll: () => provider.playQueue(songs, 0),
-        ),
-      );
-      if (!collapsed) {
-        for (int i = 0; i < songs.length; i++) {
-          final Song song = songs[i];
-          final bool isCurrent = view.currentSong?.id == song.id;
-          sections.add(
-            SongListTile(
-              song: song,
-              isCurrent: isCurrent,
-              isPlaying: isCurrent && view.isPlaying,
-              selected: isSelected(song.id),
-              selectionMode: isSelectionMode,
-              // O grupo vira a fila: próxima/anterior navega dentro dele.
-              onTap: () => isSelectionMode
-                  ? toggleSelect(song.id)
-                  : provider.playQueue(songs, i),
-              onLongPress: () => _onSongLongPress(song),
-              onMenuTap: () => _showSongMenu(context, provider, song),
-            ),
-          );
-        }
+    // ---- Modo agrupado (Álbum/Artista/Pasta) — item 2.2 ----
+    // Agrupamento memoizado no provider (recalcula só quando mudam
+    // catálogo, busca ou modo); aqui só se ACHATA em linhas (cabeçalho +
+    // faixas dos grupos expandidos) e renderiza com ListView.builder —
+    // a árvore só materializa a viewport, não os milhares de tiles.
+    final List<SongGroup> groups = provider.visibleGroups(_groupMode);
+    final List<_GroupRow> rows = <_GroupRow>[];
+    for (final SongGroup group in groups) {
+      rows.add(_GroupRow.header(group));
+      if (_collapsedGroups.contains(group.key)) continue;
+      for (int i = 0; i < group.songs.length; i++) {
+        rows.add(_GroupRow.item(group, i));
       }
     }
 
-    return ListView(
+    return ListView.builder(
       padding: const EdgeInsets.symmetric(vertical: 8),
-      children: sections,
+      itemCount: rows.length,
+      itemBuilder: (context, index) {
+        final _GroupRow row = rows[index];
+        if (row.indexInGroup < 0) {
+          // Cabeçalho: expandir/recolher + "tocar grupo".
+          final SongGroup group = row.group;
+          final bool collapsed = _collapsedGroups.contains(group.key);
+          return _GroupHeader(
+            icon: _modeIcon(_groupMode),
+            title: group.key,
+            count: group.songs.length,
+            collapsed: collapsed,
+            onToggle: () => setState(() {
+              if (!collapsed) {
+                _collapsedGroups.add(group.key);
+              } else {
+                _collapsedGroups.remove(group.key);
+              }
+            }),
+            onPlayAll: () => provider.playQueue(group.songs, 0),
+          );
+        }
+        final Song song = row.group.songs[row.indexInGroup];
+        final bool isCurrent = view.currentSong?.id == song.id;
+        return SongListTile(
+          song: song,
+          isCurrent: isCurrent,
+          isPlaying: isCurrent && view.isPlaying,
+          selected: isSelected(song.id),
+          selectionMode: isSelectionMode,
+          // O grupo vira a fila: próxima/anterior navega dentro dele.
+          onTap: () => isSelectionMode
+              ? toggleSelect(song.id)
+              : provider.playQueue(row.group.songs, row.indexInGroup),
+          onLongPress: () => _onSongLongPress(song),
+          onMenuTap: () => _showSongMenu(context, provider, song),
+        );
+      },
     );
   }
 
@@ -770,6 +743,18 @@ class _MusicScreenState extends State<MusicScreen> with MediaSelection<String> {
       ),
     );
   }
+}
+
+/// Linha achatada do modo agrupado (item 2.2): cabeçalho
+/// (indexInGroup < 0) ou faixa do grupo (indexInGroup >= 0 — a faixa
+/// mora em group.songs[indexInGroup]).
+class _GroupRow {
+  final SongGroup group;
+  final int indexInGroup;
+
+  _GroupRow.header(this.group) : indexInGroup = -1;
+
+  _GroupRow.item(this.group, this.indexInGroup);
 }
 
 /// Cabeçalho de grupo (Álbum/Artista/Pasta): expande/recolhe e toca o
