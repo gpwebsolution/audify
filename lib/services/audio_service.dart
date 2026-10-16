@@ -121,6 +121,39 @@ class AudioService extends BaseAudioHandler {
   Future<void> Function(bool enabled)? onSetShuffleMode;
   Future<void> Function(int index)? onSkipToQueueIndex;
 
+  // ---------------------------------------------------------------------
+  // Item 3.4 — gapless e crossfade.
+  // ---------------------------------------------------------------------
+
+  /// Notificado quando o PLAYER avança sozinho (gapless) para outro
+  /// índice da fila carregada. O [PlayerProvider] sincroniza a
+  /// PlaybackQueue/UI sem recarregar — este é o único sinal de
+  /// "a faixa X começou" (completed só chega no FIM da fila).
+  /// `(index, song)` — o provider valida o id no índice e ignora
+  /// eventos espúrios (divergência entre fila publicada e carregada).
+  void Function(int index, Song song)? onQueueIndexChanged;
+
+  /// Leitura ao vivo da preferência de crossfade
+  /// ([SettingsProvider.crossfadeSeconds]); null ou 0 = desligado.
+  /// Getter (não int) para refletir mudanças em Configurações sem
+  /// recriar o serviço — mesmo padrão de [pauseOnNoisyEnabled].
+  int Function()? crossfadeSeconds;
+
+  /// Fila enviada por último em [publishQueue]. Quando contém a faixa
+  /// pedida, [playSong] carrega a FILA INTEIRA no player (gapless) em
+  /// vez de uma fonte única. A lista nunca é mutada in-place pelo
+  /// provider (rebuild/setQueue sempre trocam a identidade).
+  List<Song> _queueSnapshot = const <Song>[];
+
+  /// Ids da fila que está CARREGADA no player — comparados com o
+  /// snapshot para decidir entre seek (skip sem recarga) e
+  /// [AudioPlayer.setAudioSources] (fila nova).
+  List<String> _loadedQueueIds = const <String>[];
+
+  /// Índice conhecido do player — dedupe do replay do
+  /// `currentIndexStream` e das recargas feitas pelo próprio serviço.
+  int? _lastPlayerIndex;
+
   /// Modo de repeat/shuffle APLICADOS no provider — publicados no
   /// [PlaybackState] para o sistema exibir/refletir os botões certos.
   RepeatMode _publishedRepeat = RepeatMode.off;
@@ -215,6 +248,10 @@ class AudioService extends BaseAudioHandler {
   /// updatePosition + updateTime).
   static const Duration broadcastInterval = Duration(seconds: 1);
 
+  /// Teto da busca de capa da notificação (item 3.4): além dele o
+  /// mediaItem sai SEM capa — arte nunca atrasa a reprodução.
+  static const Duration _mediaArtTimeout = Duration(seconds: 2);
+
   /// Fila do provider → MediaSession (Android Auto/Bluetooth/browse).
   ///
   /// A fila é enviada APENAS quando a lista muda de identidade (troca de
@@ -224,6 +261,9 @@ class AudioService extends BaseAudioHandler {
   /// corrente continua na notificação via [mediaItem].
   void publishQueue(List<Song> songs, int currentIndex) {
     try {
+      // Item 3.4: o snapshot alimenta o gapless do [playSong] — guardado
+      // SEMPRE (mesmo com a lista idêntica, o índice abaixo muda).
+      _queueSnapshot = songs;
       if (!identical(_publishedQueue, songs)) {
         _publishedQueue = songs;
         queue.add(<MediaItem>[
@@ -247,10 +287,26 @@ class AudioService extends BaseAudioHandler {
 
   /// Publica os modos repeat/shuffle aplicados pelo provider (chamar após
   /// QUALQUER mudança de modo — inclusive a vinda do próprio sistema).
+  ///
+  /// Item 3.4: o repeat também é aplicado no player como modos NATIVOS
+  /// (gapless: a fila carregada avança/repete sem intervalo). A
+  /// [PlaybackQueue] continua sendo a fonte da verdade — aqui só
+  /// espelhamos o que ela decidiu.
   void syncModes({required RepeatMode repeat, required bool shuffle}) {
     try {
       _publishedRepeat = repeat;
       _publishedShuffle = shuffle;
+      unawaited(
+        _player
+            .setLoopMode(switch (repeat) {
+              RepeatMode.off => LoopMode.off,
+              RepeatMode.all => LoopMode.all,
+              RepeatMode.one => LoopMode.one,
+            })
+            .catchError((Object e, StackTrace s) {
+          ErrorLogService.logSync('audio/setLoopMode', e, s);
+        }),
+      );
       broadcastPlaybackState();
     } catch (e, s) {
       ErrorLogService.logSync('audio/syncModes', e, s);
@@ -313,6 +369,7 @@ class AudioService extends BaseAudioHandler {
   AudioService({
     this.degradedMode = false,
     this.pauseOnNoisyEnabled,
+    this.crossfadeSeconds,
     this.eqProbeTimeout = const Duration(seconds: 5),
     DateTime Function()? clock,
   }) : _clock = clock ?? DateTime.now {
@@ -352,6 +409,10 @@ class AudioService extends BaseAudioHandler {
           // [broadcastInterval]. O sistema projeta o avanço real a partir
           // de updatePosition/updateTime, então não precisa de tick.
           broadcastPlaybackState(throttled: true);
+          // Item 3.4: o crossfade é regulado por posição (fade-in nos
+          // primeiros X s / fade-out nos últimos X s) — ver
+          // [tickCrossfade].
+          unawaited(tickCrossfade());
         } catch (e, s) {
           ErrorLogService.logSync('audio/onPosition', e, s);
         }
@@ -383,6 +444,44 @@ class AudioService extends BaseAudioHandler {
           ErrorLogService.logSync('audio/onState', e, s);
         }
       }),
+      // Item 3.4 — gapless: com a fila inteira carregada, o player
+      // avança SOZINHO para a próxima faixa e o índice muda sem passar
+      // por `completed` (este só chega no fim da fila). Guarda contra o
+      // replay do stream e contra eventos sem fila carregada.
+      _player.currentIndexStream.listen((int? index) {
+        try {
+          if (index == null) return;
+          if (index == _lastPlayerIndex) return;
+          if (_loadedQueueIds.isEmpty) return;
+          _lastPlayerIndex = index;
+          unawaited(_onPlayerIndexChanged(index));
+        } catch (e, s) {
+          ErrorLogService.logSync('audio/onQueueIndex', e, s);
+        }
+      }),
+      // Item 3.4 — falha de arquivo DURANTE a reprodução da playlist:
+      // o plugin emite PlayerException com o índice da faixa morta; o
+      // provider decide o skip (mesmo callback/critério do playSong).
+      _player.errorStream.listen(
+        (PlayerException error) {
+          try {
+            final int? idx = error.index;
+            final Song? failed = (idx != null &&
+                    idx >= 0 &&
+                    idx < _queueSnapshot.length)
+                ? _queueSnapshot[idx]
+                : _currentSong;
+            if (failed == null) return;
+            status.value = PlayerStatus.idle;
+            errorMessage.value = userMessage('tocar "${failed.title}"', error);
+            unawaited(_notifyPlaybackFailed(failed));
+          } catch (e, s) {
+            ErrorLogService.logSync('audio/onPlayerError', e, s);
+          }
+        },
+        onError: (Object e, StackTrace s) =>
+            ErrorLogService.logSync('audio/errorStream', e, s),
+      ),
     ]);
   }
 
@@ -568,33 +667,50 @@ class AudioService extends BaseAudioHandler {
     }
   }
 
-  /// Reproduz uma faixa do catálogo.
-  ///
-  /// Estratégia para troca rápida de música: `stop()` primeiro (cancela a
-  /// faixa anterior e libera recursos), só então seta a nova fonte. Sem
-  /// isso, duas reproduções podem sobrepor-se no mesmo player.
-  ///
-  /// Fonte conforme a origem: assets usam `AudioSource.asset`; faixas do
-  /// aparelho usam `AudioSource.uri` com o caminho absoluto do arquivo.
-  /// (just_audio carrega no `setAudioSource` — falha de arquivo lança aqui,
-  /// alimentando o mesmo catch de antes: mensagem amigável + skip 1.7.)
-  Future<void> playSong(Song song) async {
+  // ---------------------------------------------------------------------
+  // Item 3.4 — gapless: helpers de fila/carregamento.
+  // ---------------------------------------------------------------------
+
+  /// Fonte de áudio de uma faixa (asset x arquivo do aparelho).
+  static AudioSource _sourceFor(Song song) => song.isAsset
+      ? AudioSource.asset(song.assetKey!)
+      : AudioSource.uri(Uri.file(song.filePath!));
+
+  static List<String> _idsOf(List<Song> songs) =>
+      <String>[for (final Song s in songs) s.id];
+
+  /// True quando os ids carregados são EXATAMENTE os da fila atual —
+  /// mesma ordem/tamanho (aí um novo playSong vira seek, sem recarga).
+  static bool _sameQueue(List<String> loaded, List<Song> snapshot) {
+    if (loaded.length != snapshot.length) return false;
+    for (int i = 0; i < loaded.length; i++) {
+      if (loaded[i] != snapshot[i].id) return false;
+    }
+    return true;
+  }
+
+  /// Item 3.4: o player mudou de índice SOZINHO (transição gapless).
+  /// Atualiza o estado do serviço (faixa/notificação) e notifica o
+  /// provider — sem recarregar nada.
+  Future<void> _onPlayerIndexChanged(int index) async {
+    final List<Song> snap = _queueSnapshot;
+    if (index < 0 || index >= snap.length) return;
+    final Song song = snap[index];
+    _currentSong = song;
+    _publishedQueueIndex = index;
+    await _updateMediaItem(song);
+    broadcastPlaybackState();
+    onQueueIndexChanged?.call(index, song);
+  }
+
+  /// Notificação/tela de bloqueio acompanham a faixa (capa via cache em
+  /// disco — assíncrono com guarda de erro). O [_mediaArtTimeout] limita
+  /// a capa: notificação/capa NUNCA podem atrasar a reprodução (disco
+  /// cheio, canal nativo lento); sem arte a UI usa o fallback.
+  Future<void> _updateMediaItem(Song song) async {
     try {
-      _currentSong = song;
-      errorMessage.value = null;
-      await _player.stop();
-
-      final AudioSource source = song.isAsset
-          ? AudioSource.asset(song.assetKey!)
-          : AudioSource.uri(Uri.file(song.filePath!));
-      await _player.setAudioSource(source);
-      await _player.play();
-
-      // Atualiza a notificação de mídia (título, artista, duração).
-      // A capa vem de um ARQUIVO no cache do app (Uri.file) — o
-      // content:// legado do albumart falha no Android 10+ e faixa de
-      // asset não tinha capa nenhuma. Ver [NotificationArtCache].
-      final Uri? artUri = await NotificationArtCache.uriFor(song);
+      final Uri? artUri = await NotificationArtCache.uriFor(song)
+          .timeout(_mediaArtTimeout);
       mediaItem.add(MediaItem(
         id: song.id,
         title: song.title,
@@ -603,6 +719,144 @@ class AudioService extends BaseAudioHandler {
         duration: song.duration,
         artUri: artUri,
       ));
+    } catch (e, s) {
+      // Timeout/falha: notifica SEM capa em vez de travar o playSong.
+      ErrorLogService.logSync('audio/mediaItem', e, s);
+      mediaItem.add(MediaItem(
+        id: song.id,
+        title: song.title,
+        artist: song.displayArtist,
+        album: song.album,
+        duration: song.duration,
+      ));
+    }
+  }
+
+  /// Encaminha a falha para o provider (que decide o skip, com teto de
+  /// falhas seguidas). Guardado: um throw aqui escaparia para a zona.
+  Future<void> _notifyPlaybackFailed(Song failed) async {
+    try {
+      await onPlaybackFailed?.call(failed);
+    } catch (e, s) {
+      ErrorLogService.logSync('audio/onPlaybackFailed', e, s);
+    }
+  }
+
+  // ---------------------------------------------------------------------
+  // Item 3.4 — crossfade (fade de volume por posição, 0–12 s).
+  //
+  // Sem sobreposição de áudio (1 player): fade-out nos últimos X s da
+  // faixa + fade-in nos primeiros X s da próxima — a troca é a própria
+  // transição gapless. O sono (item 3.1) tem PRIORIDADE: com timer
+  // ativo o crossfade não atua para os dois fades brigarem pelo volume.
+  // ---------------------------------------------------------------------
+
+  /// Fator de volume do crossfade no instante [position] (1.0 = sem
+  /// efeito, 0.0 = mudo). Função pura — testável sem player: fade-in
+  /// nos primeiros [crossfadeSeconds] s e fade-out nos últimos; o menor
+  /// dos dois manda (o meio da faixa toca em volume normal e faixas
+  /// mais curtas que o crossfade fazem um "triângulo" suave).
+  static double crossfadeVolumeFactor(
+    Duration position,
+    Duration duration,
+    int crossfadeSeconds,
+  ) {
+    if (crossfadeSeconds <= 0) return 1.0;
+    if (duration <= Duration.zero) return 1.0;
+    final int cfMs = crossfadeSeconds * 1000;
+    final int posMs = position.inMilliseconds;
+    final int remainingMs = duration.inMilliseconds - posMs;
+    final double fadeIn = (posMs / cfMs).clamp(0.0, 1.0).toDouble();
+    final double fadeOut = (remainingMs / cfMs).clamp(0.0, 1.0).toDouble();
+    return fadeIn < fadeOut ? fadeIn : fadeOut;
+  }
+
+  /// Aplica o fator do crossfade no tick de posição (o [_applyVolume]
+  /// tem guarda de mudança — ticks em volume normal não tocam canal).
+  /// `@visibleForTesting`: os testes disparam o fade de forma
+  /// determinística (sem depender do timer de posição do just_audio).
+  @visibleForTesting
+  Future<void> tickCrossfade() async {
+    try {
+      // Sono ativo: o fade do timer manda (regra de prioridade).
+      if (_sleepMode != SleepTimerMode.off) return;
+      final int cf = crossfadeSeconds?.call() ?? 0;
+      if (cf <= 0) {
+        // Desligado/depois de uma janela: retorna à base.
+        await _applyVolume(1.0);
+        return;
+      }
+      if (status.value != PlayerStatus.playing) {
+        // Pausado/fim: sai da janela (retomada corrige no próximo tick).
+        await _applyVolume(1.0);
+        return;
+      }
+      final double factor = crossfadeVolumeFactor(
+        position.value,
+        duration.value,
+        cf,
+      );
+      await _applyVolume(factor);
+    } catch (e, s) {
+      ErrorLogService.logSync('audio/crossfade', e, s);
+    }
+  }
+
+  /// Reproduz uma faixa do catálogo.
+  ///
+  /// Toca uma faixa do catálogo posicionando-a na fila publicada.
+  ///
+  /// Item 3.4 — três caminhos:
+  ///  - MESMA fila já carregada: só `seek` (gapless, sem recarga);
+  ///  - fila publicada nova/diferente: carrega a FILA INTEIRA
+  ///    (`setAudioSources`) — o player avança sozinho entre faixas;
+  ///  - sem fila publicada: fonte única (serviço isolado).
+  ///
+  /// Falha de arquivo/alvo continua no mesmo catch de antes: mensagem
+  /// amigável + skip 1.7 (via `onPlaybackFailed`).
+  Future<void> playSong(Song song) async {
+    try {
+      _currentSong = song;
+      errorMessage.value = null;
+
+      final List<Song> snap = _queueSnapshot;
+      final int snapIdx = snap.indexWhere((Song s) => s.id == song.id);
+
+      if (snapIdx >= 0 && _sameQueue(_loadedQueueIds, snap)) {
+        // Mesma fila já carregada (skip manual, replay, troca de faixa
+        // dentro da mesma fila): só REPOSICIONA — gapless, sem recarga
+        // e sem o corte de stop → setAudioSource antigo.
+        _lastPlayerIndex = snapIdx;
+        await _player.seek(Duration.zero, index: snapIdx);
+        if (!_player.playing) await _player.play();
+      } else if (snapIdx >= 0) {
+        // Fila nova (primeira carga, shuffle/rebuild, repeat mudou):
+        // carrega a FILA INTEIRA — o player avança sozinho entre
+        // faixas (item 3.4).
+        await _player.stop();
+        await _player.setAudioSources(
+          <AudioSource>[for (final Song s in snap) _sourceFor(s)],
+          initialIndex: snapIdx,
+          initialPosition: Duration.zero,
+        );
+        _loadedQueueIds = _idsOf(snap);
+        _lastPlayerIndex = snapIdx;
+        await _player.play();
+      } else {
+        // Sem fila publicada (serviço usado isolado): fonte única —
+        // comportamento antigo.
+        await _player.stop();
+        await _player.setAudioSources(<AudioSource>[_sourceFor(song)]);
+        _loadedQueueIds = <String>[song.id];
+        _lastPlayerIndex = 0;
+        await _player.play();
+      }
+
+      // Atualiza a notificação de mídia (título, artista, duração).
+      // A capa vem de um ARQUIVO no cache do app (Uri.file) — o
+      // content:// legado do albumart falha no Android 10+ e faixa de
+      // asset não tinha capa nenhuma. Ver [NotificationArtCache].
+      await _updateMediaItem(song);
       broadcastPlaybackState();
       // Item 3.3: com a plataforma ativa agora, o equalizador dá probe
       // (se ainda desconhecido) e o estado persistido vai para o aparelho.
@@ -618,11 +872,7 @@ class AudioService extends BaseAudioHandler {
       // [shouldSkipOnOpenFailure]): ele decide se pula para a próxima
       // faixa, com limite de falhas seguidas (PlayerProvider).
       if (shouldSkipOnOpenFailure(e)) {
-        try {
-          await onPlaybackFailed?.call(song);
-        } catch (e2, s2) {
-          ErrorLogService.logSync('audio/onPlaybackFailed', e2, s2);
-        }
+        await _notifyPlaybackFailed(song);
       }
     }
   }
@@ -786,6 +1036,22 @@ class AudioService extends BaseAudioHandler {
   /// chamada direto após avançar o relógio.
   Future<bool> checkSleepTimer() async {
     try {
+      // Item 3.4 — "ao fim da faixa" com repeat ONE: o player repete a
+      // faixa NO NATIVO (LoopMode.one, gapless) e nenhum evento
+      // `completed`/transição chega para o provider consumir. Aqui o
+      // fim é detectado pela posição (~400 ms do fim, só enquanto
+      // toca). Com repeat off/all os eventos normais (fim da fila /
+      // transição gapless) continuam consumindo antes, via provider —
+      // o consume é one-shot, então um duplo disparo não existe.
+      if (_sleepMode == SleepTimerMode.trackEnd &&
+          _publishedRepeat == RepeatMode.one &&
+          status.value == PlayerStatus.playing &&
+          duration.value > Duration.zero &&
+          duration.value - position.value <=
+              const Duration(milliseconds: 400)) {
+        consumeSleepAtTrackEnd(); // agenda fade/stop (one-shot)
+        return true;
+      }
       if (_sleepMode != SleepTimerMode.duration) return false;
       final DateTime? deadline = _sleepDeadline;
       if (deadline == null) return false;

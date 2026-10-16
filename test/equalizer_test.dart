@@ -23,180 +23,7 @@ import 'package:audify/providers/settings_provider.dart';
 import 'package:audify/screens/equalizer_screen.dart';
 import 'package:audify/services/audio_service.dart';
 
-/// Mock dos canais do just_audio (principal + por jogador + eventos) —
-/// simula um aparelho com/sem equalizador sem tocar em hardware.
-class _JustAudioMock {
-  _JustAudioMock({
-    this.minDb = -15,
-    this.maxDb = 15,
-    this.bandCount = 5,
-    this.failGetParameters = false,
-    this.missingGetParameters = false,
-  });
-
-  final double minDb;
-  final double maxDb;
-  final int bandCount;
-  final bool failGetParameters;
-
-  /// Simula o canal do equalizador SEM implementação nativa (a leitura do
-  /// parâmetro responde "no implementation found", como num aparelho que
-  /// não expõe o Equalizer do Android).
-  final bool missingGetParameters;
-
-  /// Todas as chamadas registradas (qualquer método), para asserts
-  /// genéricos (ex.: conteúdo do 'init').
-  final List<MethodCall> calls = <MethodCall>[];
-
-  static const List<double> _centers = <double>[60, 230, 910, 3600, 14000];
-
-  String? _playerId;
-
-  List<MethodCall> callsWhere(String method) =>
-      calls.where((MethodCall c) => c.method == method).toList();
-
-  /// Ganhos enviados por banda, na ordem das chamadas.
-  List<double> get gainCalls => callsWhere('androidEqualizerBandSetGain')
-      .map(
-        (MethodCall c) => ((c.arguments as Map)['gain'] as num).toDouble(),
-      )
-      .toList();
-
-  List<int> get gainBands => callsWhere('androidEqualizerBandSetGain')
-      .map((MethodCall c) => (c.arguments as Map)['bandIndex'] as int)
-      .toList();
-
-  /// Estados enviados em audioEffectSetEnabled.
-  List<bool> get enabledCalls => callsWhere('audioEffectSetEnabled')
-      .map((MethodCall c) => (c.arguments as Map)['enabled'] as bool)
-      .toList();
-
-  /// Instala os mocks; o retorno é o teardown (addTearDown).
-  void Function() install() {
-    final TestWidgetsFlutterBinding binding =
-        TestWidgetsFlutterBinding.ensureInitialized();
-    const MethodChannel main =
-        MethodChannel('com.ryanheise.just_audio.methods');
-
-    binding.defaultBinaryMessenger.setMockMethodCallHandler(
-      main,
-      (MethodCall call) async {
-        calls.add(call);
-        if (call.method == 'init') {
-          _installPlayerChannels(binding);
-        }
-        // void/Map: resposta vazia cobre init (void) e os métodos com
-        // Response.fromMap (payload nunca-nulo).
-        return <dynamic, dynamic>{};
-      },
-    );
-
-    return () {
-      binding.defaultBinaryMessenger.setMockMethodCallHandler(main, null);
-      final String? id = _playerId;
-      if (id != null) {
-        binding.defaultBinaryMessenger.setMockMethodCallHandler(
-          MethodChannel('com.ryanheise.just_audio.methods.$id'),
-          null,
-        );
-        binding.defaultBinaryMessenger.setMockStreamHandler(
-          EventChannel('com.ryanheise.just_audio.events.$id'),
-          null,
-        );
-        binding.defaultBinaryMessenger.setMockStreamHandler(
-          EventChannel('com.ryanheise.just_audio.data.$id'),
-          null,
-        );
-      }
-    };
-  }
-
-  void _installPlayerChannels(TestWidgetsFlutterBinding binding) {
-    // O id vem do pedido de init (a UI Dart o gerou antes de chamar).
-    // Como o handler não expõe o retorno, re-registramos no canal
-    // derivado — o id está em algum init já registrado em `calls`.
-    final MethodCall init = callsWhere('init').last;
-    _playerId = ((init.arguments as Map)['id'] as String?) ?? 'player';
-    final String id = _playerId!;
-
-    binding.defaultBinaryMessenger.setMockMethodCallHandler(
-      MethodChannel('com.ryanheise.just_audio.methods.$id'),
-      (MethodCall call) async {
-        calls.add(call);
-        if (call.method == 'androidEqualizerGetParameters') {
-          if (missingGetParameters) {
-            throw MissingPluginException(
-              'No implementation found for method '
-              'androidEqualizerGetParameters',
-            );
-          }
-          if (failGetParameters) {
-            throw PlatformException(
-              code: 'error',
-              message: 'Equalizador não suportado',
-            );
-          }
-          return <dynamic, dynamic>{
-            'parameters': <dynamic, dynamic>{
-              'minDecibels': minDb,
-              'maxDecibels': maxDb,
-              'bands': <dynamic>[
-                for (int i = 0; i < bandCount; i++)
-                  <dynamic, dynamic>{
-                    'index': i,
-                    'lowerFrequency': _centers[i] * 0.8,
-                    'upperFrequency': _centers[i] * 1.2,
-                    'centerFrequency': _centers[i],
-                    'gain': 0.0,
-                  },
-              ],
-            },
-          };
-        }
-        // Demais métodos (load, setGain, setEnabled, dispose...):
-        // payload vazio é válido para todos os Response do plugin.
-        return <dynamic, dynamic>{};
-      },
-    );
-    // Eventos: stream respondida, porém sem nenhum evento — o estado
-    // inicial do player (idle) já satisfaz o carregamento do probe.
-    binding.defaultBinaryMessenger.setMockStreamHandler(
-      EventChannel('com.ryanheise.just_audio.events.$id'),
-      MockStreamHandler.inline(
-        onListen: (Object? arguments, MockStreamHandlerEventSink events) {
-          // sem eventos de propósito
-        },
-      ),
-    );
-    binding.defaultBinaryMessenger.setMockStreamHandler(
-      EventChannel('com.ryanheise.just_audio.data.$id'),
-      MockStreamHandler.inline(
-        onListen: (Object? arguments, MockStreamHandlerEventSink events) {
-          // sem eventos de propósito
-        },
-      ),
-    );
-  }
-}
-
-/// Instala o mock e registra o teardown automaticamente.
-_JustAudioMock _mockJustAudio({
-  double minDb = -15,
-  double maxDb = 15,
-  int bandCount = 5,
-  bool failGetParameters = false,
-  bool missingGetParameters = false,
-}) {
-  final _JustAudioMock mock = _JustAudioMock(
-    minDb: minDb,
-    maxDb: maxDb,
-    bandCount: bandCount,
-    failGetParameters: failGetParameters,
-    missingGetParameters: missingGetParameters,
-  );
-  addTearDown(mock.install());
-  return mock;
-}
+import 'support/just_audio_mock.dart';
 
 void main() {
   // ------------------------------------------------------------------
@@ -207,7 +34,7 @@ void main() {
     // Canais do just_audio respondem (evita o hack assíncrono de
     // disposeAllPlayers do _pluginPlatform), mas o Equalizer não tem
     // implementação: getParameters responde "no implementation found".
-    final _JustAudioMock mock = _mockJustAudio(missingGetParameters: true);
+    final JustAudioMock mock = mockJustAudio(missingGetParameters: true);
     final AudioService audio = AudioService(
       eqProbeTimeout: const Duration(milliseconds: 250),
     );
@@ -228,7 +55,7 @@ void main() {
   });
 
   test('probe com getParameters ERRANDO vira unsupported, sem crash', () async {
-    final _JustAudioMock mock = _mockJustAudio(failGetParameters: true);
+    final JustAudioMock mock = mockJustAudio(failGetParameters: true);
     final AudioService audio = AudioService(
       eqProbeTimeout: const Duration(milliseconds: 400),
     );
@@ -245,7 +72,7 @@ void main() {
   });
 
   test('probe COM canal saudável: supported, frequências e ganhos', () async {
-    final _JustAudioMock mock = _mockJustAudio();
+    final JustAudioMock mock = mockJustAudio();
     final AudioService audio = AudioService();
 
     // Estado ANTES da ativação: local, sem canal tocado.
@@ -284,7 +111,7 @@ void main() {
 
   test('ganho é clampado na faixa real e bandas extras são ignoradas',
       () async {
-    final _JustAudioMock mock = _mockJustAudio(
+    final JustAudioMock mock = mockJustAudio(
       minDb: -10,
       maxDb: 10,
       bandCount: 3,

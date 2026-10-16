@@ -90,6 +90,23 @@ class _SettingsScreenState extends State<SettingsScreen> {
           value: settings.pauseOnNoisy,
           onChanged: settings.setPauseOnNoisy,
         ),
+        // Item 3.4 — crossfade entre faixas.
+        ListTile(
+          leading: const Icon(Icons.blur_on),
+          title: const Text('Crossfade'),
+          subtitle: const Text(
+            'Transição suave entre faixas — o fim da atual cai e a '
+            'próxima sobe em volume (sem intervalo).',
+          ),
+          trailing: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(settings.crossfadeLabel),
+              const Icon(Icons.chevron_right),
+            ],
+          ),
+          onTap: () => _pickCrossfade(context, settings),
+        ),
         // Item 3.3 — tela própria do equalizador.
         ListTile(
           leading: const Icon(Icons.equalizer),
@@ -312,6 +329,46 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 },
               ),
           ],
+        ),
+      ),
+    );
+  }
+
+  /// Escolhe a duração do crossfade (item 3.4): 0 = desligado (padrão),
+  /// até 12 s. O valor é lido ao vivo pelo serviço (getter), então vale
+  /// na próxima transição sem reiniciar nada.
+  Future<void> _pickCrossfade(
+    BuildContext context,
+    SettingsProvider settings,
+  ) async {
+    await showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (BuildContext sheetContext) => SafeArea(
+        child: RadioGroup<int>(
+          groupValue: settings.crossfadeSeconds,
+          onChanged: (int? value) async {
+            if (value == null) return;
+            await settings.setCrossfadeSeconds(value);
+            if (sheetContext.mounted) Navigator.pop(sheetContext);
+          },
+          child: ListView(
+            shrinkWrap: true,
+            children: <Widget>[
+              for (final int option in SettingsProvider.crossfadeOptions)
+                RadioListTile<int>(
+                  value: option,
+                  title: Text(option == 0 ? 'Desligado' : '$option s'),
+                  subtitle: Text(
+                    option == 0
+                        ? 'Troca de faixa direta (padrão).'
+                        : 'Nos últimos ${option}s da faixa e nos '
+                            'primeiros ${option}s da próxima, o volume '
+                            'faz a transição.',
+                  ),
+                ),
+            ],
+          ),
         ),
       ),
     );

@@ -22,6 +22,7 @@ class SettingsProvider extends ChangeNotifier {
   static const String _minDurationKey = 'library_min_duration_seconds';
   static const String _ignoredFoldersKey = 'library_ignored_folders';
   static const String _playbackSpeedKey = 'playback_speed';
+  static const String _crossfadeKey = 'crossfade_seconds';
   static const String _eqEnabledKey = 'equalizer_enabled';
   static const String _eqBandsKey = 'equalizer_bands';
   static const String _eqPresetKey = 'equalizer_preset';
@@ -59,6 +60,14 @@ class SettingsProvider extends ChangeNotifier {
     1.5,
     2.0,
   ];
+
+  /// Crossfade (item 3.4): duração máxima da transição entre faixas, em
+  /// segundos. `0` = desligado (padrão); teto em 12 s (faixa do pedido).
+  static const int maxCrossfadeSeconds = 12;
+
+  /// Opções do seletor: desligado + 1..12 s.
+  static final List<int> crossfadeOptions =
+      List<int>.generate(maxCrossfadeSeconds + 1, (int i) => i);
 
   // ---- Equalizador (item 3.3) ----
 
@@ -153,6 +162,10 @@ class SettingsProvider extends ChangeNotifier {
   /// Velocidade de reprodução persistida (item 3.2). `1.0` = normal.
   double _playbackSpeed = 1.0;
 
+  /// Crossfade persistido (item 3.4): segundos da transição entre
+  /// faixas — `0` = desligado.
+  int _crossfadeSeconds = 0;
+
   // ---- Equalizador (item 3.3) — ver [setEqualizer] ----
   bool _equalizerEnabled = false;
   List<double> _equalizerBands = defaultEqualizerBands();
@@ -188,6 +201,13 @@ class SettingsProvider extends ChangeNotifier {
 
   /// Velocidade de reprodução persistida (0,5–2,0; 1.0 = normal).
   double get playbackSpeed => _playbackSpeed;
+
+  /// Crossfade em segundos (0 = desligado; ver [maxCrossfadeSeconds]).
+  int get crossfadeSeconds => _crossfadeSeconds;
+
+  /// Rótulo do crossfade, para a UI.
+  String get crossfadeLabel =>
+      _crossfadeSeconds == 0 ? 'Desligado' : '$_crossfadeSeconds s';
 
   /// Equalizador ligado (item 3.3).
   bool get equalizerEnabled => _equalizerEnabled;
@@ -375,6 +395,11 @@ class SettingsProvider extends ChangeNotifier {
               storedSpeed <= 2.0
           ? storedSpeed
           : 1.0;
+      // Item 3.4: fora de 0–12 (corrompido) volta ao padrão desligado.
+      _crossfadeSeconds = (prefs.getInt(_crossfadeKey) ?? 0).clamp(
+        0,
+        maxCrossfadeSeconds,
+      );
       // Item 3.3: bandas corrompidas (tamanho/NaN/fora da faixa) caem no
       // default plano; preset desconhecido volta para 'Plano'.
       _equalizerEnabled = prefs.getBool(_eqEnabledKey) ?? false;
@@ -498,6 +523,21 @@ class SettingsProvider extends ChangeNotifier {
     try {
       final SharedPreferences prefs = await SharedPreferences.getInstance();
       await prefs.setDouble(_playbackSpeedKey, valid);
+    } catch (e) {
+      // Falha de escrita não quebra a sessão atual.
+    }
+  }
+
+  /// Persiste o crossfade (item 3.4). Fora de 0–12 cai no teto/piso —
+  /// a mesma faixa que o slider oferece.
+  Future<void> setCrossfadeSeconds(int seconds) async {
+    final int safe = seconds.clamp(0, maxCrossfadeSeconds);
+    if (_crossfadeSeconds == safe) return;
+    _crossfadeSeconds = safe;
+    _notify();
+    try {
+      final SharedPreferences prefs = await SharedPreferences.getInstance();
+      await prefs.setInt(_crossfadeKey, safe);
     } catch (e) {
       // Falha de escrita não quebra a sessão atual.
     }

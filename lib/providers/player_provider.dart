@@ -221,6 +221,10 @@ class PlayerProvider extends ChangeNotifier {
     // Faixa que FALHOU ao abrir: decide aqui (quem conhece a fila)
     // se pula para a próxima — com teto de falhas seguidas.
     _audioService.onPlaybackFailed = _onPlaybackFailed;
+    // Item 3.4: o player avança SOZINHO na fila carregada (gapless) —
+    // o serviço notifica a nova faixa e este provider sincroniza
+    // fila/UI/sessão sem recarregar nada.
+    _audioService.onQueueIndexChanged = _onQueueIndexChanged;
     // Item 3.1: o timer de sono pode disparar sozinho (relógio) com o
     // player já parado — sem mudança de status, quem reemite a UI é este
     // callback. `_notify` é guardado contra dispose.
@@ -597,15 +601,16 @@ class PlayerProvider extends ChangeNotifier {
     // antes de tocar, para o sistema já ter a permissão quando a
     // notificação de mídia for postada. Nunca atrasa a faixa.
     _maybeAskNotificationPermission();
+    // Item 3.4: publica a fila ANTES de tocar — o playSong lê o
+    // snapshot publicado para carregar a fila inteira (gapless) ou só
+    // reposicionar (skip sem recarga).
+    _publishQueueToService();
     await _audioService.playSong(song);
     // playSong limpa errorMessage no início e só o repreenche em falha:
     // abrir com sucesso zera o contador de falhas seguidas.
     if (_audioService.errorMessage.value == null) {
       _consecutivePlayFailures = 0;
     }
-    // Mantém a fila/índice/modos do MediaSession sincronizados com o
-    // que está tocando (Bluetooth/Android Auto leem daqui).
-    _publishQueueToService();
   }
 
   /// Item 1.11 — POST_NOTIFICATIONS no primeiro play (nunca no boot).
@@ -828,6 +833,10 @@ class PlayerProvider extends ChangeNotifier {
   }
 
   /// Fim natural da faixa: avança na fila (repeat one = toca de novo).
+  ///
+  /// Com repeat off/all o player carrega a fila inteira (item 3.4): o
+  /// `completed` chega só no FIM da fila — as transições intermediárias
+  /// vêm por [_onQueueIndexChanged] (gapless, sem recarga).
   Future<void> _onTrackCompleted() async {
     // Item 3.1 — sono "ao fim da faixa": o serviço consome o evento, para a
     // reprodução e o provider NÃO avança a fila (senão a próxima faixa
@@ -844,6 +853,29 @@ class PlayerProvider extends ChangeNotifier {
     }
     _playbackQueue.setIndex(nextIndex);
     await _playCurrent();
+  }
+
+  /// Item 3.4: o player avançou SOZINHO (gapless) para a próxima faixa
+  /// da fila carregada — sincroniza fila/UI/sessão sem recarregar nada
+  /// (chamar [_playCurrent] aqui mataria o gapless com um reload).
+  void _onQueueIndexChanged(int index, Song song) {
+    if (_isDisposed) return;
+    // Evento espúrio (divergência entre fila publicada e a carregada no
+    // player): o próximo playSong recarrega a fila — aqui só ignora.
+    if (index < 0 || index >= _playbackQueue.queue.length) return;
+    if (_playbackQueue.queue[index].id != song.id) return;
+
+    _playbackQueue.setIndex(index);
+    _currentSong = song;
+    _positionNotifier.value = Duration.zero;
+    _duration = _audioService.duration.value;
+    _publishQueueToService();
+    _notify();
+    // Item 3.1 — sono "ao fim da faixa": a faixa terminou (a próxima já
+    // começou junto, gapless). Consome AQUI; o serviço agenda o stop
+    // (one-shot — o segundo consume, em eventos seguintes, é um no-op).
+    if (_audioService.consumeSleepAtTrackEnd()) return;
+    _maybeSaveSession();
   }
 
   void _onErrorMessageChanged() {
@@ -1081,6 +1113,8 @@ class PlayerProvider extends ChangeNotifier {
     _audioService.duration.removeListener(_onDurationChanged);
     _audioService.status.removeListener(_onStatusChanged);
     _audioService.errorMessage.removeListener(_onErrorMessageChanged);
+    // Item 3.4: sem provider não há para quem notificar a transição.
+    _audioService.onQueueIndexChanged = null;
     _audioService.dispose();
     _positionNotifier.dispose();
     super.dispose();

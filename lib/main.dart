@@ -78,6 +78,9 @@ Future<void> _bootstrap() async {
         // Leitura ao vivo da preferência "pausar ao desconectar
         // fones" (Configurações → Reprodução).
         pauseOnNoisyEnabled: () => settingsProvider.pauseOnNoisy,
+        // Item 3.4: crossfade lido ao vivo (0–12 s, Configurações →
+        // Reprodução) — mudou na tela, vale na próxima transição.
+        crossfadeSeconds: () => settingsProvider.crossfadeSeconds,
       ),
       config: const audio_service.AudioServiceConfig(
         androidNotificationChannelId: 'com.example.music_app.audio',

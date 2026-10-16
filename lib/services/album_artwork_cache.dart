@@ -49,6 +49,10 @@ class AlbumArtworkCache {
     final Future<Uint8List?>? inflight = _pending[mediaId];
     if (inflight != null) return inflight;
 
+    // ATENÇÃO: o callback do whenComplete precisa ser um BLOCO sem
+    // retorno — `() => _pending.remove(...)` devolve o próprio future
+    // recém-criado e o whenComplete passa a esperar por ele (deadlock
+    // eterno: a arte nunca carrega e quem espera o load trava).
     final Future<Uint8List?> future = _query
         .queryArtwork(mediaId, ArtworkType.AUDIO)
         .then((Uint8List? data) {
@@ -60,7 +64,9 @@ class AlbumArtworkCache {
           _remember(mediaId, null);
           return null;
         })
-        .whenComplete(() => _pending.remove(mediaId));
+        .whenComplete(() {
+          _pending.remove(mediaId);
+        });
 
     _pending[mediaId] = future;
     return future;
