@@ -5,6 +5,7 @@ import 'package:audio_session/audio_session.dart';
 import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/foundation.dart';
 
+import '../models/repeat_mode.dart';
 import '../models/song_model.dart';
 import 'error_log_service.dart';
 import 'notification_art_cache.dart';
@@ -67,6 +68,102 @@ class AudioService extends BaseAudioHandler {
   /// conhece a fila/shuffle/repeat. Evita acoplamento do serviço ao estado.
   Future<void> Function()? onSkipToNext;
   Future<void> Function()? onSkipToPrevious;
+
+  /// Botões vindos do SISTEMA (Bluetooth/Android Auto/relógio):
+  /// repeat/shuffle direto no modo específico (não ciclam) e pular para
+  /// um índice da fila publicada. O provider aplica e persiste.
+  Future<void> Function(RepeatMode mode)? onSetRepeatMode;
+  Future<void> Function(bool enabled)? onSetShuffleMode;
+  Future<void> Function(int index)? onSkipToQueueIndex;
+
+  /// Modo de repeat/shuffle APLICADOS no provider — publicados no
+  /// [PlaybackState] para o sistema exibir/refletir os botões certos.
+  RepeatMode _publishedRepeat = RepeatMode.off;
+  bool _publishedShuffle = false;
+
+  /// Índice da faixa corrente na fila publicada (null = nada selecionado).
+  int? _publishedQueueIndex;
+
+  /// Fila publicada por último (identidade da lista) — evita reenviar a
+  /// fila inteira ao MediaSession a cada troca de faixa.
+  List<Song>? _publishedQueue;
+
+  /// Velocidade de reprodução publicada (1.0 = normal). Item 3.2 passará
+  /// a defini-la junto com o controle de velocidade.
+  final double _speed = 1.0;
+
+  /// Fila do provider → MediaSession (Android Auto/Bluetooth/browse).
+  ///
+  /// A fila é enviada APENAS quando a lista muda de identidade (troca de
+  /// faixa/index não reenvia — só atualiza o índice via [PlaybackState]).
+  /// Entradas ficam sem capa de propósito: gravar a capa de milhares de
+  /// faixas em disco a cada publicação é I/O proibido; a capa da faixa
+  /// corrente continua na notificação via [mediaItem].
+  void publishQueue(List<Song> songs, int currentIndex) {
+    try {
+      if (!identical(_publishedQueue, songs)) {
+        _publishedQueue = songs;
+        queue.add(<MediaItem>[
+          for (final Song song in songs)
+            MediaItem(
+              id: song.id,
+              title: song.title,
+              artist: song.displayArtist,
+              album: song.album,
+              duration: song.duration,
+            ),
+        ]);
+      }
+      _publishedQueueIndex =
+          (currentIndex < 0 || currentIndex >= songs.length) ? null : currentIndex;
+      _broadcastPlaybackState();
+    } catch (e, s) {
+      ErrorLogService.logSync('audio/publishQueue', e, s);
+    }
+  }
+
+  /// Publica os modos repeat/shuffle aplicados pelo provider (chamar após
+  /// QUALQUER mudança de modo — inclusive a vinda do próprio sistema).
+  void syncModes({required RepeatMode repeat, required bool shuffle}) {
+    try {
+      _publishedRepeat = repeat;
+      _publishedShuffle = shuffle;
+      _broadcastPlaybackState();
+    } catch (e, s) {
+      ErrorLogService.logSync('audio/syncModes', e, s);
+    }
+  }
+
+  /// Mapeamento PURO: modo do app → enum do audio_service
+  /// (publicado no PlaybackState; é o que o sistema lê).
+  static AudioServiceRepeatMode systemRepeatMode(RepeatMode mode) =>
+      switch (mode) {
+        RepeatMode.off => AudioServiceRepeatMode.none,
+        RepeatMode.all => AudioServiceRepeatMode.all,
+        RepeatMode.one => AudioServiceRepeatMode.one,
+      };
+
+  /// Mapeamento PURO inverso: comando do sistema → modo do app.
+  /// `group` (não implementado pelo audio_service) cai em `off`.
+  static RepeatMode appRepeatMode(AudioServiceRepeatMode mode) =>
+      switch (mode) {
+        AudioServiceRepeatMode.one => RepeatMode.one,
+        AudioServiceRepeatMode.all => RepeatMode.all,
+        _ => RepeatMode.off, // none e group
+      };
+
+  /// Mapeamento PURO: shuffle do app → enum do audio_service.
+  static AudioServiceShuffleMode systemShuffleMode(bool enabled) =>
+      enabled ? AudioServiceShuffleMode.all : AudioServiceShuffleMode.none;
+
+  /// Mapeamento PURO: estado interno → processingState publicado
+  /// (o sistema depende de `completed` para mostrar "repetir" na UI).
+  static AudioProcessingState systemProcessingState(PlayerStatus status) =>
+      switch (status) {
+        PlayerStatus.idle => AudioProcessingState.idle,
+        PlayerStatus.completed => AudioProcessingState.completed,
+        _ => AudioProcessingState.ready,
+      };
 
   /// Chamado quando uma faixa FALHOU ao abrir (arquivo apagado/corrompido,
   /// canal nativo morto...). O [PlayerProvider] decide se pula para a
@@ -452,11 +549,50 @@ class AudioService extends BaseAudioHandler {
     }
   }
 
+  /// Comando direto de repeat do sistema (Bluetooth/Android Auto):
+  /// delega ao provider, que aplica NA FILA e persiste a preferência.
+  @override
+  Future<void> setRepeatMode(AudioServiceRepeatMode repeatMode) async {
+    try {
+      await onSetRepeatMode?.call(appRepeatMode(repeatMode));
+    } catch (e, s) {
+      ErrorLogService.logSync('audio/setRepeatMode', e, s);
+    }
+  }
+
+  /// Comando direto de shuffle do sistema: idem [setRepeatMode].
+  @override
+  Future<void> setShuffleMode(AudioServiceShuffleMode shuffleMode) async {
+    try {
+      await onSetShuffleMode
+          ?.call(shuffleMode != AudioServiceShuffleMode.none);
+    } catch (e, s) {
+      ErrorLogService.logSync('audio/setShuffleMode', e, s);
+    }
+  }
+
+  /// Pular para um índice da fila publicada (Android Auto/browse).
+  /// Índice fora do intervalo é ignorado no provider — aqui só
+  /// protegemos o canal nativo contra throw.
+  @override
+  Future<void> skipToQueueItem(int index) async {
+    try {
+      await onSkipToQueueIndex?.call(index);
+    } catch (e, s) {
+      ErrorLogService.logSync('audio/skipToQueueItem', e, s);
+    }
+  }
+
   /// Reemite o estado para o audio_service (notificação + lock screen).
   ///
   /// A lista de controles muda conforme o estado: pausa quando tocando,
   /// play quando pausado. Os compact indices definem os botões visíveis
   /// na notificação compacta (anterior, play/pause, próxima).
+  ///
+  /// Publica TAMBÉM o que o sistema/Bluetooth/Android Auto precisam ler:
+  /// fila corrente, índice dela, modos repeat/shuffle e velocidade —
+  /// sem isso o lock screen mostra o estado errado (ex.: repeat aceso
+  /// depois de desligar no app).
   void _broadcastPlaybackState() {
     try {
       final bool playing = status.value == PlayerStatus.playing;
@@ -467,13 +603,24 @@ class AudioService extends BaseAudioHandler {
           MediaControl.skipToNext,
           MediaControl.stop,
         ],
-        systemActions: const {MediaAction.seek},
+        systemActions: const {
+          MediaAction.seek,
+          MediaAction.setShuffleMode,
+          MediaAction.setRepeatMode,
+          MediaAction.skipToQueueItem,
+        },
         androidCompactActionIndices: const [0, 1, 2],
-        processingState: status.value == PlayerStatus.idle
-            ? AudioProcessingState.idle
-            : AudioProcessingState.ready,
+        processingState: systemProcessingState(status.value),
         playing: playing,
         updatePosition: position.value,
+        // Posição projetada: `position + (now - updateTime)` — o default
+        // do construtor já usa o relógio atual, então o sistema calcula
+        // o avanço em tempo real sem precisar de rebroadcast por tick.
+        updateTime: DateTime.now(),
+        speed: _speed,
+        repeatMode: systemRepeatMode(_publishedRepeat),
+        shuffleMode: systemShuffleMode(_publishedShuffle),
+        queueIndex: _publishedQueueIndex,
       ));
     } catch (e, s) {
       ErrorLogService.logSync('audio/broadcast', e, s);

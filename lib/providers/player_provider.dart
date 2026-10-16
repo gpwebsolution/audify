@@ -104,6 +104,12 @@ class PlayerProvider extends ChangeNotifier {
     // navegação da fila para este provider.
     _audioService.onSkipToNext = next;
     _audioService.onSkipToPrevious = previous;
+    // Comandos de repeat/shuffle/índice vindos do SISTEMA
+    // (Bluetooth, Android Auto, relógio) — o app é a fonte de verdade:
+    // aplica na fila e persiste a preferência.
+    _audioService.onSetRepeatMode = _onSystemSetRepeatMode;
+    _audioService.onSetShuffleMode = _onSystemSetShuffleMode;
+    _audioService.onSkipToQueueIndex = _onSystemSkipToQueueIndex;
     // Faixa que FALHOU ao abrir: decide aqui (quem conhece a fila)
     // se pula para a próxima — com teto de falhas seguidas.
     _audioService.onPlaybackFailed = _onPlaybackFailed;
@@ -256,6 +262,9 @@ class PlayerProvider extends ChangeNotifier {
     if (_audioService.errorMessage.value == null) {
       _consecutivePlayFailures = 0;
     }
+    // Mantém a fila/índice/modos do MediaSession sincronizados com o
+    // que está tocando (Bluetooth/Android Auto leem daqui).
+    _publishQueueToService();
   }
 
   /// Chamado pelo [AudioService] quando uma faixa FALHOU ao abrir.
@@ -319,6 +328,7 @@ class PlayerProvider extends ChangeNotifier {
     // Persiste a preferência (próxima sessão abre
     // no mesmo modo).
     settings?.setShuffleEnabled(_playbackQueue.shuffle);
+    _publishQueueToService();
     _notify();
   }
 
@@ -326,7 +336,68 @@ class PlayerProvider extends ChangeNotifier {
     _playbackQueue.cycleRepeat();
     // Persiste a preferência.
     settings?.setRepeatMode(_playbackQueue.repeat);
+    _syncModesToService();
     _notify();
+  }
+
+  // ------------------------------------------------------------------
+  // Comandos vindos do SISTEMA (Bluetooth/Android Auto/relógio)
+  // ------------------------------------------------------------------
+
+  /// Repeat escolhido DIRETO pelo sistema (o botão escolhe o modo,
+  /// não cicla). Aplica na fila, persiste e reemite o estado para o
+  /// sistema refletir o resultado.
+  Future<void> _onSystemSetRepeatMode(RepeatMode mode) async {
+    if (_isDisposed) return;
+    _playbackQueue.setRepeat(mode);
+    await settings?.setRepeatMode(mode);
+    _syncModesToService();
+    _notify();
+  }
+
+  /// Shuffle ligado/desligado pelo sistema — idem [_onSystemSetRepeatMode].
+  Future<void> _onSystemSetShuffleMode(bool enabled) async {
+    if (_isDisposed) return;
+    if (_playbackQueue.shuffle != enabled) {
+      _playbackQueue.toggleShuffle();
+      await settings?.setShuffleEnabled(enabled);
+    }
+    _syncModesToService();
+    _notify();
+  }
+
+  /// Faixa escolhida por índice na fila publicada (Android Auto/browse).
+  /// Índice fora do intervalo é ignorado — o canal nativo não pode
+  /// receber erro por uma lista que encurtou.
+  Future<void> _onSystemSkipToQueueIndex(int index) async {
+    if (_isDisposed) return;
+    if (index < 0 || index >= _playbackQueue.queue.length) return;
+    // Escolha manual = nova chance no teto de falhas seguidas.
+    _consecutivePlayFailures = 0;
+    _playbackQueue.setIndex(index);
+    await _playCurrent();
+    _publishQueueToService();
+  }
+
+  /// Publica fila + índice da fila + modos no MediaSession. Chamado após
+  /// QUALQUER mudança de fila/modo/índice (é barato: a lista só vai ao
+  /// canal quando a identidade muda — ver [AudioService.publishQueue]).
+  void _publishQueueToService() {
+    if (_isDisposed) return;
+    _audioService.publishQueue(
+      _playbackQueue.queue,
+      _playbackQueue.queueIndex,
+    );
+    _syncModesToService();
+  }
+
+  /// Publica apenas os modos (shuffle/repeat) no MediaSession.
+  void _syncModesToService() {
+    if (_isDisposed) return;
+    _audioService.syncModes(
+      repeat: _playbackQueue.repeat,
+      shuffle: _playbackQueue.shuffle,
+    );
   }
 
   void _onPositionChanged() {
@@ -506,6 +577,7 @@ class PlayerProvider extends ChangeNotifier {
     _currentSong = queue[idx];
     _position = stored.$2;
     _playbackQueue.setQueue(queue, idx);
+    _publishQueueToService();
     _notify();
   }
 
@@ -551,6 +623,9 @@ class PlayerProvider extends ChangeNotifier {
     // Remove da fila ativa (ordem preservada; reencaixa o
     // índice corrente na próxima sobrevivente).
     _playbackQueue.removeSongs(ids);
+    // Fila encurtou: republica no MediaSession (índices do sistema
+    // apontariam para faixas que não existem mais).
+    _publishQueueToService();
 
     if (removedCurrent) {
       // A sessão salva aponta para um arquivo morto: some com ela. Só quando
