@@ -85,11 +85,16 @@ class _FakeSessionRepository extends SessionRepository {
   Future<(List<String>, int)> loadQueue() async => (const <String>[], -1);
 }
 
-PlayerProvider _provider(PlayableAudioService svc, List<Song> catalog) =>
+PlayerProvider _provider(
+  PlayableAudioService svc,
+  List<Song> catalog, {
+  int catalogComputeThreshold = PlayerProvider.defaultCatalogComputeThreshold,
+}) =>
     PlayerProvider(
       svc,
       songRepository: _FakeSongRepository(catalog),
       sessionRepository: _FakeSessionRepository(),
+      catalogComputeThreshold: catalogComputeThreshold,
     );
 
 List<Song> _smallCatalog() => <Song>[
@@ -185,9 +190,14 @@ void main() {
     'modo agrupado com 5.000 faixas: lazy, colapsar e grupo como fila',
     (tester) async {
       final PlayableAudioService svc = PlayableAudioService();
+      // Limite do compute elevado (item 2.4): sob FakeAsync o isolate
+      // não responde e o init travaria — aqui o que importa é o
+      // agrupamento/lazy, não o caminho do isolate (ele é coberto no
+      // teste de abertura do snapshot, em zona real).
       final PlayerProvider provider = _provider(
         svc,
         _manySongs(5000),
+        catalogComputeThreshold: 100000,
       );
       addTearDown(provider.dispose);
       await provider.init();

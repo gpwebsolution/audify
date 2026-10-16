@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 
 import '../models/repeat_mode.dart';
@@ -5,6 +7,7 @@ import '../models/song_model.dart';
 import '../repositories/session_repository.dart';
 import '../repositories/song_repository.dart';
 import '../services/audio_service.dart';
+import '../services/catalog_snapshot_service.dart';
 import '../services/error_log_service.dart';
 import '../services/permission_service.dart';
 import '../utils/playback_queue.dart';
@@ -84,6 +87,36 @@ class PlayerProvider extends ChangeNotifier {
   /// Implementação do pedido de notificação (injetável para teste).
   final Future<void> Function() _requestNotificationPermission;
 
+  // ---- Snapshot + reconciliação do catálogo (item 2.4) ----
+
+  /// Snapshot leve do catálogo (JSON) — boot mostra a lista na hora.
+  /// `null` = desativado (padrão em testes; o app real injeta no main).
+  final CatalogSnapshotService? _snapshotService;
+
+  /// Relógio injetável: o throttle do re-scan ao voltar do segundo
+  /// plano precisa ser testável sem esperar 30s de verdade.
+  final DateTime Function() _clock;
+
+  /// Varredura do catálogo em andamento — deduplica boot/resume/pull.
+  bool _catalogScanInFlight = false;
+
+  /// Instante da última varredura iniciada (throttle do onAppResumed).
+  DateTime? _lastCatalogScan;
+
+  /// Janela mínima entre re-scans automáticos ao voltar do segundo
+  /// plano — checar o MediaStore a cada retorno custa I/O à toa.
+  static const Duration catalogRescanThrottle = Duration(seconds: 30);
+
+  /// A partir de quantas faixas a ordenação do catálogo sai da UI
+  /// thread ([compute]). Abaixo disso custa <~2ms e não paga o spawn
+  /// do isolate. [defaultCatalogComputeThreshold] para o app real;
+  /// testes podem subir o valor (ver construtor).
+  static const int defaultCatalogComputeThreshold = 500;
+
+  /// Limite efetivo deste provider ([defaultCatalogComputeThreshold]
+  /// no app; injetável para teste).
+  final int catalogComputeThreshold;
+
   Song? _currentSong;
 
   /// Posição de reprodução — notifier DEDICADO (item 2.1): o tick
@@ -144,11 +177,23 @@ class PlayerProvider extends ChangeNotifier {
     SessionRepository? sessionRepository,
     PlaybackQueue? playbackQueue,
     Future<void> Function()? requestNotificationPermission,
+    // Item 2.4: null = snapshot DESATIVADO (padrão). Só o main.dart —
+    // raiz de composição — injeta o serviço real. Testes ficam sem
+    // snapshot de propósito: o channel do path_provider não responde
+    // sob FakeAsync e travaria o await de init() em testWidgets.
+    this._snapshotService,
+    DateTime Function()? clock,
+    // Item 2.4: a partir de quantas faixas a ordenação vai para
+    // [compute]. Testes com milhares de faixas sob FakeAsync elevam o
+    // limite (isolate não responde fora de zona real — runAsync exporia
+    // MissingPluginException de stream do audioplayers mascarado).
+    this.catalogComputeThreshold = defaultCatalogComputeThreshold,
   }) : _songRepository = songRepository ?? SongRepository(),
        _sessionRepository = sessionRepository ?? SessionRepository(),
        _playbackQueue = playbackQueue ?? PlaybackQueue(),
        _requestNotificationPermission = requestNotificationPermission ??
-           PermissionService.requestNotificationAccess {
+           PermissionService.requestNotificationAccess,
+       _clock = clock ?? DateTime.now {
     // Botões da notificação/tela de bloqueio (audio_service) delegam a
     // navegação da fila para este provider.
     _audioService.onSkipToNext = next;
@@ -184,7 +229,16 @@ class PlayerProvider extends ChangeNotifier {
   }
 
   /// Fluxo de inicialização: permissões -> catálogo -> fila.
-  Future<void> init() async {
+  /// Boot ÚNICO e idempotente (item 2.4): o construtor já dispara o
+  /// init(); chamadas seguintes (testes) aguardam o MESMO futuro em vez
+  /// de rodar um segundo boot — dois boots paralelos disputavam
+  /// snapshot/reconciliação e o segundo resetava a lista que o primeiro
+  /// já tinha reconciliado.
+  Future<void>? _initFuture;
+
+  Future<void> init() => _initFuture ??= _init();
+
+  Future<void> _init() async {
     _isLoading = true;
     _notify();
 
@@ -199,31 +253,130 @@ class PlayerProvider extends ChangeNotifier {
       await _loadSongs(includeDevice: false);
       return;
     }
+
+    // Item 2.4: SNAPSHOT primeiro — a biblioteca aparece na hora (sem
+    // esperar o MediaStore) e a varredura real roda em segundo plano,
+    // reconciliando. Só cai no caminho frio quem não tem snapshot.
+    final List<Song>? snapshot =
+        _isDisposed ? null : await _snapshotService?.load();
+    if (snapshot != null && !_isDisposed) {
+      _songs = await _buildCatalog(List<Song>.of(snapshot));
+      if (_isDisposed) return;
+      _applySearchFilter();
+      _isLoading = false;
+      _notify();
+      // Em segundo plano: varre de verdade e só mexe na UI se algo
+      // tiver mudado (um boot sem novidade não reconstrói a lista).
+      unawaited(_reconcileCatalog(includeDevice: true));
+      await _restoreSession();
+      return;
+    }
+
     await _loadSongs(includeDevice: true);
     await _restoreSession();
   }
 
-  /// (Re)carrega o catálogo e reconstrói a fila.
+  /// (Re)carrega o catálogo (caminho frio — sem snapshot). Ao final
+  /// grava o snapshot para o próximo boot já abrir com a lista pronta.
   Future<void> _loadSongs({required bool includeDevice}) async {
+    _markCatalogScanStarted();
     try {
       final List<Song> device = includeDevice
           ? await _songRepository.loadDeviceSongs()
           : const [];
       final List<Song> assets = await _songRepository.loadAssetSongs();
-      _songs = [
-        ...device,
-        ...assets,
       // Item 2.3: ordem natural + sem acento — 'Faixa 2' antes de
-      // 'Faixa 10' e 'Ação' no lugar de 'Zebra' (antes: 'Zebra' vinha
-      // primeiro porque 'á' > 'z' em código de ponto).
-      ]..sort((a, b) => naturalCompare(a.title, b.title));
+      // 'Faixa 10' e 'Ação' no lugar de 'Zebra' (o sort roda em
+      // isolate quando o catálogo é grande — item 2.4).
+      _songs = await _buildCatalog(<Song>[...device, ...assets]);
       _applySearchFilter();
-    } catch (e) {
+      unawaited(_snapshotService?.save(_songs));
+    } catch (e, s) {
       _errorMessage = 'Falha ao carregar a lista de músicas: $e';
+      ErrorLogService.logSync('PlayerProvider._loadSongs', e, s);
     } finally {
       _isLoading = false;
       _notify();
     }
+  }
+
+  /// Junta as fontes e ordena o catálogo ([naturalCompare], item 2.3).
+  /// Com muitas faixas a ordenação sai da UI thread via [compute] —
+  /// 5 mil faixas aqui atrasam o primeiro frame (item 2.4).
+  Future<List<Song>> _buildCatalog(List<Song> merged) async {
+    if (merged.length < catalogComputeThreshold) {
+      return merged..sort((a, b) => naturalCompare(a.title, b.title));
+    }
+    return compute(sortCatalogJob, merged);
+  }
+
+  /// Varre as fontes de novo e reconcilia o catálogo (item 2.4).
+  /// Usado pelo boot com snapshot (em segundo plano), pelo onAppResumed
+  /// (com throttle) e pelo pull-to-refresh. Só notifica a UI se algo
+  /// TIVER mudado — resume sem novidade não reconstrói a lista.
+  Future<void> _reconcileCatalog({required bool includeDevice}) async {
+    if (_isDisposed || _catalogScanInFlight) return;
+    _catalogScanInFlight = true;
+    _markCatalogScanStarted();
+    try {
+      final List<Song> device = includeDevice
+          ? await _songRepository.loadDeviceSongs()
+          : const <Song>[];
+      final List<Song> assets = await _songRepository.loadAssetSongs();
+      final List<Song> merged =
+          await _buildCatalog(<Song>[...device, ...assets]);
+      if (_isDisposed) return;
+      if (_catalogEquals(_songs, merged)) return; // sem mudança: silêncio
+
+      _songs = merged;
+      _applySearchFilter();
+      // Reancora a faixa atual na instância nova (mesmo id, metadados
+      // podem ter mudado). Se ela sumiu do catálogo (apagada fora do
+      // app), a reprodução segue — o play falha e o handler do item 1.7
+      // decide; derrubar o player no meio de um resume seria pior.
+      final Song? current = _currentSong;
+      if (current != null) {
+        final int idx = merged.indexWhere((Song s) => s.id == current.id);
+        if (idx >= 0) _currentSong = merged[idx];
+      }
+      _notify();
+      await _snapshotService?.save(merged);
+    } catch (e, s) {
+      ErrorLogService.logSync('PlayerProvider._reconcileCatalog', e, s);
+    } finally {
+      _catalogScanInFlight = false;
+    }
+  }
+
+  /// Pull-to-refresh da aba Música (item 2.4): ação EXPLÍCITA do
+  /// usuário — varre sempre, sem o throttle do onAppResumed.
+  Future<void> rescanCatalog() => _reconcileCatalog(
+        includeDevice: _permission == AudioPermissionState.granted,
+      );
+
+  void _markCatalogScanStarted() => _lastCatalogScan = _clock();
+
+  /// Igualdade REAL do catálogo — [Song.==] compara só o id, então
+  /// título/artista/álbum/caminho/duração mudados também contam como
+  /// mudança (e aí sim vale reconstruir a lista).
+  static bool _catalogEquals(List<Song> a, List<Song> b) {
+    if (identical(a, b) || a.length != b.length) return false;
+    for (int i = 0; i < a.length; i++) {
+      final Song x = a[i];
+      final Song y = b[i];
+      if (x.id != y.id ||
+          x.title != y.title ||
+          x.artist != y.artist ||
+          x.album != y.album ||
+          x.filePath != y.filePath ||
+          x.assetPath != y.assetPath ||
+          x.mediaId != y.mediaId ||
+          x.albumId != y.albumId ||
+          x.duration != y.duration) {
+        return false;
+      }
+    }
+    return true;
   }
 
   /// Solicita a permissão de novo (banner da UI) e recarrega o catálogo.
@@ -631,6 +784,21 @@ class PlayerProvider extends ChangeNotifier {
     _status = svc.status.value;
     _errorMessage = svc.errorMessage.value;
     _notify();
+    _maybeRescanCatalogOnResume();
+  }
+
+  /// Re-escaneia ao voltar do segundo plano com THROTTLE (item 2.4):
+  /// música adicionada/apagada em outro app aparece sozinha, sem varrer
+  /// o MediaStore a cada retorno (ex.: trocar de aba 5x em 10s = 1 scan).
+  void _maybeRescanCatalogOnResume() {
+    if (_isDisposed) return;
+    if (_permission != AudioPermissionState.granted) return;
+    final DateTime now = _clock();
+    final DateTime? last = _lastCatalogScan;
+    if (last != null && now.difference(last) < catalogRescanThrottle) {
+      return;
+    }
+    unawaited(_reconcileCatalog(includeDevice: true));
   }
 
   /// Alterna entre tocar/pausar com base no estado atual.
@@ -763,6 +931,9 @@ class PlayerProvider extends ChangeNotifier {
     // abaixo via removeSongs (preserva filas vindas de
     // playlist, não só da lista visível).
     _applySearchFilter();
+    // Item 2.4: a exclusão foi explícita — o snapshot não pode voltar
+    // com a faixa morta no próximo boot.
+    unawaited(_snapshotService?.save(_songs));
 
     // Remove da fila ativa (ordem preservada; reencaixa o
     // índice corrente na próxima sobrevivente).
@@ -814,3 +985,10 @@ class PlayerProvider extends ChangeNotifier {
     super.dispose();
   }
 }
+
+/// Job de [compute] (precisa de função de topo, item 2.4): ordena o
+/// catálogo com a MESMA regra do caminho síncrono — naturalCompare
+/// (ordem natural + sem acento, item 2.3) — fora da UI thread.
+@pragma('vm:entry-point')
+List<Song> sortCatalogJob(List<Song> songs) =>
+    songs..sort((a, b) => naturalCompare(a.title, b.title));

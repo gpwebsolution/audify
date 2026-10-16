@@ -360,8 +360,13 @@ class _MusicScreenState extends State<MusicScreen> with MediaSelection<String> {
             view.permission == AudioPermissionState.permanentlyDenied)
           _PermissionBanner(provider: provider),
 
-        // ---- Lista de músicas (expande) ----
-        Expanded(child: _buildBody(context, provider, view)),
+        // ---- Lista de músicas (expande) + pull-to-refresh (item 2.4) ----
+        Expanded(
+          child: RefreshIndicator(
+            onRefresh: provider.rescanCatalog,
+            child: _buildBody(context, provider, view),
+          ),
+        ),
       ],
     );
   }
@@ -426,6 +431,9 @@ class _MusicScreenState extends State<MusicScreen> with MediaSelection<String> {
 
     if (_groupMode == MusicGroupMode.tracks) {
       return ListView.builder(
+        // Sempre rolável (item 2.4): lista curta/esticada ainda
+        // deixa puxar para atualizar (RefreshIndicator acima).
+        physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.symmetric(vertical: 8),
         itemCount: view.visibleSongs.length,
         itemBuilder: (context, index) {
@@ -462,6 +470,7 @@ class _MusicScreenState extends State<MusicScreen> with MediaSelection<String> {
     }
 
     return ListView.builder(
+      physics: const AlwaysScrollableScrollPhysics(),
       padding: const EdgeInsets.symmetric(vertical: 8),
       itemCount: rows.length,
       itemBuilder: (context, index) {

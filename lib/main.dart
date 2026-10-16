@@ -8,6 +8,7 @@ import 'package:provider/provider.dart';
 
 import 'providers/file_provider.dart';
 import 'providers/gallery_provider.dart';
+import 'services/catalog_snapshot_service.dart';
 import 'services/error_log_service.dart';
 import 'services/pdf_favorites_service.dart';
 import 'providers/player_provider.dart';
@@ -102,9 +103,14 @@ Future<void> _bootstrap() async {
         // Tema persistido (claro/escuro/sistema).
         ChangeNotifierProvider.value(value: settingsProvider),
         // Player: único provider de áudio; o AudioService é criado junto.
+        // Item 2.4: snapshot do catálogo (JSON) — só aqui, na raiz de
+        // composição; testes construem o provider sem o serviço.
         ChangeNotifierProvider(
-          create: (_) =>
-              PlayerProvider(audioService, settings: settingsProvider),
+          create: (_) => PlayerProvider(
+            audioService,
+            settings: settingsProvider,
+            snapshotService: CatalogSnapshotService(),
+          ),
         ),
         // Playlists (banco sqflite) — depende do player para tocar filas.
         ChangeNotifierProxyProvider<PlayerProvider, PlaylistProvider>(
