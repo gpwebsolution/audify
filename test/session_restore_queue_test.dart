@@ -1,15 +1,13 @@
 // Testes do item 1.6: a retomada de sessão restaura a FILA ATIVA
 // (ids + índice), não o catálogo inteiro.
 //
-// Usa repositórios falsos + AudioService real com canais do
-// audioplayers mockados (mesma receita de player_queue_search_test.dart):
-// a reprodução "falha" por dentro, mas o estado do provider
-// (faixa corrente/fila) é definido ANTES da chamada ao plugin.
+// Usa repositórios falsos + AudioService simulado que "toca" sem
+// erro (test/support/playable_audio_service.dart) — mesma receita
+// de player_queue_search_test.dart.
 //
 // OBS: o provider ORDENA o catálogo por título (apple, banana,
 // cherry, mango, pear).
 
-import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:audify/models/song_model.dart';
@@ -17,7 +15,8 @@ import 'package:audify/providers/player_provider.dart';
 import 'package:audify/providers/settings_provider.dart';
 import 'package:audify/repositories/session_repository.dart';
 import 'package:audify/repositories/song_repository.dart';
-import 'package:audify/services/audio_service.dart';
+
+import 'support/playable_audio_service.dart';
 
 class _FakeSongRepository extends SongRepository {
   final List<Song> assets;
@@ -79,18 +78,7 @@ List<Song> _fiveTracks() => [
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  setUpAll(() {
-    final TestDefaultBinaryMessenger messenger =
-        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
-    messenger.setMockMethodCallHandler(
-      const MethodChannel('xyz.luan/audioplayers.global'),
-      (call) async => null,
-    );
-    messenger.setMockMethodCallHandler(
-      const MethodChannel('xyz.luan/audioplayers'),
-      (call) async => null,
-    );
-  });
+  setUpAll(mockAudioplayersChannels);
 
   /// Cria o provider já com a sessão "gravada" (como se viesse do disco).
   Future<PlayerProvider> restoredProvider({
@@ -110,7 +98,7 @@ void main() {
     await settings.load();
 
     final PlayerProvider provider = PlayerProvider(
-      AudioService(),
+      PlayableAudioService(),
       settings: settings,
       songRepository: _FakeSongRepository(catalog ?? _fiveTracks()),
       sessionRepository: session,

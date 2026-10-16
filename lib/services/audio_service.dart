@@ -67,6 +67,11 @@ class AudioService extends BaseAudioHandler {
   Future<void> Function()? onSkipToNext;
   Future<void> Function()? onSkipToPrevious;
 
+  /// Chamado quando uma faixa FALHOU ao abrir (arquivo apagado/corrompido,
+  /// canal nativo morto...). O [PlayerProvider] decide se pula para a
+  /// próxima — com limite de falhas seguidas para não entrar em loop.
+  Future<void> Function(Song song)? onPlaybackFailed;
+
   /// Leitura ao vivo da preferência "pausar ao desconectar fones"
   /// ([SettingsProvider.pauseOnNoisy]). É um getter (não bool) para
   /// refletir mudanças feitas em Configurações sem recriar o serviço.
@@ -213,6 +218,64 @@ class AudioService extends BaseAudioHandler {
   }) =>
       isPlaying && settingEnabled;
 
+  /// Mensagem AMIGÁVEL (pt-BR) para o usuário a partir de uma falha.
+  ///
+  /// Função PURA — sem plugin/estado, testável em unidade. O detalhe
+  /// técnico da exceção NÃO aparece aqui: quem registra é o
+  /// [ErrorLogService] (chamado pelo catch de origem).
+  static String friendlyError(Object error) {
+    final String text = error.toString().toLowerCase();
+    if (text.contains('unable to load asset') ||
+        text.contains('no such file') ||
+        text.contains('not found') ||
+        text.contains('does not exist') ||
+        text.contains('enoent')) {
+      return 'Arquivo não encontrado — pode ter sido movido ou apagado.';
+    }
+    if (text.contains('permission') ||
+        text.contains('eacces') ||
+        text.contains('denied')) {
+      return 'Sem permissão para ler este arquivo.';
+    }
+    if (text.contains('corrupt') ||
+        text.contains('format') ||
+        text.contains('invalid') ||
+        text.contains('source error')) {
+      return 'O arquivo parece estar corrompido ou em formato incompatível.';
+    }
+    return 'Tente novamente ou toque em outra faixa.';
+  }
+
+  /// Monta a mensagem final: ação + motivo amigável (nunca o objeto
+  /// da exceção cru, que confunde o usuário).
+  static String userMessage(String action, Object error) =>
+      'Não foi possível $action. ${friendlyError(error)}';
+
+  /// Decisão PURA: vale a pena PULAR para a próxima faixa após esta
+  /// falha de abertura?
+  ///
+  /// Só sim para falha de ARQUIVO (apagado/corrompido/inacessível) —
+  /// aí a próxima faixa tem chance de tocar. Para falha de PLATAFORMA
+  /// (canal nativo morto, plugin indisponível), pular não resolve:
+  /// TODAS as faixas falhariam da mesma forma e só se aquece o
+  /// aparelho tentando. Assim também não dispara skip em testes/
+  /// ambientes sem canal nativo.
+  static bool shouldSkipOnOpenFailure(Object error) {
+    final String text = error.toString().toLowerCase();
+    if (text.contains('missingpluginexception')) return false;
+    return text.contains('unable to load asset') ||
+        text.contains('no such file') ||
+        text.contains('not found') ||
+        text.contains('does not exist') ||
+        text.contains('enoent') ||
+        text.contains('permission') ||
+        text.contains('eacces') ||
+        text.contains('denied') ||
+        text.contains('corrupt') ||
+        text.contains('failed to open') ||
+        text.contains('cannot open');
+  }
+
   /// Reage ao evento "becoming noisy" (fone desconectado):
   /// pausa a reprodução se [shouldPauseOnNoisy] disser sim.
   /// Falhas viram log local — o evento do sistema nunca
@@ -281,10 +344,21 @@ class AudioService extends BaseAudioHandler {
       _broadcastPlaybackState();
     } catch (e, s) {
       // Arquivo inválido/corrompido ou falha de plataforma (inclui canal
-      // nativo morto): nunca crash — loga e expõe para a UI.
+      // nativo morto): nunca crash — loga TÉCNICO no serviço de log e
+      // expõe mensagem amigável para a UI.
       ErrorLogService.logSync('audio/playSong', e, s);
       status.value = PlayerStatus.idle;
-      errorMessage.value = 'Falha ao reproduzir "${song.title}": $e';
+      errorMessage.value = userMessage('tocar "${song.title}"', e);
+      // Notifica o provider (só em falha de ARQUIVO — ver
+      // [shouldSkipOnOpenFailure]): ele decide se pula para a próxima
+      // faixa, com limite de falhas seguidas (PlayerProvider).
+      if (shouldSkipOnOpenFailure(e)) {
+        try {
+          await onPlaybackFailed?.call(song);
+        } catch (e2, s2) {
+          ErrorLogService.logSync('audio/onPlaybackFailed', e2, s2);
+        }
+      }
     }
   }
 
@@ -309,7 +383,7 @@ class AudioService extends BaseAudioHandler {
       await _player.pause();
     } catch (e, s) {
       ErrorLogService.logSync('audio/pause', e, s);
-      errorMessage.value = 'Falha ao pausar: $e';
+      errorMessage.value = userMessage('pausar a reprodução', e);
     }
   }
 
@@ -319,7 +393,7 @@ class AudioService extends BaseAudioHandler {
       await _player.resume();
     } catch (e, s) {
       ErrorLogService.logSync('audio/resume', e, s);
-      errorMessage.value = 'Falha ao retomar: $e';
+      errorMessage.value = userMessage('retomar a reprodução', e);
     }
   }
 
@@ -331,7 +405,7 @@ class AudioService extends BaseAudioHandler {
       await _player.stop();
     } catch (e, s) {
       ErrorLogService.logSync('audio/stop', e, s);
-      errorMessage.value = 'Falha ao parar: $e';
+      errorMessage.value = userMessage('parar a reprodução', e);
     } finally {
       status.value = PlayerStatus.idle;
       // Notifica o audio_service: processa o stop (remove controles e,
@@ -350,7 +424,7 @@ class AudioService extends BaseAudioHandler {
       _broadcastPlaybackState();
     } catch (e, s) {
       ErrorLogService.logSync('audio/seek', e, s);
-      errorMessage.value = 'Falha ao buscar posição: $e';
+      errorMessage.value = userMessage('mudar a posição da faixa', e);
     }
   }
 

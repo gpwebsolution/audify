@@ -2,24 +2,24 @@
 // tocando (separação entre lista exibida e fila ativa).
 //
 // Usa repositórios falsos (SongRepository/SessionRepository são
-// concretos, mas os métodos são sobrescrevíveis) e o AudioService
-// real. Os canais do audioplayers são mockados para que o VM
-// não dispare MissingPluginException — a reprodução "falha" por
-// dentro (asset inexistente no bundle de teste), mas o estado
-// do provider (faixa corrente/fila) é definido ANTES da chamada
-// ao plugin, o que é o que estes testes verificam.
+// concretos, mas os métodos são sobrescrevíveis) e um AudioService
+// SIMULADO que "toca" sem erro (test/support/playable_audio_service.dart).
+// Em ambiente de teste o audioplayers não tem canal nativo e playSong
+// falharia de verdade — com o item 1.7 (skip automático em falha de
+// arquivo) isso mudaria currentSong no meio dos testes, mascarando o
+// que aqui se verifica: a ORDEM da fila.
 //
 // OBS: o provider ORDENA o catálogo por título, então a ordem
 // das faixas é alfabética (apple, banana, cherry, mango, pear).
 
-import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:audify/models/song_model.dart';
 import 'package:audify/providers/player_provider.dart';
 import 'package:audify/repositories/session_repository.dart';
 import 'package:audify/repositories/song_repository.dart';
-import 'package:audify/services/audio_service.dart';
+
+import 'support/playable_audio_service.dart';
 
 class _FakeSongRepository extends SongRepository {
   final List<Song> assets;
@@ -37,10 +37,16 @@ class _FakeSessionRepository extends SessionRepository {
   Future<void> save(Song song, Duration position) async {}
 
   @override
+  Future<void> saveQueue(List<String> ids, int index) async {}
+
+  @override
   Future<void> clear() async {}
 
   @override
   Future<(Song?, Duration)> load() async => (null, Duration.zero);
+
+  @override
+  Future<(List<String>, int)> loadQueue() async => (const <String>[], -1);
 }
 
 Song _track(String name) =>
@@ -56,7 +62,7 @@ List<Song> _fiveTracks() => [
 
 PlayerProvider _provider() {
   return PlayerProvider(
-    AudioService(),
+    PlayableAudioService(),
     songRepository: _FakeSongRepository(_fiveTracks()),
     sessionRepository: _FakeSessionRepository(),
   );
@@ -65,22 +71,7 @@ PlayerProvider _provider() {
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  setUpAll(() {
-    // Sem os canais do audioplayers no VM: evita
-    // MissingPluginException (o app é tolerante a falhas
-    // do plugin, mas o erro assíncrono falharia o teste).
-    final TestDefaultBinaryMessenger messenger =
-        TestDefaultBinaryMessengerBinding
-            .instance.defaultBinaryMessenger;
-    messenger.setMockMethodCallHandler(
-      const MethodChannel('xyz.luan/audioplayers.global'),
-      (call) async => null,
-    );
-    messenger.setMockMethodCallHandler(
-      const MethodChannel('xyz.luan/audioplayers'),
-      (call) async => null,
-    );
-  });
+  setUpAll(mockAudioplayersChannels);
 
   test('digitar na busca não altera a fila que está tocando',
       () async {

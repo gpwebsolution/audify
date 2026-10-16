@@ -40,6 +40,15 @@ class PlayerProvider extends ChangeNotifier {
   /// Último instante em que a sessão foi persistida (throttle de 5s).
   DateTime _lastSessionSave = DateTime.fromMillisecondsSinceEpoch(0);
 
+  /// Falhas SEGUIDAS ao abrir faixas (arquivo apagado/corrompido...).
+  /// Zerado quando uma faixa abre com sucesso e quando o usuário escolhe
+  /// outra faixa na mão — só assim a fila corrompida não gera loop.
+  int _consecutivePlayFailures = 0;
+
+  /// Teto de falhas seguidas antes de PARAR (e não pular mais). Com a
+  /// fila toda morta, pular indefinidamente só aquece o aparelho.
+  static const int maxConsecutivePlayFailures = 3;
+
   Song? _currentSong;
 
   Duration _position = Duration.zero;
@@ -95,6 +104,9 @@ class PlayerProvider extends ChangeNotifier {
     // navegação da fila para este provider.
     _audioService.onSkipToNext = next;
     _audioService.onSkipToPrevious = previous;
+    // Faixa que FALHOU ao abrir: decide aqui (quem conhece a fila)
+    // se pula para a próxima — com teto de falhas seguidas.
+    _audioService.onPlaybackFailed = _onPlaybackFailed;
     _audioService.position.addListener(_onPositionChanged);
     _audioService.duration.addListener(_onDurationChanged);
     _audioService.status.addListener(_onStatusChanged);
@@ -212,6 +224,8 @@ class PlayerProvider extends ChangeNotifier {
   /// tocar uma faixa monta/atualiza a fila.
   Future<void> playVisibleAt(int index) async {
     if (index < 0 || index >= _visibleSongs.length) return;
+    // Escolha manual = nova chance: zera o teto de falhas seguidas.
+    _consecutivePlayFailures = 0;
     _rebuildQueue();
     _playbackQueue.setIndex(
       _playbackQueue.queue.indexWhere((s) => s.id == _visibleSongs[index].id),
@@ -223,6 +237,8 @@ class PlayerProvider extends ChangeNotifier {
   /// faixa específica. Substitui a fila corrente sem alterar a biblioteca.
   Future<void> playQueue(List<Song> queue, int startIndex) async {
     if (queue.isEmpty) return;
+    // Escolha manual = nova chance: zera o teto de falhas seguidas.
+    _consecutivePlayFailures = 0;
     _playbackQueue.setQueue(queue, startIndex);
     await _playCurrent();
   }
@@ -235,6 +251,47 @@ class PlayerProvider extends ChangeNotifier {
     _duration = Duration.zero;
     _notify(); // destaca a faixa imediatamente
     await _audioService.playSong(song);
+    // playSong limpa errorMessage no início e só o repreenche em falha:
+    // abrir com sucesso zera o contador de falhas seguidas.
+    if (_audioService.errorMessage.value == null) {
+      _consecutivePlayFailures = 0;
+    }
+  }
+
+  /// Chamado pelo [AudioService] quando uma faixa FALHOU ao abrir.
+  ///
+  /// Estratégia: pula para a próxima automaticamente (arquivo apagado/
+  /// corrompido não deve travar a escuta), mas com TETO de falhas
+  /// seguidas ([maxConsecutivePlayFailures]) — com a fila toda morta,
+  /// pular indefinidamente só repete o erro e esquenta o aparelho.
+  /// A mensagem amigável (com o motivo) já foi publicada pelo serviço.
+  Future<void> _onPlaybackFailed(Song failed) async {
+    if (_isDisposed) return;
+    _consecutivePlayFailures++;
+
+    if (_consecutivePlayFailures >= maxConsecutivePlayFailures) {
+      // Teto batido: para de tentar e deixa uma mensagem que explica o
+      // PORQUÊ de ter parado (a do serviço cita a última faixa; esta
+      // diz o total). Nada de pular em loop com a fila toda morta.
+      _audioService.errorMessage.value =
+          'Reprodução parada: $maxConsecutivePlayFailures faixas seguidas '
+          'falharam ao abrir. Verifique se os arquivos ainda existem '
+          'no aparelho.';
+      _status = PlayerStatus.idle;
+      _notify();
+      return;
+    }
+
+    final int? nextIndex = _playbackQueue.nextIndex();
+    // Mesma faixa (repeat one apontando para a morta) = loop garantido;
+    // null = fim da fila (repeat off). Nos dois casos, sem pular: a
+    // mensagem amigável da última falha (serviço) já está na UI.
+    final bool sameTrack =
+        nextIndex != null && nextIndex == _playbackQueue.queueIndex;
+    if (nextIndex == null || sameTrack) return;
+
+    _playbackQueue.setIndex(nextIndex);
+    await _playCurrent();
   }
 
   /// Próxima faixa da fila (respecta repeat all/one e shuffle).
