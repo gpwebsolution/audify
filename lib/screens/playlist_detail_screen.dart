@@ -54,7 +54,15 @@ class _PlaylistDetailScreenState extends State<PlaylistDetailScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final PlayerProvider player = context.watch<PlayerProvider>();
+    // Item 2.1: select explícito (não watch) — esta lista reconstrói só
+    // quando a faixa corrente ou o toque/pausa mudam; o tick de posição
+    // não passa por aqui (nem pelo notifyListeners do provider).
+    final String? currentSongId = context.select<PlayerProvider, String?>(
+      (PlayerProvider p) => p.currentSong?.id,
+    );
+    final bool isPlaying = context.select<PlayerProvider, bool>(
+      (PlayerProvider p) => p.isPlaying,
+    );
     final PlaylistProvider provider = context.watch<PlaylistProvider>();
     final ColorScheme colors = Theme.of(context).colorScheme;
     final List<Song> songs = _songs ?? const [];
@@ -101,7 +109,8 @@ class _PlaylistDetailScreenState extends State<PlaylistDetailScreen> {
                       ),
                       _ReorderableSongs(
                         songs: songs,
-                        player: player,
+                        currentSongId: currentSongId,
+                        isPlaying: isPlaying,
                         onTap: (song) =>
                             provider.playPlaylist(widget.playlistId, song),
                         onRemove: (song) => _confirmRemoveSong(
@@ -280,16 +289,21 @@ class _SectionHeader extends StatelessWidget {
 }
 
 /// Lista reordenável de músicas (arrasta pela alça).
+///
+/// Recebe a faixa corrente e o toque/pausa como VALORES (item 2.1): widget
+/// puro, sem assinatura do PlayerProvider.
 class _ReorderableSongs extends StatelessWidget {
   final List<Song> songs;
-  final PlayerProvider player;
+  final String? currentSongId;
+  final bool isPlaying;
   final ValueChanged<Song> onTap;
   final ValueChanged<Song> onRemove;
   final ValueChanged<List<Song>> onReorder;
 
   const _ReorderableSongs({
     required this.songs,
-    required this.player,
+    required this.currentSongId,
+    required this.isPlaying,
     required this.onTap,
     required this.onRemove,
     required this.onReorder,
@@ -312,14 +326,14 @@ class _ReorderableSongs extends StatelessWidget {
       },
       itemBuilder: (context, index) {
         final Song song = songs[index];
-        final bool isCurrent = player.currentSong?.id == song.id;
+        final bool isCurrent = currentSongId == song.id;
         return ReorderableDragStartListener(
           key: ValueKey('song-${song.id}'),
           index: index,
           child: SongListTile(
             song: song,
             isCurrent: isCurrent,
-            isPlaying: isCurrent && player.isPlaying,
+            isPlaying: isCurrent && isPlaying,
             onTap: () => onTap(song),
             onLongPress: () => onRemove(song),
             trailing: Row(

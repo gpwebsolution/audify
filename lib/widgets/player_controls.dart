@@ -20,13 +20,6 @@ class PlayerControls extends StatelessWidget {
     final ColorScheme colors = Theme.of(context).colorScheme;
     final Song? song = provider.currentSong;
 
-    // Progresso para a barra fina (0..1).
-    final double progress = provider.duration > Duration.zero
-        ? (provider.position.inMilliseconds /
-                provider.duration.inMilliseconds)
-            .clamp(0.0, 1.0)
-        : 0.0;
-
     return Material(
       elevation: 8,
       color: colors.surfaceContainerLow,
@@ -42,10 +35,23 @@ class PlayerControls extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             children: [
               // ---- Barra fina de progresso ----
-              LinearProgressIndicator(
-                value: progress,
-                minHeight: 3,
-                backgroundColor: colors.surfaceContainerHighest,
+              // Item 2.1: só a barra consome o tick de posição (via
+              // ValueListenableBuilder); o resto do mini player reconstrói
+              // apenas em mudança de faixa/toque/fila.
+              ValueListenableBuilder<Duration>(
+                valueListenable: provider.positionListenable,
+                builder: (context, position, _) {
+                  final double progress = provider.duration > Duration.zero
+                      ? (position.inMilliseconds /
+                              provider.duration.inMilliseconds)
+                          .clamp(0.0, 1.0)
+                      : 0.0;
+                  return LinearProgressIndicator(
+                    value: progress,
+                    minHeight: 3,
+                    backgroundColor: colors.surfaceContainerHighest,
+                  );
+                },
               ),
               Padding(
                 padding: const EdgeInsets.fromLTRB(16, 8, 8, 8),

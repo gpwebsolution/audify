@@ -95,6 +95,21 @@ class MusicScreen extends StatefulWidget {
 
 enum _MusicGroupMode { tracks, album, artist, folder }
 
+/// Fatia do [PlayerProvider] exibida pela aba (item 2.1): um ÚNICO select
+/// estrutural — a tela reconstrói apenas quando um destes valores muda.
+/// Posição de reprodução não compõe a fatia: o progresso pertence ao mini
+/// player e ao player em tela cheia (ValueListenableBuilder).
+typedef _MusicView = ({
+  bool isLoading,
+  List<Song> songs,
+  List<Song> visibleSongs,
+  Song? currentSong,
+  bool isPlaying,
+  String searchQuery,
+  AudioPermissionState permission,
+  String? errorMessage,
+});
+
 class _MusicScreenState extends State<MusicScreen> with MediaSelection<String> {
   final TextEditingController _searchController = TextEditingController();
   String? _lastShownError;
@@ -229,9 +244,24 @@ class _MusicScreenState extends State<MusicScreen> with MediaSelection<String> {
 
   @override
   Widget build(BuildContext context) {
-    final PlayerProvider provider = context.watch<PlayerProvider>();
+    // Item 2.1: select explícito (não watch) — a lista reconstrói só
+    // quando um destes valores muda. Tick de posição não está aqui e não
+    // passa pelo notifyListeners do provider.
+    final PlayerProvider provider = context.read<PlayerProvider>();
+    final _MusicView view = context.select<PlayerProvider, _MusicView>(
+      (PlayerProvider p) => (
+        isLoading: p.isLoading,
+        songs: p.songs,
+        visibleSongs: p.visibleSongs,
+        currentSong: p.currentSong,
+        isPlaying: p.isPlaying,
+        searchQuery: p.searchQuery,
+        permission: p.permission,
+        errorMessage: p.errorMessage,
+      ),
+    );
 
-    _handleErrorFeedback(provider);
+    _handleErrorFeedback(view.errorMessage);
 
     return Column(
       children: [
@@ -250,7 +280,7 @@ class _MusicScreenState extends State<MusicScreen> with MediaSelection<String> {
             decoration: InputDecoration(
               hintText: 'Buscar música, artista ou álbum',
               prefixIcon: const Icon(Icons.search),
-              suffixIcon: provider.searchQuery.isEmpty
+              suffixIcon: view.searchQuery.isEmpty
                   ? null
                   : IconButton(
                       tooltip: 'Limpar busca',
@@ -330,12 +360,12 @@ class _MusicScreenState extends State<MusicScreen> with MediaSelection<String> {
         ),
 
         // ---- Banner de permissão (quando negada/bloqueada) ----
-        if (provider.permission == AudioPermissionState.denied ||
-            provider.permission == AudioPermissionState.permanentlyDenied)
+        if (view.permission == AudioPermissionState.denied ||
+            view.permission == AudioPermissionState.permanentlyDenied)
           _PermissionBanner(provider: provider),
 
         // ---- Lista de músicas (expande) ----
-        Expanded(child: _buildBody(context, provider)),
+        Expanded(child: _buildBody(context, provider, view)),
       ],
     );
   }
@@ -389,8 +419,10 @@ class _MusicScreenState extends State<MusicScreen> with MediaSelection<String> {
   }
 
   /// Exibe o erro do provider uma única vez (feedback visual, sem crash).
-  void _handleErrorFeedback(PlayerProvider provider) {
-    final String? error = provider.errorMessage;
+  ///
+  /// Recebe o valor já selecionado ([_MusicView.errorMessage]) — este
+  /// widget não assina o provider por conta própria (item 2.1).
+  void _handleErrorFeedback(String? error) {
     if (error != null && error != _lastShownError) {
       _lastShownError = error;
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -405,27 +437,31 @@ class _MusicScreenState extends State<MusicScreen> with MediaSelection<String> {
     }
   }
 
-  Widget _buildBody(BuildContext context, PlayerProvider provider) {
-    if (provider.isLoading) {
+  Widget _buildBody(
+    BuildContext context,
+    PlayerProvider provider,
+    _MusicView view,
+  ) {
+    if (view.isLoading) {
       return const Center(child: CircularProgressIndicator());
     }
 
-    if (provider.visibleSongs.isEmpty) {
-      return _buildEmptyState(context, provider);
+    if (view.visibleSongs.isEmpty) {
+      return _buildEmptyState(context, view);
     }
 
     if (_groupMode == _MusicGroupMode.tracks) {
       return ListView.builder(
         padding: const EdgeInsets.symmetric(vertical: 8),
-        itemCount: provider.visibleSongs.length,
+        itemCount: view.visibleSongs.length,
         itemBuilder: (context, index) {
-          final Song song = provider.visibleSongs[index];
-          final bool isCurrent = provider.currentSong?.id == song.id;
+          final Song song = view.visibleSongs[index];
+          final bool isCurrent = view.currentSong?.id == song.id;
           final bool marked = isSelected(song.id);
           return SongListTile(
             song: song,
             isCurrent: isCurrent,
-            isPlaying: isCurrent && provider.isPlaying,
+            isPlaying: isCurrent && view.isPlaying,
             selected: marked,
             selectionMode: isSelectionMode,
             onTap: () => _onSongTap(provider, index, song),
@@ -438,7 +474,7 @@ class _MusicScreenState extends State<MusicScreen> with MediaSelection<String> {
 
     // ---- Modo agrupado (Álbum/Artista/Pasta) ----
     final LinkedHashMap<String, List<Song>> groups = LinkedHashMap();
-    for (final Song song in provider.visibleSongs) {
+    for (final Song song in view.visibleSongs) {
       groups.putIfAbsent(_groupKeyOf(song), () => []).add(song);
     }
     final List<MapEntry<String, List<Song>>> sortedEntries =
@@ -469,12 +505,12 @@ class _MusicScreenState extends State<MusicScreen> with MediaSelection<String> {
       if (!collapsed) {
         for (int i = 0; i < songs.length; i++) {
           final Song song = songs[i];
-          final bool isCurrent = provider.currentSong?.id == song.id;
+          final bool isCurrent = view.currentSong?.id == song.id;
           sections.add(
             SongListTile(
               song: song,
               isCurrent: isCurrent,
-              isPlaying: isCurrent && provider.isPlaying,
+              isPlaying: isCurrent && view.isPlaying,
               selected: isSelected(song.id),
               selectionMode: isSelectionMode,
               // O grupo vira a fila: próxima/anterior navega dentro dele.
@@ -701,17 +737,16 @@ class _MusicScreenState extends State<MusicScreen> with MediaSelection<String> {
     );
   }
 
-  Widget _buildEmptyState(BuildContext context, PlayerProvider provider) {
-    final bool noPermission =
-        provider.permission != AudioPermissionState.granted;
+  Widget _buildEmptyState(BuildContext context, _MusicView view) {
+    final bool noPermission = view.permission != AudioPermissionState.granted;
 
     final String message = noPermission
         ? 'Permissão de acesso às músicas negada.\n'
               'Permita acima para ver as músicas do aparelho.'
-        : (provider.songs.isEmpty
+        : (view.songs.isEmpty
               ? 'Nenhuma música encontrada.\n'
                     'Adicione arquivos .mp3 em assets/songs/ ou no aparelho.'
-              : 'Nenhum resultado para "${provider.searchQuery}".');
+              : 'Nenhum resultado para "${view.searchQuery}".');
 
     return Center(
       child: Padding(

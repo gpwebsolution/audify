@@ -59,7 +59,13 @@ class PlayerProvider extends ChangeNotifier {
 
   Song? _currentSong;
 
-  Duration _position = Duration.zero;
+  /// Posição de reprodução — notifier DEDICADO (item 2.1): o tick
+  /// (~5x/s) NÃO passa por notifyListeners(), então a lista da
+  /// biblioteca não reconstrói enquanto toca. Só os widgets de
+  /// progresso consomem, via ValueListenableBuilder ([positionListenable]).
+  final ValueNotifier<Duration> _positionNotifier =
+      ValueNotifier<Duration>(Duration.zero);
+
   Duration _duration = Duration.zero;
   PlayerStatus _status = PlayerStatus.idle;
   String? _errorMessage;
@@ -82,7 +88,12 @@ class PlayerProvider extends ChangeNotifier {
 
   bool get shuffle => _playbackQueue.shuffle;
 
-  Duration get position => _position;
+  Duration get position => _positionNotifier.value;
+
+  /// Progresso como ValueListenable (item 2.1): consumir com
+  /// ValueListenableBuilder nos widgets que mostram a barra/tempos —
+  /// mudanças aqui não acionam os watchers da lista.
+  ValueListenable<Duration> get positionListenable => _positionNotifier;
 
   Duration get duration => _duration;
 
@@ -216,6 +227,11 @@ class PlayerProvider extends ChangeNotifier {
   void setSearchQuery(String query) {
     _searchQuery = query.trim();
     _applySearchFilter();
+    // Item 2.1: a busca não notificava antes — a tela só se atualizava
+    // porque o tick de posição reconstruía tudo ~5x/s (pausado, ficava
+    // defasada). Com o tick fora do notifyListeners, digitar notifica de
+    // verdade: lista e ícone de limpar atualizam na hora.
+    _notify();
   }
 
   void _applySearchFilter() {
@@ -266,7 +282,7 @@ class PlayerProvider extends ChangeNotifier {
     final Song? song = _playbackQueue.current;
     if (song == null) return;
     _currentSong = song;
-    _position = Duration.zero;
+    _positionNotifier.value = Duration.zero;
     _duration = Duration.zero;
     _notify(); // destaca a faixa imediatamente
     // Item 1.11: POST_NOTIFICATIONS no primeiro play — fire-and-forget
@@ -354,7 +370,7 @@ class PlayerProvider extends ChangeNotifier {
   /// Faixa anterior (ou reinicia a atual se passou mais de 3s tocando).
   Future<void> previous() async {
     if (_currentSong == null) return;
-    if (_position > const Duration(seconds: 3)) {
+    if (position > const Duration(seconds: 3)) {
       return seek(Duration.zero);
     }
     final int? prevIndex = _playbackQueue.previousIndex();
@@ -441,9 +457,11 @@ class PlayerProvider extends ChangeNotifier {
   }
 
   void _onPositionChanged() {
-    _position = _audioService.position.value;
+    // Item 2.1: o tick atualiza SÓ o notifier de progresso — sem
+    // notifyListeners. A lista da biblioteca não reconstrói ~5x/s;
+    // os widgets de progresso reagem via ValueListenableBuilder.
+    _positionNotifier.value = _audioService.position.value;
     _maybeSaveSession();
-    _notify();
   }
 
   /// Salva a sessão periodicamente (5s) e em pausas — barato e tolerante
@@ -481,7 +499,7 @@ class PlayerProvider extends ChangeNotifier {
     }
     final int? nextIndex = _playbackQueue.nextIndex();
     if (nextIndex == null) {
-      _position = Duration.zero;
+      _positionNotifier.value = Duration.zero;
       return;
     }
     _playbackQueue.setIndex(nextIndex);
@@ -522,7 +540,7 @@ class PlayerProvider extends ChangeNotifier {
   void onAppResumed() {
     if (_isDisposed) return;
     final AudioService svc = _audioService;
-    _position = svc.position.value;
+    _positionNotifier.value = svc.position.value;
     _duration = svc.duration.value;
     _status = svc.status.value;
     _errorMessage = svc.errorMessage.value;
@@ -549,7 +567,7 @@ class PlayerProvider extends ChangeNotifier {
   /// Para a reprodução e zera a posição na UI.
   Future<void> stop() async {
     await _audioService.stop();
-    _position = Duration.zero;
+    _positionNotifier.value = Duration.zero;
     _notify();
   }
 
@@ -615,7 +633,7 @@ class PlayerProvider extends ChangeNotifier {
     }
 
     _currentSong = queue[idx];
-    _position = stored.$2;
+    _positionNotifier.value = stored.$2;
     _playbackQueue.setQueue(queue, idx);
     _publishQueueToService();
     _notify();
@@ -626,7 +644,7 @@ class PlayerProvider extends ChangeNotifier {
   Future<void> _saveSession() async {
     final Song? song = _currentSong;
     if (song == null) return;
-    await _sessionRepository.save(song, _position);
+    await _sessionRepository.save(song, position);
     // Fila ativa (ids + índice): permite retomar a MESMA fila
     // (inclusive a ordem embaralhada), não só a faixa.
     final List<Song> queue = _playbackQueue.queue;
@@ -675,7 +693,7 @@ class PlayerProvider extends ChangeNotifier {
 
       await _audioService.stop();
       _currentSong = null;
-      _position = Duration.zero;
+      _positionNotifier.value = Duration.zero;
       _duration = Duration.zero;
       _status = PlayerStatus.idle;
       _lastSessionSave = DateTime.fromMillisecondsSinceEpoch(0);
@@ -706,6 +724,7 @@ class PlayerProvider extends ChangeNotifier {
     _audioService.status.removeListener(_onStatusChanged);
     _audioService.errorMessage.removeListener(_onErrorMessageChanged);
     _audioService.dispose();
+    _positionNotifier.dispose();
     super.dispose();
   }
 }

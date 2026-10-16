@@ -189,11 +189,6 @@ class _PlayerScreenState extends State<PlayerScreen> {
     final double maxMs = provider.duration.inMilliseconds
         .clamp(1, 1 << 62)
         .toDouble();
-    final double sliderValue =
-        (_dragValueMs ?? provider.position.inMilliseconds.toDouble()).clamp(
-          0,
-          maxMs,
-        );
 
     return Scaffold(
       appBar: AppBar(
@@ -260,39 +255,61 @@ class _PlayerScreenState extends State<PlayerScreen> {
             const SizedBox(height: 16),
 
             // ---- Slider de progresso (seek arrastável) ----
-            Slider(
-              value: sliderValue,
-              max: maxMs,
-              onChanged: sliderEnabled
-                  ? (double value) {
-                      setState(() => _dragValueMs = value);
-                    }
-                  : null,
-              onChangeStart: sliderEnabled
-                  ? (_) => setState(() => _dragValueMs = sliderValue)
-                  : null,
-              onChangeEnd: sliderEnabled
-                  ? (double value) {
-                      provider.seek(Duration(milliseconds: value.round()));
-                      setState(() => _dragValueMs = null);
-                    }
-                  : null,
-            ),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 24),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(
-                    formatDuration(Duration(milliseconds: sliderValue.round())),
-                    style: Theme.of(context).textTheme.labelMedium,
-                  ),
-                  Text(
-                    formatDuration(provider.duration),
-                    style: Theme.of(context).textTheme.labelMedium,
-                  ),
-                ],
-              ),
+            // Item 2.1: slider e tempos reagem SÓ ao notifier de posição
+            // (ValueListenableBuilder) — o resto desta tela reconstrói em
+            // mudança de faixa/status/modo, não a cada tick de 200ms.
+            ValueListenableBuilder<Duration>(
+              valueListenable: provider.positionListenable,
+              builder: (context, position, _) {
+                final double sliderValue =
+                    (_dragValueMs ?? position.inMilliseconds.toDouble()).clamp(
+                      0,
+                      maxMs,
+                    );
+                return Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Slider(
+                      value: sliderValue,
+                      max: maxMs,
+                      onChanged: sliderEnabled
+                          ? (double value) {
+                              setState(() => _dragValueMs = value);
+                            }
+                          : null,
+                      onChangeStart: sliderEnabled
+                          ? (_) => setState(() => _dragValueMs = sliderValue)
+                          : null,
+                      onChangeEnd: sliderEnabled
+                          ? (double value) {
+                              provider.seek(
+                                Duration(milliseconds: value.round()),
+                              );
+                              setState(() => _dragValueMs = null);
+                            }
+                          : null,
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 24),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            formatDuration(
+                              Duration(milliseconds: sliderValue.round()),
+                            ),
+                            style: Theme.of(context).textTheme.labelMedium,
+                          ),
+                          Text(
+                            formatDuration(provider.duration),
+                            style: Theme.of(context).textTheme.labelMedium,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                );
+              },
             ),
             const SizedBox(height: 8),
 
