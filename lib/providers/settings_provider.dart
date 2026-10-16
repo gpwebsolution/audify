@@ -19,6 +19,8 @@ class SettingsProvider extends ChangeNotifier {
   static const String _pauseOnNoisyKey = 'pause_on_noisy';
   static const String _shuffleKey = 'shuffle_enabled';
   static const String _repeatModeKey = 'repeat_mode';
+  static const String _minDurationKey = 'library_min_duration_seconds';
+  static const String _ignoredFoldersKey = 'library_ignored_folders';
 
   /// Opções de prazo da lixeira, em dias. `0` = manter para sempre.
   static const List<int> trashRetentionOptions = <int>[
@@ -28,6 +30,16 @@ class SettingsProvider extends ChangeNotifier {
     15,
     30,
     90,
+  ];
+
+  /// Opções de duração MÍNIMA da biblioteca (segundos). `0` =
+  /// desligado (padrão) — mostra tudo, inclusive toques curtíssimos.
+  static const List<int> minDurationOptions = <int>[
+    0, // desligado
+    10,
+    30,
+    60,
+    120,
   ];
 
   /// Prazo padrão: 30 dias é o padrão de mercado (Google Fotos, Drive).
@@ -66,6 +78,15 @@ class SettingsProvider extends ChangeNotifier {
   int _galleryColumns = 3;
   int _videoColumns = 2;
   int _trashRetentionDays = defaultTrashRetentionDays;
+
+  // ---- Filtros da biblioteca (item 2.5) ----
+
+  /// Duração mínima em segundos — `0` = desligado (padrão).
+  int _libraryMinDurationSeconds = 0;
+
+  /// Pastas ignoradas (caminhos normalizados, sem barra final).
+  List<String> _ignoredFolders = const <String>[];
+
   bool _isDisposed = false;
 
   ThemeMode get themeMode => _themeMode;
@@ -94,6 +115,79 @@ class SettingsProvider extends ChangeNotifier {
   /// Rótulo curto do prazo, para a UI.
   String get trashRetentionLabel =>
       _trashRetentionDays == 0 ? 'Para sempre' : '$_trashRetentionDays dias';
+
+  /// Duração mínima da biblioteca em segundos (`0` = desligado) —
+  /// item 2.5.
+  int get libraryMinDurationSeconds => _libraryMinDurationSeconds;
+
+  /// Rótulo da duração mínima, para a UI.
+  String get libraryMinDurationLabel {
+    final int seconds = _libraryMinDurationSeconds;
+    if (seconds == 0) return 'Desligado';
+    if (seconds >= 60 && seconds % 60 == 0) return '${seconds ~/ 60} min';
+    return '$seconds s';
+  }
+
+  /// Pastas cujas faixas não aparecem na biblioteca (item 2.5).
+  List<String> get ignoredFolders => List<String>.unmodifiable(
+        _ignoredFolders,
+      );
+
+  /// Define a duração mínima (apenas valores de [minDurationOptions]).
+  Future<void> setLibraryMinDuration(int seconds) async {
+    if (!minDurationOptions.contains(seconds)) return;
+    if (_libraryMinDurationSeconds == seconds) return;
+    _libraryMinDurationSeconds = seconds;
+    _notify();
+    try {
+      final SharedPreferences prefs = await SharedPreferences.getInstance();
+      await prefs.setInt(_minDurationKey, seconds);
+    } catch (e) {
+      // Falha de escrita não quebra a sessão atual.
+    }
+  }
+
+  /// Adiciona uma pasta ignorada (caminho normalizado; duplicata ou
+  /// vazio é ignorado). Retorna true se a lista mudou.
+  Future<bool> addIgnoredFolder(String path) async {
+    final String? normalized = _normalizeFolderPath(path);
+    if (normalized == null) return false;
+    if (_ignoredFolders.contains(normalized)) return false;
+    _ignoredFolders = <String>[..._ignoredFolders, normalized]..sort();
+    _notify();
+    await _persistIgnoredFolders();
+    return true;
+  }
+
+  /// Remove uma pasta ignorada. Retorna true se a lista mudou.
+  Future<bool> removeIgnoredFolder(String path) async {
+    if (!_ignoredFolders.contains(path)) return false;
+    _ignoredFolders =
+        _ignoredFolders.where((String f) => f != path).toList(growable: false);
+    _notify();
+    await _persistIgnoredFolders();
+    return true;
+  }
+
+  Future<void> _persistIgnoredFolders() async {
+    try {
+      final SharedPreferences prefs = await SharedPreferences.getInstance();
+      await prefs.setStringList(_ignoredFoldersKey, _ignoredFolders);
+    } catch (e) {
+      // Falha de escrita não quebra a sessão atual.
+    }
+  }
+
+  /// Normaliza o caminho digitado: trim, sem barra final (a comparação
+  /// do filtro usa `caminho/` como prefixo) e sem raiz inútil.
+  static String? _normalizeFolderPath(String raw) {
+    String path = raw.trim();
+    while (path.length > 1 && path.endsWith('/')) {
+      path = path.substring(0, path.length - 1);
+    }
+    if (path.isEmpty || path == '/') return null;
+    return path;
+  }
 
   /// Colunas EFETIVAS para uma largura de tela.
   ///
@@ -176,6 +270,15 @@ class SettingsProvider extends ChangeNotifier {
         minColumns,
         maxColumns,
       );
+      _libraryMinDurationSeconds = minDurationOptions
+              .contains(prefs.getInt(_minDurationKey))
+          ? prefs.getInt(_minDurationKey)!
+          : 0;
+      _ignoredFolders =
+          (prefs.getStringList(_ignoredFoldersKey) ?? const <String>[])
+              .where((String f) => _normalizeFolderPath(f) != null)
+              .map((String f) => _normalizeFolderPath(f)!)
+              .toList(growable: false);
       _notify();
     } catch (e) {
       // Sem persistência disponível: mantém o padrão (system).

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:provider/provider.dart';
 
+import '../providers/player_provider.dart';
 import '../providers/settings_provider.dart';
 import '../services/error_log_service.dart';
 import '../screens/trash_screen.dart';
@@ -87,6 +88,42 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
           value: settings.pauseOnNoisy,
           onChanged: settings.setPauseOnNoisy,
+        ),
+
+        // ---- Biblioteca (item 2.5) ----
+        const _SectionHeader(title: 'Biblioteca'),
+        ListTile(
+          leading: const Icon(Icons.timer_outlined),
+          title: const Text('Duração mínima'),
+          subtitle: Text(
+            settings.libraryMinDurationSeconds == 0
+                ? 'Mostra todas as faixas (padrão).'
+                : 'Esconde faixas com menos de '
+                    '${settings.libraryMinDurationLabel} — '
+                    'toques e notificações somem.',
+          ),
+          trailing: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(settings.libraryMinDurationLabel),
+              const Icon(Icons.chevron_right),
+            ],
+          ),
+          onTap: () => _pickMinDuration(context, settings),
+        ),
+        ListTile(
+          leading: const Icon(Icons.folder_off),
+          title: const Text('Pastas ignoradas'),
+          subtitle: Text(
+            settings.ignoredFolders.isEmpty
+                ? 'Nenhuma. Áudios de WhatsApp/toques ficam misturados '
+                    'se o MediaStore marcar como música.'
+                : '${settings.ignoredFolders.length} '
+                    '${settings.ignoredFolders.length == 1 ? 'pasta' : 'pastas'} '
+                    'fora da biblioteca.',
+          ),
+          trailing: const Icon(Icons.chevron_right),
+          onTap: () => _editIgnoredFolders(context, settings),
         ),
 
         // ---- Lixeira ----
@@ -267,6 +304,176 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ),
       ),
     );
+  }
+
+  /// Escolhe a duração mínima da biblioteca (item 2.5). Se o valor
+  /// mudou, re-escaneia o catálogo para o filtro valer na hora.
+  Future<void> _pickMinDuration(
+    BuildContext context,
+    SettingsProvider settings,
+  ) async {
+    final int before = settings.libraryMinDurationSeconds;
+    await showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (BuildContext sheetContext) => SafeArea(
+        child: RadioGroup<int>(
+          groupValue: settings.libraryMinDurationSeconds,
+          onChanged: (int? value) async {
+            if (value == null) return;
+            await settings.setLibraryMinDuration(value);
+            if (sheetContext.mounted) Navigator.pop(sheetContext);
+          },
+          child: ListView(
+            shrinkWrap: true,
+            children: <Widget>[
+              for (final int option in SettingsProvider.minDurationOptions)
+                RadioListTile<int>(
+                  value: option,
+                  title: Text(_durationLabel(option)),
+                  subtitle: Text(
+                    option == 0
+                        ? 'Todas as faixas aparecem (padrão).'
+                        : 'Esconde do catálogo o que tiver menos de '
+                            '${_durationLabel(option)} — some com toques '
+                            'e notificações curtas.',
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+    if (before == settings.libraryMinDurationSeconds) return;
+    if (!context.mounted) return;
+    await context.read<PlayerProvider>().rescanCatalog();
+  }
+
+  /// Editor de pastas ignoradas (item 2.5): lista + campo para colar o
+  /// caminho (ex.: `/storage/emulated/0/WhatsApp/Audio`). Mudou a
+  /// lista → re-escaneia o catálogo ao fechar.
+  Future<void> _editIgnoredFolders(
+    BuildContext context,
+    SettingsProvider settings,
+  ) async {
+    bool changed = false;
+    final TextEditingController pathController = TextEditingController();
+    try {
+      await showModalBottomSheet<void>(
+        context: context,
+        showDragHandle: true,
+        isScrollControlled: true,
+        builder: (BuildContext sheetContext) => StatefulBuilder(
+          builder: (BuildContext sheetContext, void Function(void Function()) setSheetState) {
+            return SafeArea(
+              child: Padding(
+                padding: EdgeInsets.only(
+                  bottom: MediaQuery.of(sheetContext).viewInsets.bottom,
+                ),
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(
+                    maxHeight: MediaQuery.sizeOf(sheetContext).height * 0.7,
+                  ),
+                  child: ListView(
+                    shrinkWrap: true,
+                    children: <Widget>[
+                      const Padding(
+                        padding: EdgeInsets.fromLTRB(24, 8, 24, 0),
+                        child: Text(
+                          'Pastas ignoradas',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                      const Padding(
+                        padding: EdgeInsets.fromLTRB(24, 4, 24, 8),
+                        child: Text(
+                          'Faixas DENTRO da pasta somem da biblioteca. '
+                          'Cole o caminho da pasta (subpastas também '
+                          'contam).',
+                          style: TextStyle(fontSize: 13),
+                        ),
+                      ),
+                      if (settings.ignoredFolders.isEmpty)
+                        const ListTile(
+                          leading: Icon(Icons.check_circle_outline),
+                          title: Text('Nenhuma pasta ignorada'),
+                        ),
+                      for (final String folder in settings.ignoredFolders)
+                        ListTile(
+                          leading: const Icon(Icons.folder_off),
+                          title: Text(
+                            folder,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          trailing: IconButton(
+                            tooltip: 'Remover da lista',
+                            icon: const Icon(Icons.close),
+                            onPressed: () async {
+                              final bool ok = await settings
+                                  .removeIgnoredFolder(folder);
+                              if (ok) changed = true;
+                              if (sheetContext.mounted) {
+                                setSheetState(() {});
+                              }
+                            },
+                          ),
+                        ),
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+                        child: Row(
+                          children: <Widget>[
+                            Expanded(
+                              child: TextField(
+                                controller: pathController,
+                                decoration: const InputDecoration(
+                                  hintText:
+                                      '/storage/.../WhatsApp/Audio',
+                                  border: OutlineInputBorder(),
+                                  isDense: true,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            FilledButton(
+                              onPressed: () async {
+                                final bool ok = await settings
+                                    .addIgnoredFolder(pathController.text);
+                                if (ok) {
+                                  changed = true;
+                                  pathController.clear();
+                                }
+                                if (sheetContext.mounted) {
+                                  setSheetState(() {});
+                                }
+                              },
+                              child: const Text('Adicionar'),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          },
+        ),
+      );
+    } finally {
+      pathController.dispose();
+    }
+    if (!changed || !context.mounted) return;
+    await context.read<PlayerProvider>().rescanCatalog();
+  }
+
+  static String _durationLabel(int seconds) {
+    if (seconds == 0) return 'Desligado';
+    if (seconds >= 60 && seconds % 60 == 0) return '${seconds ~/ 60} min';
+    return '$seconds s';
   }
 
   Future<void> _showErrorLog() async {

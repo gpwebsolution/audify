@@ -282,7 +282,7 @@ class PlayerProvider extends ChangeNotifier {
     _markCatalogScanStarted();
     try {
       final List<Song> device = includeDevice
-          ? await _songRepository.loadDeviceSongs()
+          ? await _loadFilteredDeviceSongs()
           : const [];
       final List<Song> assets = await _songRepository.loadAssetSongs();
       // Item 2.3: ordem natural + sem acento — 'Faixa 2' antes de
@@ -320,7 +320,7 @@ class PlayerProvider extends ChangeNotifier {
     _markCatalogScanStarted();
     try {
       final List<Song> device = includeDevice
-          ? await _songRepository.loadDeviceSongs()
+          ? await _loadFilteredDeviceSongs()
           : const <Song>[];
       final List<Song> assets = await _songRepository.loadAssetSongs();
       final List<Song> merged =
@@ -355,6 +355,52 @@ class PlayerProvider extends ChangeNotifier {
       );
 
   void _markCatalogScanStarted() => _lastCatalogScan = _clock();
+
+  /// Faixas do aparelho já com os FILTROS da Configurações >
+  /// Biblioteca (item 2.5) — usada pelo caminho frio e pela
+  /// reconciliação para as duas aplicarem as MESMAS regras.
+  Future<List<Song>> _loadFilteredDeviceSongs() async {
+    final List<Song> raw = await _songRepository.loadDeviceSongs();
+    return filterDeviceSongs(
+      raw,
+      minDurationSeconds: settings?.libraryMinDurationSeconds ?? 0,
+      ignoredFolders: settings?.ignoredFolders ?? const <String>[],
+    );
+  }
+
+  /// Regras da Configurações > Biblioteca (item 2.5): duração mínima e
+  /// pastas ignoradas (WhatsApp, toques, notificações...). Só faixas do
+  /// aparelho passam por aqui (o chamador garante); assets do bundle
+  /// passam sempre, por segurança. Duração DESCONHECIDA passa — filtrar
+  /// no escuro esconderia música real. A comparação de pasta usa
+  /// `pasta/` como prefixo com limite de diretório: `/Music` não pega
+  /// `/MusicAntiga/x.mp3`.
+  static List<Song> filterDeviceSongs(
+    List<Song> device, {
+    required int minDurationSeconds,
+    required List<String> ignoredFolders,
+  }) {
+    if (minDurationSeconds <= 0 && ignoredFolders.isEmpty) return device;
+    final int minMs = minDurationSeconds * 1000;
+    return device.where((Song song) {
+      if (song.isAsset) return true;
+      if (minMs > 0) {
+        final Duration? duration = song.duration;
+        if (duration != null && duration.inMilliseconds < minMs) {
+          return false;
+        }
+      }
+      if (ignoredFolders.isNotEmpty) {
+        final String? path = song.filePath;
+        if (path != null) {
+          for (final String folder in ignoredFolders) {
+            if (path.startsWith('$folder/')) return false;
+          }
+        }
+      }
+      return true;
+    }).toList(growable: false);
+  }
 
   /// Igualdade REAL do catálogo — [Song.==] compara só o id, então
   /// título/artista/álbum/caminho/duração mudados também contam como
