@@ -83,7 +83,6 @@ List<Song> _catalog() => [
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  setUpAll(mockAudioplayersChannels);
 
   group('stripDiacritics', () {
     test('remove diacríticos comuns de pt-BR/ES/FR preservando caixa', () {

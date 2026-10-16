@@ -68,7 +68,6 @@ List<String> _ids(List<Song> songs) =>
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   setUpAll(() {
-    mockAudioplayersChannels();
     sqfliteFfiInit();
     databaseFactory = databaseFactoryFfi;
   });

@@ -73,7 +73,6 @@ PlayerProvider _provider(PlayableAudioService svc) => PlayerProvider(
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  setUpAll(mockAudioplayersChannels);
 
   test('tick de posição não emite notifyListeners; busca notifica (2.1)',
       () async {

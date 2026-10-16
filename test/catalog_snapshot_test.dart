@@ -125,7 +125,6 @@ PlayerProvider _provider(
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
-  setUpAll(mockAudioplayersChannels);
 
   group('CatalogSnapshotService', () {
     test('roundtrip: save + load devolve as mesmas faixas', () async {

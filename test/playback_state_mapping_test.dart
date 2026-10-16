@@ -73,7 +73,6 @@ PlayerProvider _provider(PlayableAudioService svc, SettingsProvider prefs) {
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  setUpAll(mockAudioplayersChannels);
 
   setUp(() {
     SharedPreferences.setMockInitialValues({});

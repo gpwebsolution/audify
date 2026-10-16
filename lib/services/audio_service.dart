@@ -2,8 +2,8 @@ import 'dart:async';
 
 import 'package:audio_service/audio_service.dart';
 import 'package:audio_session/audio_session.dart';
-import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/foundation.dart';
+import 'package:just_audio/just_audio.dart';
 
 import '../models/repeat_mode.dart';
 import '../models/song_model.dart';
@@ -16,8 +16,10 @@ enum PlayerStatus { idle, playing, paused, stopped, completed }
 /// Camada de serviço de áudio.
 ///
 /// Responsabilidade: isolar TODA a lógica do `AudioPlayer` do pacote
-/// audioplayers em um único lugar. A UI e o Provider nunca tocam no plugin
-/// diretamente — conversam apenas com esta classe.
+/// just_audio em um único lugar. A UI e o Provider nunca tocam no plugin
+/// diretamente — conversam apenas com esta classe. (Item 3.0: motor trocado
+/// de audioplayers para just_audio — gapless/Equalizer — mantendo esta
+/// interface pública estável; ver RELATORIO_3.0.md.)
 ///
 /// Extende `BaseAudioHandler` (audio_service): além do player, esta classe
 /// alimenta o MediaSession do Android — notificação de mídia persistente e
@@ -100,9 +102,10 @@ class AudioService extends BaseAudioHandler {
 
   /// Intervalo mínimo entre broadcasts gerados pelo TICK DE POSIÇÃO.
   /// Mudanças de estado (play/pause/seek/troca de faixa) continuam
-  /// broadcast imediato — o throttle cobre só o ~5x/s do onPositionChanged,
-  /// que enchia o canal nativo sem necessidade (o sistema projeta a
-  /// posição a partir de updatePosition + updateTime).
+  /// broadcast imediato — o throttle cobre só o tick de posição
+  /// (positionStream do just_audio: até ~5x/s), que enchia o canal
+  /// nativo sem necessidade (o sistema projeta a posição a partir de
+  /// updatePosition + updateTime).
   static const Duration broadcastInterval = Duration(seconds: 1);
 
   /// Fila do provider → MediaSession (Android Auto/Bluetooth/browse).
@@ -208,9 +211,18 @@ class AudioService extends BaseAudioHandler {
     // audio_service para manter a notificação/tela de bloqueio sincronizadas.
     // Os corpos são blindados: uma exceção DENTRO de um callback de stream
     // escapa para a zona e derrubaria o app — agora vira log local.
+    // (just_audio: positionStream é timer Dart de 16–200ms só enquanto toca;
+    // playerStateStream cobre playing+processingState — completed incluso.)
     _subscriptions.addAll(<StreamSubscription<dynamic>>[
-      _player.onPositionChanged.listen((Duration newPosition) {
+      _player.positionStream.listen((Duration newPosition) {
         try {
+          // Só ticks de reprodução: o just_audio re-emite a posição ATUAL
+          // no primeiro listen (replay, chega assíncrona) e não emite com
+          // o player parado — aceitar fora de `playing` setaria posição e
+          // abriria o throttle do broadcast à toa no boot (contrato do
+          // teste de throttle).
+          if (status.value != PlayerStatus.playing) return;
+          if (position.value == newPosition) return;
           position.value = newPosition;
           // Tick de posição: broadcast com throttle (1x/s) — ver
           // [broadcastInterval]. O sistema projeta o avanço real a partir
@@ -220,28 +232,26 @@ class AudioService extends BaseAudioHandler {
           ErrorLogService.logSync('audio/onPosition', e, s);
         }
       }),
-      _player.onDurationChanged.listen((Duration newDuration) {
+      _player.durationStream.listen((Duration? newDuration) {
         try {
-          duration.value = newDuration;
+          duration.value = newDuration ?? Duration.zero;
         } catch (e, s) {
           ErrorLogService.logSync('audio/onDuration', e, s);
         }
       }),
-      _player.onPlayerStateChanged.listen((state) {
+      _player.playerStateStream.listen((PlayerState state) {
         try {
+          final PlayerStatus before = status.value;
           _mapPlayerState(state);
-          broadcastPlaybackState();
+          // Guarda: o just_audio re-emite o estado ATUAL no primeiro
+          // listen (replay) — sem checar mudança, o boot publicaria
+          // PlaybackState à toa e o throttle sairia aberto cedo (contrato
+          // do teste de throttle: 1 emissão por intervalo).
+          if (status.value != before) {
+            broadcastPlaybackState();
+          }
         } catch (e, s) {
           ErrorLogService.logSync('audio/onState', e, s);
-        }
-      }),
-      _player.onPlayerComplete.listen((_) {
-        try {
-          // Faixa chegou ao fim naturalmente.
-          status.value = PlayerStatus.completed;
-          broadcastPlaybackState();
-        } catch (e, s) {
-          ErrorLogService.logSync('audio/onComplete', e, s);
         }
       }),
     ]);
@@ -411,18 +421,21 @@ class AudioService extends BaseAudioHandler {
   }
 
   /// Traduz o estado interno do plugin para o enum da nossa camada.
+  ///
+  /// just_audio expõe (playing, processingState) ortogonais: o fim da faixa
+  /// é `processingState == completed` (antes era um evento à parte do
+  /// audioplayers); idle recém-construído vira [PlayerStatus.idle] para o
+  /// systemProcessingState continuar publicando `idle` no boot.
   void _mapPlayerState(PlayerState state) {
-    switch (state) {
-      case PlayerState.playing:
-        status.value = PlayerStatus.playing;
-      case PlayerState.paused:
-        status.value = PlayerStatus.paused;
-      case PlayerState.stopped:
-        status.value = PlayerStatus.stopped;
-      case PlayerState.completed:
+    switch (state.processingState) {
+      case ProcessingState.completed:
         status.value = PlayerStatus.completed;
-      case PlayerState.disposed:
-        status.value = PlayerStatus.stopped;
+      case ProcessingState.idle:
+        status.value = PlayerStatus.idle;
+      case ProcessingState.loading:
+      case ProcessingState.buffering:
+      case ProcessingState.ready:
+        status.value = state.playing ? PlayerStatus.playing : PlayerStatus.paused;
     }
   }
 
@@ -432,20 +445,21 @@ class AudioService extends BaseAudioHandler {
   /// faixa anterior e libera recursos), só então seta a nova fonte. Sem
   /// isso, duas reproduções podem sobrepor-se no mesmo player.
   ///
-  /// Fonte conforme a origem: assets usam `AssetSource`; faixas do
-  /// aparelho usam `DeviceFileSource` com o caminho absoluto do arquivo.
+  /// Fonte conforme a origem: assets usam `AudioSource.asset`; faixas do
+  /// aparelho usam `AudioSource.uri` com o caminho absoluto do arquivo.
+  /// (just_audio carrega no `setAudioSource` — falha de arquivo lança aqui,
+  /// alimentando o mesmo catch de antes: mensagem amigável + skip 1.7.)
   Future<void> playSong(Song song) async {
     try {
       _currentSong = song;
       errorMessage.value = null;
       await _player.stop();
-      await _player.setReleaseMode(ReleaseMode.stop);
 
-      final Source source = song.isAsset
-          ? AssetSource(song.assetKey!)
-          : DeviceFileSource(song.filePath!);
-      await _player.setSource(source);
-      await _player.resume();
+      final AudioSource source = song.isAsset
+          ? AudioSource.asset(song.assetKey!)
+          : AudioSource.uri(Uri.file(song.filePath!));
+      await _player.setAudioSource(source);
+      await _player.play();
 
       // Atualiza a notificação de mídia (título, artista, duração).
       // A capa vem de um ARQUIVO no cache do app (Uri.file) — o
@@ -507,9 +521,12 @@ class AudioService extends BaseAudioHandler {
   }
 
   /// Retoma de onde parou.
+  ///
+  /// (just_audio: o método de retomar é `play()`; a fonte continua carregada
+  /// após `pause()`, então a posição é preservada.)
   Future<void> resume() async {
     try {
-      await _player.resume();
+      await _player.play();
     } catch (e, s) {
       ErrorLogService.logSync('audio/resume', e, s);
       errorMessage.value = userMessage('retomar a reprodução', e);
@@ -522,11 +539,20 @@ class AudioService extends BaseAudioHandler {
     _interruptionPause = null;
     try {
       await _player.stop();
+      // O stop do just_audio NÃO zera o cursor (o do audioplayers zerava):
+      // seek explícito para a próxima retomada começar no início, como
+      // documentado.
+      await _player.seek(Duration.zero);
     } catch (e, s) {
       ErrorLogService.logSync('audio/stop', e, s);
       errorMessage.value = userMessage('parar a reprodução', e);
     } finally {
       status.value = PlayerStatus.idle;
+      position.value = Duration.zero;
+      // Republica o estado final (tudo parado) — o stream do just_audio
+      // pode não emitir aqui (sem mudança percebida) e a notificação não
+      // pode ficar mostrando "tocando".
+      broadcastPlaybackState();
       // Notifica o audio_service: processa o stop (remove controles e,
       // no Android, permite encerrar o foreground service limpo — cobre
       // o caso de o usuário deslizar o app fora dos recentes).

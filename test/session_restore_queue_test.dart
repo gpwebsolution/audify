@@ -78,7 +78,6 @@ List<Song> _fiveTracks() => [
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  setUpAll(mockAudioplayersChannels);
 
   /// Cria o provider já com a sessão "gravada" (como se viesse do disco).
   Future<PlayerProvider> restoredProvider({

@@ -15,12 +15,10 @@ import 'package:audio_service/audio_service.dart' as asvc;
 
 import 'package:audify/services/audio_service.dart';
 
-import 'support/playable_audio_service.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  setUpAll(mockAudioplayersChannels);
 
   group('broadcastPlaybackState throttled', () {
     late DateTime now;
@@ -41,7 +39,7 @@ void main() {
           svc.playbackState.skip(1).listen(seen.add);
       addTearDown(sub.cancel);
 
-      // 5 ticks de 200ms (padrão do audioplayers) em 1s.
+      // 5 ticks de 200ms (cadência máxima do positionStream) em 1s.
       for (int i = 0; i < 5; i++) {
         svc.position.value = Duration(milliseconds: 200 * i);
         svc.broadcastPlaybackState(throttled: true);

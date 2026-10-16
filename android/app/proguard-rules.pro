@@ -30,11 +30,11 @@
 -keep class com.lucasjosino.on_audio_query.** { *; }
 
 # ---------------------------------------------------------------------
-# audioplayers (xyz.luan.audioplayers)
-# Canal de plataforma + ExoPlayer subjacente; callbacks nativos -> Dart
-# por nome de método.
+# just_audio (com.ryanheise.just_audio) — item 3.0 (troca do
+# audioplayers). Canal de plataforma + Media3/ExoPlayer; callbacks
+# nativos -> Dart por nome de método.
 # ---------------------------------------------------------------------
--keep class xyz.luan.audioplayers.** { *; }
+-keep class com.ryanheise.just_audio.** { *; }
 
 # ---------------------------------------------------------------------
 # video_player (io.flutter.plugins.videoplayer) + ExoPlayer/Media3

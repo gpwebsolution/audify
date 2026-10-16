@@ -17,7 +17,6 @@ import 'package:audify/repositories/session_repository.dart';
 import 'package:audify/repositories/song_repository.dart';
 import 'package:audify/services/audio_service.dart';
 
-import 'support/playable_audio_service.dart';
 
 class _FakeSongRepository extends SongRepository {
   final List<Song> assets;
@@ -107,7 +106,6 @@ PlayerProvider _provider(AudioService audio) {
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  setUpAll(mockAudioplayersChannels);
 
   group('mensagens amigáveis (funções puras)', () {
     test('userMessage cita a ação e o motivo, nunca o objeto cru', () {

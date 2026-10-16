@@ -1,36 +1,22 @@
 // AudioService "tocável" para testes de fila/playlist.
 //
-// Por quê: em ambiente de teste o audioplayers não tem canal nativo e
-// playSong FALHA de verdade (asset do teste inexistente / canal morto).
-// Com o item 1.7, falha de arquivo dispara skip automático para a
-// próxima faixa — o que mudaria currentSong no MEIO dos testes de
+// Por quê: em ambiente de teste o motor de áudio (just_audio) não tem
+// canal nativo e playSong FALHA de verdade (asset do teste inexistente /
+// canal morto). Com o item 1.7, falha de arquivo dispara skip automático
+// para a próxima faixa — o que mudaria currentSong no MEIO dos testes de
 // fila/busca (cujo foco é a ordem da fila, não a recuperação de erro).
 //
 // Aqui playSong "dá certo" (status playing, sem erro): o provider
 // enxerga o mesmo estado de um app normal tocando, e a recuperação de
 // falha é testada à parte em playback_failure_skip_test.dart.
+//
+// Não há mocks de canal de plataforma (item 3.0): o AudioPlayer do
+// just_audio constrói com plataforma IDLE quando o app nunca chama
+// play()/setAudioSource — e nenhum teste real toca esses métodos (os
+// testes de unidade publicam broadcast/posição diretamente).
 
 import 'package:audify/models/song_model.dart';
 import 'package:audify/services/audio_service.dart';
-import 'package:flutter/services.dart';
-import 'package:flutter_test/flutter_test.dart';
-
-/// Mocka os canais do audioplayers para o VM não lançar
-/// MissingPluginException na criação do AudioPlayer (o construtor real
-/// chama `init` no canal nativo). Chamar em setUpAll dos testes que
-/// instanciam AudioService/PlayableAudioService.
-void mockAudioplayersChannels() {
-  final TestDefaultBinaryMessenger messenger =
-      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
-  messenger.setMockMethodCallHandler(
-    const MethodChannel('xyz.luan/audioplayers.global'),
-    (call) async => null,
-  );
-  messenger.setMockMethodCallHandler(
-    const MethodChannel('xyz.luan/audioplayers'),
-    (call) async => null,
-  );
-}
 
 class PlayableAudioService extends AudioService {
   /// Faixas que "tocaram" até agora (útil para asserções).

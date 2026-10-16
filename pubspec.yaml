@@ -36,10 +36,11 @@ dependencies:
   # Ícones Material (Cupertino é usado como fallback em alguns widgets).
   cupertino_icons: ^1.0.8
 
-  # Reprodução de áudio local (assets) e futura reprodução via URL.
-  # audioplayers suporta AssetSource, DeviceFileSource e UrlSource com a
-  # mesma API, o que torna a evolução para streaming trivial.
-  audioplayers: ^6.8.1
+  # Reprodução de áudio local (assets/URL/arquivos). Item 3.0: trocado o
+  # audioplayers pelo just_audio — gapless e equalizador Android só
+  # existem nele (RELATORIO_3.0.md), e o padrão documentado do
+  # audio_service é just_audio.
+  just_audio: ^0.10.6
 
   # Gerenciamento de estado reativo (ChangeNotifier + InheritedWidget).
   # Escolha intencional de manter a arquitetura simples, sem overengineering.

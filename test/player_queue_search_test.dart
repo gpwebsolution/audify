@@ -4,7 +4,7 @@
 // Usa repositórios falsos (SongRepository/SessionRepository são
 // concretos, mas os métodos são sobrescrevíveis) e um AudioService
 // SIMULADO que "toca" sem erro (test/support/playable_audio_service.dart).
-// Em ambiente de teste o audioplayers não tem canal nativo e playSong
+// Em ambiente de teste o motor de áudio não tem canal nativo e playSong
 // falharia de verdade — com o item 1.7 (skip automático em falha de
 // arquivo) isso mudaria currentSong no meio dos testes, mascarando o
 // que aqui se verifica: a ORDEM da fila.
@@ -71,7 +71,6 @@ PlayerProvider _provider() {
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  setUpAll(mockAudioplayersChannels);
 
   test('digitar na busca não altera a fila que está tocando',
       () async {

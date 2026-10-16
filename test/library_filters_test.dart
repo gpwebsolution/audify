@@ -66,7 +66,6 @@ List<String> _ids(PlayerProvider provider) =>
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
-  setUpAll(mockAudioplayersChannels);
 
   setUp(() {
     SharedPreferences.setMockInitialValues({});

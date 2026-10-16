@@ -107,7 +107,6 @@ List<Song> _smallCatalog() => <Song>[
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  setUpAll(mockAudioplayersChannels);
 
   group('visibleGroups: agrupamento correto (2.2)', () {
     late PlayerProvider provider;

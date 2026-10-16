@@ -186,7 +186,7 @@ class PlayerProvider extends ChangeNotifier {
     // Item 2.4: a partir de quantas faixas a ordenação vai para
     // [compute]. Testes com milhares de faixas sob FakeAsync elevam o
     // limite (isolate não responde fora de zona real — runAsync exporia
-    // MissingPluginException de stream do audioplayers mascarado).
+    // exceções latentes de canal de plataforma do motor de áudio).
     this.catalogComputeThreshold = defaultCatalogComputeThreshold,
   }) : _songRepository = songRepository ?? SongRepository(),
        _sessionRepository = sessionRepository ?? SessionRepository(),

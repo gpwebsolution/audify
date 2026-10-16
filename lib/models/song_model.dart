@@ -14,8 +14,8 @@ class Song {
   /// (apenas para faixas do bundle).
   final String? assetPath;
 
-  /// Caminho relativo (sem `assets/`), usado pelo `AssetSource` do
-  /// audioplayers, ex.: `songs/minha_faixa.mp3`.
+  /// Caminho relativo (sem `assets/`), usado pelo `AudioSource.asset` do
+  /// just_audio, ex.: `songs/minha_faixa.mp3`.
   final String? assetKey;
 
   /// Título legível da faixa.

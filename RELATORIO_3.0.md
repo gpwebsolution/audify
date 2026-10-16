@@ -23,12 +23,12 @@ nativo. Velocidade existe (`setPlaybackRate`) e o item 3.2 vai usá-la.
   áudio simples suportado oficialmente a partir da API 23; exige
   compileSdk 34 (Flutter já compila com 35+). App em 24 > 23 sem margem
   de dúvida.
-- **Tamanho do APK:** baseline medido — **release 80,7 MB** (build de
+- **Tamanho do APK:** baseline medido — **release 80.692.756 B** (build de
   08/10): 73 MB são as 4 ABIs de `libapp.so`/`libflutter.so`, dex 4,5 MB,
-  assets 2,6 MB. O dex **já contém ExoPlayer** (o audioplayers 6.8.1 usa
-  ExoPlayer + SoundPool — verificado no APK atual). A troca remove
-  exoplayer2/audioplayers e adiciona media3 → **delta estimado de ±2 MB
-  (~2%)**; número real somente após build pós-troca.
+  assets 2,6 MB. O dex **já continha ExoPlayer** (o audioplayers 6.8.1 usa
+  ExoPlayer + SoundPool). **Após a troca (medido): 81.397.836 B —
+  +705.080 B (+0,87%)**, dentro da estimativa de ±2 MB; `xyz.luan` sumiu
+  do dex e `com.ryanheise.just_audio` entrou.
 - **Risco em aparelhos fracos:** baixo. Não entra stack de decodificação
   nova — é a mesma linhagem ExoPlayer já embarcada. O risco real é
   regressão de comportamento (interrupções/ligações, pausar ao desconectar
@@ -54,6 +54,7 @@ teste; o risco é gerenciável e o impacto de tamanho é marginal frente a
 80,7 MB. 3.1 (timer de sono) e 3.2 (velocidade) serão feitos já sobre o
 novo motor, mantendo a interface pública do `AudioService` estável.
 
-**Ressalvas honestas:** delta de APK estimado (será medido no build da
-troca); nada foi validado em aparelho — interrupções, notificação e
-background precisam de teste manual antes de encerrar a Fase 3.
+**Ressalvas honestas:** o delta de APK foi medido em build release
+(+0,87% — ver acima), mas nada foi validado em aparelho — interrupções,
+notificação e background precisam de teste manual antes de encerrar a
+Fase 3.

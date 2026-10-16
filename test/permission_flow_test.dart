@@ -124,7 +124,6 @@ PlayerProvider _provider(PlayableAudioService svc,
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  setUpAll(mockAudioplayersChannels);
 
   group('PermissionService: política de pedidos (1.11)', () {
     test('shouldRequestNotification: Android + 1x/sessão + sem grant', () {

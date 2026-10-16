@@ -1,5 +1,5 @@
 // Testes unitários do modelo Song e do tema — lógica pura, sem plugins
-// nativos (audioplayers/on_audio_query/permission_handler exigem mocks de
+// nativos (just_audio/on_audio_query/permission_handler exigem mocks de
 // platform channel, fora do escopo destes testes).
 
 import 'package:flutter/material.dart';
