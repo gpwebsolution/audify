@@ -8,6 +8,7 @@ import '../services/audio_service.dart';
 import '../services/error_log_service.dart';
 import '../services/permission_service.dart';
 import '../utils/playback_queue.dart';
+import '../utils/text_normalize.dart';
 import 'settings_provider.dart';
 
 export '../models/repeat_mode.dart' show RepeatMode;
@@ -212,7 +213,10 @@ class PlayerProvider extends ChangeNotifier {
       _songs = [
         ...device,
         ...assets,
-      ]..sort((a, b) => a.title.toLowerCase().compareTo(b.title.toLowerCase()));
+      // Item 2.3: ordem natural + sem acento — 'Faixa 2' antes de
+      // 'Faixa 10' e 'Ação' no lugar de 'Zebra' (antes: 'Zebra' vinha
+      // primeiro porque 'á' > 'z' em código de ponto).
+      ]..sort((a, b) => naturalCompare(a.title, b.title));
       _applySearchFilter();
     } catch (e) {
       _errorMessage = 'Falha ao carregar a lista de músicas: $e';
@@ -261,13 +265,15 @@ class PlayerProvider extends ChangeNotifier {
   }
 
   void _applySearchFilter() {
-    final String q = _searchQuery.toLowerCase();
+    // Item 2.3: busca sem acento — 'acao' acha 'Ação' (a chave
+    // normalizada também reduz comparações por faixa a uma passada).
+    final String q = normalizeKey(_searchQuery);
     _visibleSongs = q.isEmpty
         ? List.of(_songs)
         : _songs.where((s) {
-            final inTitle = s.title.toLowerCase().contains(q);
-            final inArtist = (s.artist ?? '').toLowerCase().contains(q);
-            final inAlbum = (s.album ?? '').toLowerCase().contains(q);
+            final inTitle = normalizeKey(s.title).contains(q);
+            final inArtist = normalizeKey(s.artist ?? '').contains(q);
+            final inAlbum = normalizeKey(s.album ?? '').contains(q);
             return inTitle || inArtist || inAlbum;
           }).toList();
   }
@@ -286,17 +292,16 @@ class PlayerProvider extends ChangeNotifier {
     return _groups;
   }
 
-  /// Agrupa por chave e ordena as chaves por minúsculas — MESMO
-  /// comportamento do código antigo da tela (só mudou o dono).
+  /// Agrupa por chave e ordena as chaves com [naturalCompare] (item 2.3:
+  /// sem acento e com ordem natural — 'Álbum 2' antes de 'Álbum 10').
+  /// As chaves de EXIBIÇÃO continuam com o texto original do MediaStore.
   static List<SongGroup> _groupSongs(List<Song> songs, MusicGroupMode mode) {
     final Map<String, List<Song>> byKey = <String, List<Song>>{};
     for (final Song song in songs) {
       byKey.putIfAbsent(_groupKeyOf(song, mode), () => <Song>[]).add(song);
     }
     final List<String> sortedKeys = byKey.keys.toList()
-      ..sort(
-        (String a, String b) => a.toLowerCase().compareTo(b.toLowerCase()),
-      );
+      ..sort(naturalCompare);
     return <SongGroup>[
       for (final String key in sortedKeys)
         SongGroup(key: key, songs: byKey[key]!),
