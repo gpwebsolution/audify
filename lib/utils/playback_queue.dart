@@ -165,6 +165,12 @@ class PlaybackQueue {
     };
   }
 
+  /// Define o modo de repetição DIRETO (restauração de
+  /// preferência persistida — sem ciclar).
+  void setRepeat(RepeatMode mode) {
+    _repeat = mode;
+  }
+
   /// Remove da fila as faixas com os ids informados (arquivos excluídos do
   /// aparelho) e reencaixa o índice corrente.
   ///

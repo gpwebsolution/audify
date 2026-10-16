@@ -1,5 +1,10 @@
-import 'package:flutter/material.dart';
+// `hide RepeatMode`: o Flutter também exporta um RepeatMode
+// (RepeatingAnimationBuilder) — escondemos o dele para usar
+// o enum do app sem prefixo.
+import 'package:flutter/material.dart' hide RepeatMode;
 import 'package:shared_preferences/shared_preferences.dart';
+
+import '../models/repeat_mode.dart';
 
 /// Preferências do app persistidas em disco (shared_preferences).
 ///
@@ -12,6 +17,8 @@ class SettingsProvider extends ChangeNotifier {
   static const String _videoColumnsKey = 'video_columns';
   static const String _trashDaysKey = 'trash_retention_days';
   static const String _pauseOnNoisyKey = 'pause_on_noisy';
+  static const String _shuffleKey = 'shuffle_enabled';
+  static const String _repeatModeKey = 'repeat_mode';
 
   /// Opções de prazo da lixeira, em dias. `0` = manter para sempre.
   static const List<int> trashRetentionOptions = <int>[
@@ -49,6 +56,13 @@ class SettingsProvider extends ChangeNotifier {
   /// constrangedor e gasta bateria. Sem auto-retomada — o
   /// usuário decide quando plugar de novo e retomar.
   bool _pauseOnNoisy = true;
+
+  /// Embaralhamento ativo — persistido para a próxima
+  /// sessão (o usuário mantém a preferência).
+  bool _shuffleEnabled = false;
+
+  /// Modo de repetição persistido (off/all/one).
+  RepeatMode _repeatMode = RepeatMode.off;
   int _galleryColumns = 3;
   int _videoColumns = 2;
   int _trashRetentionDays = defaultTrashRetentionDays;
@@ -59,6 +73,12 @@ class SettingsProvider extends ChangeNotifier {
 
   /// Pausar ao desconectar fones (becoming noisy).
   bool get pauseOnNoisy => _pauseOnNoisy;
+
+  /// Embaralhamento ativo (persistido).
+  bool get shuffleEnabled => _shuffleEnabled;
+
+  /// Modo de repetição (persistido).
+  RepeatMode get repeatMode => _repeatMode;
 
   /// Colunas desejadas na Galeria (zoom do usuário).
   int get galleryColumns => _galleryColumns;
@@ -142,6 +162,12 @@ class SettingsProvider extends ChangeNotifier {
       };
       _resumePlayback = prefs.getBool(_resumeKey) ?? true;
       _pauseOnNoisy = prefs.getBool(_pauseOnNoisyKey) ?? true;
+      _shuffleEnabled = prefs.getBool(_shuffleKey) ?? false;
+      _repeatMode = switch (prefs.getInt(_repeatModeKey)) {
+        1 => RepeatMode.all,
+        2 => RepeatMode.one,
+        _ => RepeatMode.off,
+      };
       _galleryColumns = (prefs.getInt(_galleryColumnsKey) ?? 3).clamp(
         minColumns,
         maxColumns,
@@ -192,6 +218,33 @@ class SettingsProvider extends ChangeNotifier {
     try {
       final SharedPreferences prefs = await SharedPreferences.getInstance();
       await prefs.setBool(_pauseOnNoisyKey, enabled);
+    } catch (e) {
+      // Falha de escrita não quebra a sessão atual.
+    }
+  }
+
+  /// Persiste o estado do embaralhamento (o PlayerProvider
+  /// aplica na fila; aqui só guardamos a preferência).
+  Future<void> setShuffleEnabled(bool enabled) async {
+    if (_shuffleEnabled == enabled) return;
+    _shuffleEnabled = enabled;
+    _notify();
+    try {
+      final SharedPreferences prefs = await SharedPreferences.getInstance();
+      await prefs.setBool(_shuffleKey, enabled);
+    } catch (e) {
+      // Falha de escrita não quebra a sessão atual.
+    }
+  }
+
+  /// Persiste o modo de repetição.
+  Future<void> setRepeatMode(RepeatMode mode) async {
+    if (_repeatMode == mode) return;
+    _repeatMode = mode;
+    _notify();
+    try {
+      final SharedPreferences prefs = await SharedPreferences.getInstance();
+      await prefs.setInt(_repeatModeKey, mode.index);
     } catch (e) {
       // Falha de escrita não quebra a sessão atual.
     }

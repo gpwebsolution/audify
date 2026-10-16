@@ -100,6 +100,19 @@ class PlayerProvider extends ChangeNotifier {
     _audioService.status.addListener(_onStatusChanged);
     _audioService.errorMessage.addListener(_onErrorMessageChanged);
 
+    // Restaura shuffle/repeat persistidos (as preferências
+    // já foram carregadas no boot — ver main.dart).
+    // A fila ainda está vazia: ativar shuffle aqui só
+    // marca o modo; a ordem é embaralhada na primeira
+    // montagem de fila (playVisibleAt).
+    final SettingsProvider? prefs = settings;
+    if (prefs != null) {
+      _playbackQueue.setRepeat(prefs.repeatMode);
+      if (prefs.shuffleEnabled) {
+        _playbackQueue.toggleShuffle();
+      }
+    }
+
     init();
   }
 
@@ -246,11 +259,16 @@ class PlayerProvider extends ChangeNotifier {
 
   void toggleShuffle() {
     _playbackQueue.toggleShuffle();
+    // Persiste a preferência (próxima sessão abre
+    // no mesmo modo).
+    settings?.setShuffleEnabled(_playbackQueue.shuffle);
     _notify();
   }
 
   void cycleRepeat() {
     _playbackQueue.cycleRepeat();
+    // Persiste a preferência.
+    settings?.setRepeatMode(_playbackQueue.repeat);
     _notify();
   }
 
