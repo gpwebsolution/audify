@@ -22,6 +22,11 @@ class SettingsProvider extends ChangeNotifier {
   static const String _minDurationKey = 'library_min_duration_seconds';
   static const String _ignoredFoldersKey = 'library_ignored_folders';
   static const String _playbackSpeedKey = 'playback_speed';
+  static const String _eqEnabledKey = 'equalizer_enabled';
+  static const String _eqBandsKey = 'equalizer_bands';
+  static const String _eqPresetKey = 'equalizer_preset';
+  static const String _eqBassEnabledKey = 'equalizer_bass_enabled';
+  static const String _eqBassStrengthKey = 'equalizer_bass_strength';
 
   /// Opções de prazo da lixeira, em dias. `0` = manter para sempre.
   static const List<int> trashRetentionOptions = <int>[
@@ -54,6 +59,62 @@ class SettingsProvider extends ChangeNotifier {
     1.5,
     2.0,
   ];
+
+  // ---- Equalizador (item 3.3) ----
+
+  /// Nº de bandas do layout CANÔNICO usado pela UI antes de a capacidade
+  /// real do aparelho ser conhecida (aparelhos com outra contagem se
+  /// ajustam no probe — ver `AudioService.probeEqualizer`).
+  static const int equalizerBandCount = 5;
+
+  /// Nome do preset "sem curva" (bandas zeradas).
+  static const String equalizerDefaultPreset = 'Plano';
+
+  /// Nome exibido quando o usuário mexe nas bandas na mão.
+  static const String equalizerCustomPreset = 'Personalizado';
+
+  /// Ganho padrão do reforço de graves (0–100; vira dB na camada de
+  /// serviço: `12 * forca / 100`).
+  static const int defaultEqualizerBassStrength = 60;
+
+  /// Presets do equalizador (item 3.3) — curvas de 5 bandas (dB) no
+  /// layout canônico. O aparelho recebe o que couber na faixa real
+  /// (clamp na camada de serviço).
+  static const Map<String, List<double>> equalizerPresets =
+      <String, List<double>>{
+    equalizerDefaultPreset: <double>[0, 0, 0, 0, 0],
+    'Graves': <double>[9, 6, 1, -1, -2],
+    'Graves & agudos': <double>[8, 3, 0, 3, 8],
+    'Vocal': <double>[-2, -1, 4, 3, 1],
+    'Rock': <double>[5, 3, 0, 2, 5],
+    'Pop': <double>[1, 3, 4, 3, 1],
+    'Jazz': <double>[4, 2, 0, 2, 4],
+    'Clássico': <double>[4, 3, 0, 3, 4],
+    'Eletrônico': <double>[7, 3, 0, 3, 7],
+  };
+
+  /// Faixa de ganho CANÔNICA (dB) para validação/persistência — a faixa
+  /// real do aparelho (±15 dB na maioria) é lida no probe e o clamp
+  /// final acontece ao aplicar.
+  static const double equalizerMinDb = -15;
+  static const double equalizerMaxDb = 15;
+
+  /// Bandas zeradas do layout canônico.
+  static List<double> defaultEqualizerBands() =>
+      List<double>.filled(equalizerBandCount, 0);
+
+  /// Valida uma lista de bandas vinda da UI ou do disco: cada valor é
+  /// tornado finito e limitado a [-15, 15]; entradas inválidas viram 0.
+  /// Tamanho fora de [1, 10] cai no default (5 bandas planas).
+  static List<double> sanitizeEqualizerBands(List<double> bands) {
+    if (bands.isEmpty || bands.length > 10) return defaultEqualizerBands();
+    return bands
+        .map((double b) {
+          if (!b.isFinite) return 0.0;
+          return b.clamp(equalizerMinDb, equalizerMaxDb).toDouble();
+        })
+        .toList(growable: false);
+  }
 
   /// Prazo padrão: 30 dias é o padrão de mercado (Google Fotos, Drive).
   static const int defaultTrashRetentionDays = 30;
@@ -91,6 +152,14 @@ class SettingsProvider extends ChangeNotifier {
 
   /// Velocidade de reprodução persistida (item 3.2). `1.0` = normal.
   double _playbackSpeed = 1.0;
+
+  // ---- Equalizador (item 3.3) — ver [setEqualizer] ----
+  bool _equalizerEnabled = false;
+  List<double> _equalizerBands = defaultEqualizerBands();
+  String _equalizerPreset = equalizerDefaultPreset;
+  bool _equalizerBassEnabled = false;
+  int _equalizerBassStrength = defaultEqualizerBassStrength;
+
   int _galleryColumns = 3;
   int _videoColumns = 2;
   int _trashRetentionDays = defaultTrashRetentionDays;
@@ -119,6 +188,23 @@ class SettingsProvider extends ChangeNotifier {
 
   /// Velocidade de reprodução persistida (0,5–2,0; 1.0 = normal).
   double get playbackSpeed => _playbackSpeed;
+
+  /// Equalizador ligado (item 3.3).
+  bool get equalizerEnabled => _equalizerEnabled;
+
+  /// Bandas do equalizador em dB (cópia imutável).
+  List<double> get equalizerBands => List<double>.unmodifiable(
+        _equalizerBands,
+      );
+
+  /// Nome do preset ativo ('Plano', 'Rock'... ou [equalizerCustomPreset]).
+  String get equalizerPreset => _equalizerPreset;
+
+  /// Reforço de graves ligado (item 3.3).
+  bool get equalizerBassEnabled => _equalizerBassEnabled;
+
+  /// Força do reforço de graves (0–100).
+  int get equalizerBassStrength => _equalizerBassStrength;
 
   /// Colunas desejadas na Galeria (zoom do usuário).
   int get galleryColumns => _galleryColumns;
@@ -289,6 +375,26 @@ class SettingsProvider extends ChangeNotifier {
               storedSpeed <= 2.0
           ? storedSpeed
           : 1.0;
+      // Item 3.3: bandas corrompidas (tamanho/NaN/fora da faixa) caem no
+      // default plano; preset desconhecido volta para 'Plano'.
+      _equalizerEnabled = prefs.getBool(_eqEnabledKey) ?? false;
+      _equalizerBands = sanitizeEqualizerBands(
+        (prefs.getStringList(_eqBandsKey) ?? const <String>[])
+            .map(double.tryParse)
+            .whereType<double>()
+            .toList(growable: false),
+      );
+      final String storedPreset = prefs.getString(_eqPresetKey) ??
+          equalizerDefaultPreset;
+      _equalizerPreset =
+          equalizerPresets.containsKey(storedPreset) ||
+                  storedPreset == equalizerCustomPreset
+              ? storedPreset
+              : equalizerDefaultPreset;
+      _equalizerBassEnabled = prefs.getBool(_eqBassEnabledKey) ?? false;
+      _equalizerBassStrength =
+          (prefs.getInt(_eqBassStrengthKey) ?? defaultEqualizerBassStrength)
+              .clamp(0, 100);
       _galleryColumns = (prefs.getInt(_galleryColumnsKey) ?? 3).clamp(
         minColumns,
         maxColumns,
@@ -392,6 +498,44 @@ class SettingsProvider extends ChangeNotifier {
     try {
       final SharedPreferences prefs = await SharedPreferences.getInstance();
       await prefs.setDouble(_playbackSpeedKey, valid);
+    } catch (e) {
+      // Falha de escrita não quebra a sessão atual.
+    }
+  }
+
+  /// Persiste o estado COMPLETO do equalizador (item 3.3) de uma vez:
+  /// a tela de bandas mexe em vários campos por gesto e um notify/persist
+  /// conjunto evita rebuilds e escritas duplicadas. Validação igual ao
+  /// load (bandas saneadas, preset conhecido, força 0–100).
+  Future<void> setEqualizer({
+    required bool enabled,
+    required List<double> bands,
+    required String preset,
+    required bool bassEnabled,
+    required int bassStrength,
+  }) async {
+    final List<double> safeBands = sanitizeEqualizerBands(bands);
+    final String safePreset = equalizerPresets.containsKey(preset) ||
+            preset == equalizerCustomPreset
+        ? preset
+        : equalizerDefaultPreset;
+    final int safeStrength = bassStrength.clamp(0, 100);
+    _equalizerEnabled = enabled;
+    _equalizerBands = safeBands;
+    _equalizerPreset = safePreset;
+    _equalizerBassEnabled = bassEnabled;
+    _equalizerBassStrength = safeStrength;
+    _notify();
+    try {
+      final SharedPreferences prefs = await SharedPreferences.getInstance();
+      await prefs.setBool(_eqEnabledKey, enabled);
+      await prefs.setStringList(
+        _eqBandsKey,
+        safeBands.map((double b) => b.toString()).toList(growable: false),
+      );
+      await prefs.setString(_eqPresetKey, safePreset);
+      await prefs.setBool(_eqBassEnabledKey, bassEnabled);
+      await prefs.setInt(_eqBassStrengthKey, safeStrength);
     } catch (e) {
       // Falha de escrita não quebra a sessão atual.
     }

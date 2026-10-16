@@ -11,6 +11,7 @@ import '../utils/format.dart';
 import '../widgets/album_artwork.dart';
 import '../widgets/media_actions.dart';
 import '../widgets/media_details_sheet.dart';
+import 'equalizer_screen.dart';
 import 'music_screen.dart';
 
 /// Player em tela cheia ("Agora tocando").
@@ -113,6 +114,20 @@ class _PlayerScreenState extends State<PlayerScreen> {
                 subtitle: const Text('Álbum, artista, tamanho e caminho'),
                 onTap: () =>
                     go(() => MediaDetailsSheet.showSong(context, song)),
+              ),
+              // Item 3.3 — tela própria do equalizador (o estado é global,
+              // a entrada fica aqui por alcance: é onde o ouvinte está).
+              ListTile(
+                leading: const Icon(Icons.equalizer),
+                title: const Text('Equalizador'),
+                subtitle: const Text('Bandas, presets e reforço de graves'),
+                onTap: () => go(
+                  () => Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (_) => const EqualizerScreen(),
+                    ),
+                  ),
+                ),
               ),
               const Divider(),
               ListTile(

@@ -11,6 +11,7 @@ import 'providers/gallery_provider.dart';
 import 'services/catalog_snapshot_service.dart';
 import 'services/error_log_service.dart';
 import 'services/pdf_favorites_service.dart';
+import 'providers/equalizer_provider.dart';
 import 'providers/player_provider.dart';
 import 'providers/pdf_provider.dart';
 import 'providers/playlist_provider.dart';
@@ -117,6 +118,14 @@ Future<void> _bootstrap() async {
           create: (context) => PlaylistProvider(context.read<PlayerProvider>()),
           update: (context, player, playlist) =>
               playlist ?? PlaylistProvider(player),
+        ),
+        // Equalizador (item 3.3): usa o MESMO AudioService do player e
+        // persiste nas preferências já carregadas no boot.
+        ChangeNotifierProvider<EqualizerProvider>(
+          create: (_) => EqualizerProvider(
+            audio: audioService,
+            settings: settingsProvider,
+          ),
         ),
         // Biblioteca de vídeos (MediaStore via canal nativo).
         ChangeNotifierProvider(create: (_) => VideoProvider()),

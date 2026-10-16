@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import '../providers/player_provider.dart';
 import '../providers/settings_provider.dart';
 import '../services/error_log_service.dart';
+import '../screens/equalizer_screen.dart';
 import '../screens/trash_screen.dart';
 import '../services/permission_service.dart';
 
@@ -88,6 +89,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
           value: settings.pauseOnNoisy,
           onChanged: settings.setPauseOnNoisy,
+        ),
+        // Item 3.3 — tela própria do equalizador.
+        ListTile(
+          leading: const Icon(Icons.equalizer),
+          title: const Text('Equalizador'),
+          subtitle: const Text('Bandas, presets e reforço de graves.'),
+          trailing: const Icon(Icons.chevron_right),
+          onTap: () => Navigator.of(context).push(
+            MaterialPageRoute<void>(builder: (_) => const EqualizerScreen()),
+          ),
         ),
 
         // ---- Biblioteca (item 2.5) ----

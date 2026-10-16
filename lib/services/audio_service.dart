@@ -23,6 +23,33 @@ enum PlayerStatus { idle, playing, paused, stopped, completed }
 ///   antes de pular para a próxima).
 enum SleepTimerMode { off, duration, trackEnd }
 
+/// Suporte do APARELHO ao equalizador, checado em runtime (item 3.3).
+///
+/// - [unknown]: ainda não checado (nunca houve probe nem reprodução);
+/// - [supported]: parâmetros lidos com sucesso e há bandas;
+/// - [unsupported]: canal falhou/timeout/sem bandas → UI do equalizador
+///   desligada com mensagem amigável. Nunca crasha.
+enum EqualizerSupport { unknown, supported, unsupported }
+
+/// Estado do equalizador do app (item 3.3): ligado, ganhos por banda (dB),
+/// reforço de graves e sua força. Persistido no [SettingsProvider] e
+/// replicado no aparelho via [AudioService.applyEqualizerSettings].
+class EqualizerSettings {
+  const EqualizerSettings({
+    this.enabled = false,
+    this.bands = const <double>[0, 0, 0, 0, 0],
+    this.bassEnabled = false,
+    this.bassStrength = 60,
+  });
+
+  final bool enabled;
+  final List<double> bands;
+  final bool bassEnabled;
+
+  /// 0–100; a camada de serviço converte para dB (12 * força / 100).
+  final int bassStrength;
+}
+
 /// Camada de serviço de áudio.
 ///
 /// Responsabilidade: isolar TODA a lógica do `AudioPlayer` do pacote
@@ -51,7 +78,13 @@ enum SleepTimerMode { off, duration, trackEnd }
 ///    (troca rápida de música sem "duplicar" áudio ou travar o player);
 ///  - Erros de reprodução nunca crasham: viram mensagem em [errorMessage].
 class AudioService extends BaseAudioHandler {
-  final AudioPlayer _player = AudioPlayer();
+  /// Player just_audio com o equalizador no pipeline (item 3.3). Criado no
+  /// construtor ([late]) porque o efeito precisa existir NA CONSTRUÇÃO.
+  late final AudioPlayer _player;
+
+  /// Equalizador Android do pipeline (sempre presente; habilitado só
+  /// quando o usuário liga na UI — ver [applyEqualizerSettings]).
+  final AndroidEqualizer _equalizer = AndroidEqualizer();
 
   /// Posição atual de reprodução (atualizada ~200ms em tempo real).
   final ValueNotifier<Duration> position = ValueNotifier(Duration.zero);
@@ -103,6 +136,47 @@ class AudioService extends BaseAudioHandler {
   /// Velocidade de reprodução publicada no [PlaybackState] (1.0 =
   /// normal). Item 3.2: mutable via [setPlaybackSpeed] (0,5–2,0).
   double _speed = 1.0;
+
+  // ---------------------------------------------------------------------
+  // Item 3.3 — equalizador + reforço de graves.
+  //
+  // O efeito mora no pipeline do just_audio e a checagem de capacidade é
+  // em RUNTIME: sem plataforma ativa, `parameters` não existe; o probe
+  // ativa a plataforma com uma fonte vazia (nada toca) e, se qualquer
+  // chamada falhar (canal morto, aparelho sem efeito, timeout), o estado
+  // vira [EqualizerSupport.unsupported] + log — UI desligada, sem crash.
+  // ---------------------------------------------------------------------
+
+  /// Frequência central das bandas — layout canônico até o probe ler a
+  /// real contagem/frequências do aparelho.
+  static const List<double> _canonicalBandFrequencies =
+      <double>[60, 230, 910, 3600, 14000];
+
+  /// Timeout do probe (ativação + leitura de parâmetros). Canal nativo
+  /// morto/silencioso vira "não suportado" em vez de pendurar a tela.
+  /// Público (configuração): os testes encurtam para não esperar 5s.
+  final Duration eqProbeTimeout;
+
+  /// Asset usado APENAS para ativar a plataforma no probe (nunca toca:
+  /// o player não chama `play()`); a fonte é limpa ao fim — ver
+  /// [_probeParameters].
+  static const String _eqProbeAsset = 'assets/songs/relaxing_tone.mp3';
+
+  EqualizerSupport _eqSupport = EqualizerSupport.unknown;
+
+  /// Último estado aplicado/registrado — fonte para (re)aplicar quando a
+  /// plataforma fica ativa (a UI é dona do valor; aqui só espelhamos).
+  EqualizerSettings _eqSettings = const EqualizerSettings();
+
+  /// Probe em andamento (ou já resolvido) — dedupe de concorrência e
+  /// cache do resultado.
+  Future<EqualizerSupport>? _eqProbe;
+
+  List<double> _eqBandFrequencies = _canonicalBandFrequencies;
+
+  /// Notifica quando a checagem de suporte termina (a UI lê
+  /// [equalizerSupport]). Só o EqualizerProvider registra este callback.
+  VoidCallback? onEqualizerSupportChanged;
 
   /// Relógio injetável (testes: sem fakeAsync, controlamos o tempo na mão).
   final DateTime Function() _clock;
@@ -239,8 +313,16 @@ class AudioService extends BaseAudioHandler {
   AudioService({
     this.degradedMode = false,
     this.pauseOnNoisyEnabled,
+    this.eqProbeTimeout = const Duration(seconds: 5),
     DateTime Function()? clock,
   }) : _clock = clock ?? DateTime.now {
+    // Item 3.3: pipeline com o equalizador — precisa ser o PRIMEIRO passo
+    // do corpo (os listeners abaixo já usam o player).
+    _player = AudioPlayer(
+      audioPipeline: AudioPipeline(
+        androidAudioEffects: <AndroidAudioEffect>[_equalizer],
+      ),
+    );
     _configureAudioSession();
 
     // Subscrições nos streams nativos do plugin. Guardamos cada uma na
@@ -522,6 +604,9 @@ class AudioService extends BaseAudioHandler {
         artUri: artUri,
       ));
       broadcastPlaybackState();
+      // Item 3.3: com a plataforma ativa agora, o equalizador dá probe
+      // (se ainda desconhecido) e o estado persistido vai para o aparelho.
+      unawaited(_postPlayEqualizer());
     } catch (e, s) {
       // Arquivo inválido/corrompido ou falha de plataforma (inclui canal
       // nativo morto): nunca crash — loga TÉCNICO no serviço de log e
@@ -789,6 +874,194 @@ class AudioService extends BaseAudioHandler {
       ErrorLogService.logSync('audio/setSpeed', e, s);
       errorMessage.value = userMessage('mudar a velocidade', e);
     }
+  }
+
+  // ---------------------------------------------------------------------
+  // Item 3.3 — equalizador + reforço de graves (runtime-safe)
+  // ---------------------------------------------------------------------
+
+  /// Estado da checagem de suporte do aparelho (ver [EqualizerSupport]).
+  EqualizerSupport get equalizerSupport => _eqSupport;
+
+  /// Último estado registrado (fonte para reaplicar na ativação).
+  EqualizerSettings get equalizerSettings => _eqSettings;
+
+  /// Frequência central das bandas (canônica até o probe; real depois).
+  List<double> get equalizerBandFrequencies =>
+      List<double>.unmodifiable(_eqBandFrequencies);
+
+  /// Habilitação ATUAL do efeito no player (teste: sem canal nativo).
+  @visibleForTesting
+  bool get equalizerEffectEnabled => _equalizer.enabled;
+
+  /// Item 3.3 — checa em runtime se o aparelho suporta o equalizador.
+  ///
+  /// Ativa a plataforma com uma fonte VAZIA (não toca nada) quando nada
+  /// foi carregado ainda, lê os parâmetros e aplica o estado registrado.
+  /// Falha de qualquer tipo → [EqualizerSupport.unsupported] + log;
+  /// resultado é deduplicado/congelado em um único futuro.
+  Future<EqualizerSupport> probeEqualizer() =>
+      _eqProbe ??= _probeEqualizer();
+
+  Future<EqualizerSupport> _probeEqualizer() async {
+    final bool wasIdle = _player.processingState == ProcessingState.idle;
+    AudioSource? probeSource;
+    try {
+      final AndroidEqualizerParameters params = await _probeParameters(
+        wasIdle: wasIdle,
+        onProbeSource: (AudioSource source) => probeSource = source,
+      ).timeout(eqProbeTimeout);
+      if (params.bands.isEmpty) {
+        _eqSupport = EqualizerSupport.unsupported;
+      } else {
+        _eqSupport = EqualizerSupport.supported;
+        _eqBandFrequencies = List<double>.unmodifiable(
+          params.bands.map((AndroidEqualizerBand b) => b.centerFrequency),
+        );
+        await _applyEqualizerToDevice();
+      }
+    } catch (e, s) {
+      // Canal morto, aparelho sem efeito, timeout — tudo vira
+      // "não suportado": a tela só desliga os controles, nunca crasha.
+      ErrorLogService.logSync('audio/eqProbe', e, s);
+      _eqSupport = EqualizerSupport.unsupported;
+    } finally {
+      // Só limpa a fonte de probe se ela AINDA é a carregada (identidade
+      // checada sem await entre checagem e clear — uma fila iniciada
+      // durante o probe já substituiu a fonte e é preservada).
+      // Fire-and-forget: o resultado/notify do probe nunca pode ficar
+      // preso atrás do clear (playlist pode aguardar sequência própria).
+      final AudioSource? source = probeSource;
+      if (wasIdle &&
+          source != null &&
+          _player.audioSources.length == 1 &&
+          identical(_player.audioSources.first, source)) {
+        unawaited(_clearProbeSource());
+      }
+    }
+    onEqualizerSupportChanged?.call();
+    return _eqSupport;
+  }
+
+  Future<void> _clearProbeSource() async {
+    try {
+      await _player.clearAudioSources();
+    } catch (e, s) {
+      ErrorLogService.logSync('audio/eqProbeClear', e, s);
+    }
+  }
+
+  /// Lê os parâmetros do equalizador, ativando a plataforma antes (o
+  /// just_audio só cria o efeito/ler `parameters` com o player ativo).
+  ///
+  /// Com o player vazio, `load()` não ativa nada — então carrega um asset
+  /// de probe minúsculo SEM tocar. A ativação (init + parâmetros) roda
+  /// ANTES do load do arquivo: se o arquivo falhar, os parâmetros podem
+  /// já estar válidos (o timeout na chamada ainda decide o suporte).
+  Future<AndroidEqualizerParameters> _probeParameters({
+    required bool wasIdle,
+    required void Function(AudioSource source) onProbeSource,
+  }) async {
+    if (wasIdle && _player.processingState == ProcessingState.idle) {
+      final AudioSource source = AudioSource.asset(_eqProbeAsset);
+      onProbeSource(source);
+      try {
+        await _player.setAudioSources(<AudioSource>[source]);
+      } catch (e, s) {
+        ErrorLogService.logSync('audio/eqProbeLoad', e, s);
+      }
+    }
+    return _equalizer.parameters;
+  }
+
+  /// Item 3.3 — registra/aplica o estado do equalizador.
+  ///
+  /// Com a plataforma inativa (nada tocado), o `setEnabled` é local (o
+  /// just_audio guarda sem chamar o canal) e os ganhos ficam em
+  /// [_eqSettings] até o probe/primeira faixa empurrá-los ao aparelho.
+  /// Nunca propaga exceção.
+  Future<void> applyEqualizerSettings(EqualizerSettings settings) async {
+    _eqSettings = _sanitizeEqualizerSettings(settings);
+    try {
+      await _equalizer.setEnabled(_eqSettings.enabled);
+    } catch (e, s) {
+      ErrorLogService.logSync('audio/eqEnabled', e, s);
+      _markEqualizerUnsupported();
+      return;
+    }
+    if (_eqSupport == EqualizerSupport.supported) {
+      await _applyEqualizerToDevice();
+    }
+  }
+
+  /// Pós-primeira faixa: a plataforma acaba de ativar, então resolve o
+  /// probe (se pendente) e sincroniza o estado persistido no aparelho.
+  Future<void> _postPlayEqualizer() async {
+    try {
+      final bool freshProbe = _eqProbe == null;
+      final EqualizerSupport support = await probeEqualizer();
+      if (support == EqualizerSupport.supported && !freshProbe) {
+        await _applyEqualizerToDevice();
+      }
+    } catch (e, s) {
+      ErrorLogService.logSync('audio/eqSync', e, s);
+    }
+  }
+
+  /// Envia ligar/desligar + ganhos por banda (com o reforço de graves
+  /// somado às duas bandas mais graves) para o efeito nativo, com clamp
+  /// na faixa real do aparelho. Falha → [EqualizerSupport.unsupported].
+  Future<void> _applyEqualizerToDevice() async {
+    if (_eqSupport != EqualizerSupport.supported) return;
+    final EqualizerSettings s = _eqSettings;
+    try {
+      // Reenvia o mestre também: entre o apply pré-ativação (local) e o
+      // probe pode haver corrida — aqui o canal ESTÁ ativo, então o
+      // estado nativo fica determinístico.
+      await _equalizer.setEnabled(s.enabled);
+      final AndroidEqualizerParameters params = await _equalizer.parameters;
+      // Graves: o just_audio não expõe BassBoost — o reforço é um ganho
+      // extra (12 dB × força%) somado às bandas 0 e 1 (grave/corpo).
+      final double bassDb =
+          s.bassEnabled ? 12.0 * s.bassStrength / 100.0 : 0.0;
+      for (int i = 0; i < params.bands.length; i++) {
+        final double base = i < s.bands.length ? s.bands[i] : 0.0;
+        final double lowShelf = i <= 1 ? bassDb : 0.0;
+        final double target = (base + lowShelf)
+            .clamp(params.minDecibels, params.maxDecibels)
+            .toDouble();
+        await params.bands[i].setGain(target);
+      }
+    } catch (e, s2) {
+      ErrorLogService.logSync('audio/eqApply', e, s2);
+      _markEqualizerUnsupported();
+    }
+  }
+
+  /// Congela o resultado do probe como "não suportado" (sem reprobe
+  /// infinito) e avisa a UI.
+  void _markEqualizerUnsupported() {
+    _eqSupport = EqualizerSupport.unsupported;
+    _eqProbe ??= Future<EqualizerSupport>.value(EqualizerSupport.unsupported);
+    onEqualizerSupportChanged?.call();
+  }
+
+  /// Sanitiza o estado vindo da UI/persistência: bandas finitas em
+  /// [-15, 15] (tamanho 1–10, senão 5 planas) e força 0–100.
+  static EqualizerSettings _sanitizeEqualizerSettings(EqualizerSettings s) {
+    final List<double> bands = s.bands.isEmpty || s.bands.length > 10
+        ? List<double>.filled(5, 0)
+        : s.bands
+            .map((double b) => b.isFinite
+                ? b.clamp(-15.0, 15.0).toDouble()
+                : 0.0)
+            .toList(growable: false);
+    return EqualizerSettings(
+      enabled: s.enabled,
+      bands: bands,
+      bassEnabled: s.bassEnabled,
+      bassStrength: s.bassStrength.clamp(0, 100),
+    );
   }
 
   /// Botão "próxima" do sistema: delega à lógica de fila do provider.
