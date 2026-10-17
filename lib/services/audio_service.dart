@@ -122,6 +122,16 @@ class AudioService extends BaseAudioHandler {
   Future<void> Function(int index)? onSkipToQueueIndex;
 
   // ---------------------------------------------------------------------
+  // Item 6.5 — browse do Android Auto / Bluetooth (MediaBrowser).
+  // ---------------------------------------------------------------------
+
+  /// Fontes da biblioteca para o browse — injetadas pelo [PlayerProvider]
+  /// (catálogo completo, favoritas e histórico). Null = categorias vazias.
+  List<Song> Function()? onBrowseAllSongs;
+  List<Song> Function()? onBrowseFavorites;
+  List<Song> Function()? onBrowseRecent;
+
+  // ---------------------------------------------------------------------
   // Item 3.4 — gapless e crossfade.
   // ---------------------------------------------------------------------
 
@@ -1476,6 +1486,104 @@ class AudioService extends BaseAudioHandler {
       ErrorLogService.logSync('audio/skipToQueueItem', e, s);
     }
   }
+
+  // ---- Item 6.5 — navegação do MediaBrowser (Auto / Bluetooth) ----
+
+  /// Raiz navegável devolvida pelo nativo (`BROWSABLE_ROOT_ID`) e a raiz
+  /// de "recentes" do Android Auto (`RECENT_ROOT_ID`).
+  static const String browseRootId = 'root';
+  static const String browseRecentRootId = 'recent';
+
+  /// Categorias expostas na raiz (itens browsable, não tocáveis).
+  static const String browseAllId = 'cat:all';
+  static const String browseFavoritesId = 'cat:favorites';
+  static const String browseRecentId = 'cat:recent';
+
+  /// Prefixo dos ids de faixa: `song:<song.id>`.
+  static const String browseSongPrefix = 'song:';
+
+  /// Filhos de [parentMediaId]: as 3 categorias na raiz, faixas dentro de
+  /// cada categoria. Id desconhecido devolve vazio (o cliente encerra a
+  /// navegação) e NUNCA lança — quem chama é o canal nativo.
+  @override
+  Future<List<MediaItem>> getChildren(
+    String parentMediaId, [
+    Map<String, dynamic>? options,
+  ]) async {
+    try {
+      switch (parentMediaId) {
+        case browseRootId:
+          return const <MediaItem>[
+            MediaItem(
+              id: browseAllId,
+              title: 'Todas as faixas',
+              playable: false,
+            ),
+            MediaItem(
+              id: browseFavoritesId,
+              title: 'Favoritas',
+              playable: false,
+            ),
+            MediaItem(
+              id: browseRecentId,
+              title: 'Tocadas recentemente',
+              playable: false,
+            ),
+          ];
+        case browseRecentRootId:
+        case browseRecentId:
+          return _browseItems(onBrowseRecent?.call());
+        case browseFavoritesId:
+          return _browseItems(onBrowseFavorites?.call());
+        case browseAllId:
+          return _browseItems(onBrowseAllSongs?.call());
+        default:
+          return const <MediaItem>[];
+      }
+    } catch (e, s) {
+      ErrorLogService.logSync('audio/getChildren', e, s);
+      return const <MediaItem>[];
+    }
+  }
+
+  /// Toca a faixa apontada por [mediaId] (`song:<id>`). Id fora do
+  /// catálogo é ignorado (a fila do Auto pode sobreviver a uma recarga
+  /// de biblioteca); falha de toque vira log, nunca exceção no canal.
+  @override
+  Future<void> playFromMediaId(
+    String mediaId, [
+    Map<String, dynamic>? extras,
+  ]) async {
+    final Song? song = resolveBrowseSong(mediaId);
+    if (song == null) return;
+    try {
+      await playSong(song);
+    } catch (e, s) {
+      ErrorLogService.logSync('audio/playFromMediaId', e, s);
+    }
+  }
+
+  /// Resolve `song:<id>` na fonte de todas as faixas (sem fonte = null).
+  /// Público para teste unitário — o toque em si é [playSong].
+  Song? resolveBrowseSong(String mediaId) {
+    if (!mediaId.startsWith(browseSongPrefix)) return null;
+    final String id = mediaId.substring(browseSongPrefix.length);
+    for (final Song song in onBrowseAllSongs?.call() ?? const <Song>[]) {
+      if (song.id == id) return song;
+    }
+    return null;
+  }
+
+  List<MediaItem> _browseItems(List<Song>? songs) => <MediaItem>[
+    for (final Song song in songs ?? const <Song>[])
+      MediaItem(
+        id: '$browseSongPrefix${song.id}',
+        title: song.title,
+        artist: song.displayArtist,
+        album: song.album,
+        duration: song.duration,
+      ),
+  ];
 
   /// Reemite o estado para o audio_service (notificação + lock screen).
   ///

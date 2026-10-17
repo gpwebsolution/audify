@@ -179,6 +179,12 @@
         <meta-data
             android:name="io.flutter.embedding.android.EnableImpeller"
             android:value="false" />
+        <!-- Item 6.5 — Android Auto: declara o app como app de MÍDIA
+             automotivo (browse da biblioteca no head unit/Bluetooth).
+             A raiz/filhos vêm do AudioHandler.getChildren em Dart. -->
+        <meta-data
+            android:name="com.google.android.gms.car.application"
+            android:resource="@xml/automotive_app_desc" />
     </application>
     <!-- Required to query activities that can process text, see:
          https://developer.android.com/training/package-visibility and

@@ -528,3 +528,56 @@ Cada linha: ID do item, o que falta e o motivo.
 - **Verificado**: `flutter analyze` limpo e suíte **538/538** após as
   mudanças; nenhum teste depende da versão/packageInfo (o app lê
   `PackageInfo.fromPlatform()` só para exibir em Configurações).
+
+## 6.5 — Android Auto/Bluetooth browse e widget (OPCIONAIS)
+
+### 6.5a — Browse do Android Auto / Bluetooth — FEITO
+
+- **O que o Auto/Bluetooth enxerga**: `audio_service` já expunha o
+  `MediaBrowserService` (intent-filter e receiver do MIDI_BUTTON já
+  existiam no manifest). Falta declarar o app como cliente de mídia
+  automotiva e implementar a árvore em Dart:
+  - **Manifest**: `<meta-data android:name="com.google.android.gms.car.application"
+    android:resource="@xml/automotive_app_desc"/>` + novo
+    `res/xml/automotive_app_desc.xml` (`<automotiveApp><uses name="media"/></automotiveApp>`).
+    Nada mudou em `applicationId`, notificação, foregroundServiceType ou
+    `androidStopForegroundOnPause`.
+  - **`AudioService` (handler)**: novos callbacks injetáveis
+    (`onBrowseAllSongs`/`onBrowseFavorites`/`onBrowseRecent`) + overrides
+    `getChildren` e `playFromMediaId`. Raiz `root` → 3 categorias
+    browsable (Todas as faixas / Favoritas / Tocadas recentemente, PT);
+    categorias → faixas com `id = song:<songId>` e título/artista/álbum/duração;
+    a raiz `recent` que o Auto pede (`EXTRA_RECENT`) usa a mesma fonte de
+    "Tocadas recentemente". Id desconhecido → `[]`; nunca lança no canal
+    nativo (try/catch + `ErrorLogService.logSync` em ambos os métodos).
+  - **`PlayerProvider`**: injeta as fontes no construtor
+    (catálogo `_songs`, `FavoritesProvider.instance.songs`, histórico via
+    `_browseRecentSongs` — ordem do `HistoryProvider`, só faixas que ainda
+    existem no catálogo) e zera no `dispose`.
+- **Testes** (`test/android_auto_browse_test.dart`, +8 → **546**): raiz e
+  metadados das categorias; faixas com ids/`song:`; categoria vazia e id
+  desconhecido sem fonte; ordem de favoritas/recent; `resolveBrowseSong`
+  (resolve/fora do catálogo/sem prefixo); `playFromMediaId` no-op sem
+  lançar; wiring do `PlayerProvider` (root + `cat:all` com o catálogo real
+  do provider).
+- **Limitações honestas**:
+  - **Toque real a partir do head unit / tela do Auto não foi testado** —
+    não há veículo nem Android Auto Desktop neste ambiente; o plugin de
+    áudio não existe em host, então `playSong` via `playFromMediaId` com id
+    válido fica para verificação em aparelho/veículo.
+  - A raiz/filhos no Auto real dependem também do host (`getRoot` é nativo,
+    devolve `root`/`recent` conforme `BROWSABLE_ROOT_ID`).
+  - Vínculo Play Store ↔ Android Auto (app aparecer na lista de apps de
+    música no veículo) exige publicação/declarations na store — fora do
+    escopo do repositório (pergunta na Seção 7).
+
+### 6.5b — Widget de tela inicial — ADIADO
+
+- **Não implementado**: widget (glance/home screen) de faixa atual com
+  play/pause/next/prev — **adiado por decisão do dono** (registrado aqui
+  para o relatório final; não é regressão, apenas opcional fora da lista).
+
+### Verificado (6.5a)
+
+- `flutter analyze` limpo e suíte **546/546** após as mudanças;
+  `flutter build apk --debug` ✓ (manifest e XML automotivo compilam).

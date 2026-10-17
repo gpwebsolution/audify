@@ -15,6 +15,7 @@ import '../services/playback_history_service.dart';
 import '../utils/playback_queue.dart';
 import '../utils/song_sort.dart';
 import '../utils/text_normalize.dart';
+import 'favorites_provider.dart';
 import 'history_provider.dart';
 import 'settings_provider.dart';
 
@@ -255,6 +256,11 @@ class PlayerProvider extends ChangeNotifier {
     _audioService.onSetRepeatMode = _onSystemSetRepeatMode;
     _audioService.onSetShuffleMode = _onSystemSetShuffleMode;
     _audioService.onSkipToQueueIndex = _onSystemSkipToQueueIndex;
+    // Item 6.5 — browse do Android Auto/Bluetooth: a biblioteca vista por
+    // este provider (catálogo completo, favoritas e histórico).
+    _audioService.onBrowseAllSongs = () => _songs;
+    _audioService.onBrowseFavorites = () => FavoritesProvider.instance.songs;
+    _audioService.onBrowseRecent = _browseRecentSongs;
     // Faixa que FALHOU ao abrir: decide aqui (quem conhece a fila)
     // se pula para a próxima — com teto de falhas seguidas.
     _audioService.onPlaybackFailed = _onPlaybackFailed;
@@ -1323,6 +1329,19 @@ class PlayerProvider extends ChangeNotifier {
     _notify();
   }
 
+  /// Item 6.5 — "Tocadas recentemente" do browse: ordem do histórico,
+  /// só com faixas que ainda existem no catálogo (uma apagada some do
+  /// Auto junto com a biblioteca).
+  List<Song> _browseRecentSongs() {
+    final Map<String, Song> byId = <String, Song>{
+      for (final Song song in _songs) song.id: song,
+    };
+    return <Song>[
+      for (final String id in HistoryProvider.instance.recentIds)
+        if (byId[id] != null) byId[id]!,
+    ];
+  }
+
   @override
   void dispose() {
     _isDisposed = true;
@@ -1332,6 +1351,10 @@ class PlayerProvider extends ChangeNotifier {
     _audioService.errorMessage.removeListener(_onErrorMessageChanged);
     // Item 3.4: sem provider não há para quem notificar a transição.
     _audioService.onQueueIndexChanged = null;
+    // Item 6.5: browse sem provider não tem fonte de biblioteca.
+    _audioService.onBrowseAllSongs = null;
+    _audioService.onBrowseFavorites = null;
+    _audioService.onBrowseRecent = null;
     _audioService.dispose();
     _positionNotifier.dispose();
     super.dispose();

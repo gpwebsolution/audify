@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Item 6.5 — declaração do app como app de MÍDIA automotivo (Android Auto).
+  Sem ela, o head unit não oferece o Audify na lista de apps de música;
+  com ela, o browse passa por MediaBrowserService (audio_service) e os
+  filhos vêm de AudioHandler.getChildren no Dart.
+-->
+<automotiveApp>
+    <uses name="media" />
+</automotiveApp>
