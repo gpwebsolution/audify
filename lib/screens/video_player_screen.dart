@@ -645,11 +645,14 @@ class _VolumeOsd extends StatelessWidget {
     return IgnorePointer(
       child: AnimatedOpacity(
         opacity: text == null ? 0 : 1,
-        duration: text == null ? Motion.fast : Motion.normal,
+        duration: Motion.scale(
+          context,
+          text == null ? Motion.fast : Motion.normal,
+        ),
         curve: text == null ? Motion.exit : Motion.enter,
         child: AnimatedScale(
           scale: text == null ? 0.85 : 1,
-          duration: Motion.normal,
+          duration: Motion.scale(context, Motion.normal),
           curve: Motion.enter,
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),

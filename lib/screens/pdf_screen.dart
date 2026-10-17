@@ -166,8 +166,7 @@ class _PdfScreenState extends State<PdfScreen> with MediaSelection<String> {
               ? Checkbox(
                   value: isSelected(pdf.path),
                   onChanged: (_) => toggleSelect(pdf.path),
-                  materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                )
+                    )
               : _PdfThumbnail(pdf: pdf),
           title: Text(pdf.name, maxLines: 1, overflow: TextOverflow.ellipsis),
           subtitle: Row(

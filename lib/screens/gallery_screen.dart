@@ -328,7 +328,7 @@ class _ImageTile extends StatelessWidget {
     final bool marked = selectionMode && selected;
 
     return AnimatedContainer(
-      duration: Motion.fast,
+      duration: Motion.scale(context, Motion.fast),
       curve: Motion.settle,
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(6),

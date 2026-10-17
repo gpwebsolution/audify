@@ -174,7 +174,7 @@ class ResponsiveMediaGrid<T> extends StatelessWidget {
         return false;
       },
       child: AnimatedSize(
-        duration: Motion.normal,
+        duration: Motion.scale(context, Motion.normal),
         curve: Motion.settle,
         child: GridView.builder(
           padding: padding,

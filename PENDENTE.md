@@ -324,3 +324,53 @@ Cada linha: ID do item, o que falta e o motivo.
   storage corrompido) e 3 do tema (`test/amoled_theme_test.dart`).
   Sheets/toast da nova UI NÃO têm teste de widget (só a aba em
   Configurações via teste do 5.1).
+
+---
+
+## 5.3 — Acessibilidade e estados vazios
+
+- **Semantics entregue onde o framework não dá de graça**: o Slider do
+  do player ganhou `Semantics(label: …)` (sozinho ele só anuncia o
+  valor numérico); tiles de música herdam a semântica nativa do
+  ListTile (título+subtítulo leem como botão) e todos os 66
+  IconButtons do app têm `tooltip` (só o de fechar seleção do APK
+  era novo — os outros 65 já tinham). **Não há teste automatizado de
+  leitor de tela** (TalkBack real só em aparelho).
+- **Alvos ≥ 48 dp**: `materialTapTargetSize: shrinkWrap` foi removido
+  dos Checkboxes de seleção (música, lixeira, PDFs, Arquivos ×2) —
+  voltaram ao padrão Material de 48; IconButtons já são 48 por padrão.
+  **InkWell/GestureDetector com hit próprio** (grids, tiles
+  customizados) não foram auditados sistematicamente nem cobertos por
+  teste de hit-test.
+- **Estados vazios com ação clara**: música (3 estados — permissão →
+  "Permitir"/"Abrir ajustes", catálogo vazio → "Atualizar", busca sem
+  resultado → "Limpar busca") e Playlists vazio → botão "Nova
+  playlist" com o MESMO diálogo do FAB (`askPlaylistName` virou
+  pública). **Fora do escopo**: fila vazia (só texto — sem ação
+  natural), e os empty states próprios de vídeos/fotos/PDFs/Arquivos/
+  Lixeira/Histórico/Favoritas/detalhes de playlist. A aba Playlists
+  continua com vários textos hardcoded PT fora do estado vazio
+  (descrição de contagem, confirmação de exclusão, tiles de Favoritas/
+  Histórico) — migração 5.1 restante.
+- **disableAnimations**: `Motion.scale(context, d)` zera a duração
+  quando o sistema pede animações reduzidas; aplicado na barra de
+  seleção (AnimatedSize+Switcher — vale para música/vídeos/fotos/
+  PDFs/Lixeira), grid zoom, rotação do cabeçalho de grupo, destaques
+  de seleção de vídeos/fotos e OSD do player de vídeo. **Não cobre**:
+  transições de página custom (o `pageTransitionsTheme` do tema não
+  recebe context), timers de linger (OSD/controles de vídeo),
+  `AnimatedContentSwitcher` do player de vídeo e as animações
+  internas do Navigator (sheets/diálogos).
+- **Contraste AMOLED**: teste WCAG 2.1 ≥ 4.5:1 para os pares
+  principais (onSurface/onSurfaceVariant/primary sobre o preto puro;
+  onPrimary×primary; onErrorContainer×errorContainer;
+  onPrimaryContainer×primaryContainer) — todos passam com a paleta M3
+  dark. **O banner de permissão usa `errorContainer` com alpha 0.5**
+  (mistura com o fundo) e esse par misturado NÃO é coberto pelo
+  teste.
+- **textScaler**: o app nunca desliga a escala (não existe
+  `TextScaler.noScaling` no código); o teste novo monta Música, Player
+  e Configurações com **2.0x** (override pelo `builder` do
+  MaterialApp) e não há overflow. **Não testados a 2.0x**: as outras
+  telas, e sheets/dialogs abertos a partir das principais (o conteúdo
+  deles não é renderizado no pump inicial).

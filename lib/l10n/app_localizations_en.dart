@@ -620,4 +620,16 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get defaultSortSubtitle =>
       'How the song list is ordered when the app opens.';
+
+  @override
+  String get seekLabel => 'Playback position';
+
+  @override
+  String get emptyPlaylists => 'No playlists yet.';
+
+  @override
+  String get newPlaylistBtn => 'New playlist';
+
+  @override
+  String get rescanBtn => 'Refresh';
 }

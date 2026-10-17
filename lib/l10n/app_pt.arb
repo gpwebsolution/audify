@@ -283,5 +283,9 @@
   "stopPausedTitle": "Parar serviço após pausar",
   "stopPausedSubtitle": "Encerra o player depois de N minutos pausado (0 = nunca).",
   "defaultSortTitle": "Ordenação padrão",
-  "defaultSortSubtitle": "Como a lista de músicas é ordenada ao abrir o app."
+  "defaultSortSubtitle": "Como a lista de músicas é ordenada ao abrir o app.",
+  "seekLabel": "Posição da música",
+  "emptyPlaylists": "Nenhuma playlist ainda.",
+  "newPlaylistBtn": "Nova playlist",
+  "rescanBtn": "Atualizar"
 }

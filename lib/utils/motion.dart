@@ -37,6 +37,12 @@ class Motion {
   /// Curva padrão deemphasis — usada em tudo que é padrão do Material.
   static const Curve standard = Curves.easeInOutCubic;
 
+  /// Item 5.3 — duração que respeita "animações reduzidas" do sistema
+  /// (acessibilidade): com `MediaQuery.disableAnimations` ligado, a
+  /// animação vira zero e o estado troca na hora, sem interpolação.
+  static Duration scale(BuildContext context, Duration duration) =>
+      MediaQuery.disableAnimationsOf(context) ? Duration.zero : duration;
+
   /// Transição de página do app: entra de baixo com fade, levemente suavizada
   /// em relação ao Material para não competir com a animação do sistema.
   static const PageTransitionsBuilder pageTransition =

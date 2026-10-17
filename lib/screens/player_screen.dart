@@ -592,25 +592,31 @@ class _PlayerScreenState extends State<PlayerScreen> {
                   ],
                 ),
               ),
-            Slider(
-              value: sliderValue,
-              max: maxMs,
-              onChanged: sliderEnabled
-                  ? (double value) {
-                      setState(() => _dragValueMs = value);
-                    }
-                  : null,
-              onChangeStart: sliderEnabled
-                  ? (_) => setState(() => _dragValueMs = sliderValue)
-                  : null,
-              onChangeEnd: sliderEnabled
-                  ? (double value) {
-                      provider.seek(
-                        Duration(milliseconds: value.round()),
-                      );
-                      setState(() => _dragValueMs = null);
-                    }
-                  : null,
+            // Item 5.3 — rótulo para leitor de tela: o Slider sozinho
+            // só anuncia o valor numérico ("X de 1000"), sem dizer o
+            // que é.
+            Semantics(
+              label: l10n.seekLabel,
+              child: Slider(
+                value: sliderValue,
+                max: maxMs,
+                onChanged: sliderEnabled
+                    ? (double value) {
+                        setState(() => _dragValueMs = value);
+                      }
+                    : null,
+                onChangeStart: sliderEnabled
+                    ? (_) => setState(() => _dragValueMs = sliderValue)
+                    : null,
+                onChangeEnd: sliderEnabled
+                    ? (double value) {
+                        provider.seek(
+                          Duration(milliseconds: value.round()),
+                        );
+                        setState(() => _dragValueMs = null);
+                      }
+                    : null,
+              ),
             ),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 24),

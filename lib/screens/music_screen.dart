@@ -10,6 +10,7 @@ import '../providers/player_provider.dart';
 import '../providers/favorites_provider.dart';
 import '../providers/playlist_provider.dart';
 import '../services/permission_service.dart';
+import '../utils/motion.dart';
 import '../widgets/media_actions.dart';
 import '../widgets/media_details_sheet.dart';
 import '../widgets/playlist_picker_sheet.dart';
@@ -514,7 +515,7 @@ class _MusicScreenState extends State<MusicScreen> with MediaSelection<String> {
     }
 
     if (view.visibleSongs.isEmpty) {
-      return _buildEmptyState(context, view);
+      return _buildEmptyState(context, provider, view);
     }
 
     if (_groupMode == MusicGroupMode.tracks) {
@@ -827,15 +828,42 @@ class _MusicScreenState extends State<MusicScreen> with MediaSelection<String> {
       );
   }
 
-  Widget _buildEmptyState(BuildContext context, _MusicView view) {
+  Widget _buildEmptyState(
+    BuildContext context,
+    PlayerProvider provider,
+    _MusicView view,
+  ) {
     final AppLocalizations l10n = l10nOf(context);
     final bool noPermission = view.permission != AudioPermissionState.granted;
+    final bool permanent =
+        view.permission == AudioPermissionState.permanentlyDenied;
 
     final String message = noPermission
         ? l10n.emptyPermissionDenied
         : (view.songs.isEmpty
               ? l10n.emptyNoMusic
               : l10n.emptyNoResults(view.searchQuery));
+
+    // Item 5.3 — uma ação clara por estado: permissão pedida/levada às
+    // ajustes, catálogo vazio atualizado, busca sem resultado limpa.
+    final Widget? action = noPermission
+        ? TextButton(
+            onPressed: permanent
+                ? PermissionService.openSettings
+                : provider.requestPermissionAndReload,
+            child: Text(permanent ? l10n.openSettingsBtn : l10n.allowBtn),
+          )
+        : view.songs.isEmpty
+        ? FilledButton.tonal(
+            onPressed: provider.rescanCatalog,
+            child: Text(l10n.rescanBtn),
+          )
+        : view.searchQuery.isNotEmpty
+        ? TextButton(
+            onPressed: () => provider.setSearchQuery(''),
+            child: Text(l10n.clearSearchTooltip),
+          )
+        : null;
 
     return Center(
       child: Padding(
@@ -854,6 +882,10 @@ class _MusicScreenState extends State<MusicScreen> with MediaSelection<String> {
               textAlign: TextAlign.center,
               style: Theme.of(context).textTheme.bodyMedium,
             ),
+            if (action != null) ...<Widget>[
+              const SizedBox(height: 16),
+              action,
+            ],
           ],
         ),
       ),
@@ -918,7 +950,7 @@ class _GroupHeader extends StatelessWidget {
           ),
           AnimatedRotation(
             turns: collapsed ? -0.25 : 0,
-            duration: const Duration(milliseconds: 150),
+            duration: Motion.scale(context, Motion.fast),
             child: IconButton(
               tooltip: collapsed ? l10n.expandTooltip : l10n.collapseTooltip,
               icon: const Icon(Icons.expand_more),

@@ -38,7 +38,7 @@ Future<void> showPlaylistPickerSheet(
               subtitle: const Text('Cria e escolhe em seguida'),
               onTap: () async {
                 Navigator.pop(sheetContext);
-                final Playlist? created = await _askPlaylistName(
+                final Playlist? created = await askPlaylistName(
                   context,
                   provider,
                 );
@@ -64,7 +64,10 @@ Future<void> showPlaylistPickerSheet(
 /// Dialog de nome (mesmo formato do FAB "Nova playlist" da aba
 /// Playlists). Devolve a playlist criada — ou null se cancelou ou o
 /// nome já existia (aí o aviso de duplicata aparece na tela chamadora).
-Future<Playlist?> _askPlaylistName(
+///
+/// Item 5.3 — pública para o estado vazio da aba Playlists poder
+/// oferecer a MESMA ação de criação do FAB.
+Future<Playlist?> askPlaylistName(
   BuildContext context,
   PlaylistProvider provider,
 ) async {

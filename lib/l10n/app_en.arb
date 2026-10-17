@@ -176,5 +176,9 @@
   "stopPausedTitle": "Stop service after pausing",
   "stopPausedSubtitle": "Stops the player after N minutes paused (0 = never).",
   "defaultSortTitle": "Default sort",
-  "defaultSortSubtitle": "How the song list is ordered when the app opens."
+  "defaultSortSubtitle": "How the song list is ordered when the app opens.",
+  "seekLabel": "Playback position",
+  "emptyPlaylists": "No playlists yet.",
+  "newPlaylistBtn": "New playlist",
+  "rescanBtn": "Refresh"
 }

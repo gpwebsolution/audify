@@ -348,11 +348,11 @@ class AnimatedToolbarSwap extends StatelessWidget {
     // opacidade. Um [Stack] com os dois filhos não serve: dentro de uma Column
     // a altura não é limitada e o layout fica frágil.
     return AnimatedSize(
-      duration: Motion.normal,
+      duration: Motion.scale(context, Motion.normal),
       curve: Motion.settle,
       alignment: Alignment.topCenter,
       child: AnimatedSwitcher(
-        duration: Motion.fast,
+        duration: Motion.scale(context, Motion.fast),
         switchInCurve: Motion.enter,
         switchOutCurve: Motion.exit,
         transitionBuilder: (Widget current, Animation<double> animation) {

@@ -1026,8 +1026,7 @@ class _FileListTile extends StatelessWidget {
                 Checkbox(
                   value: isSelected,
                   onChanged: (_) => onLongPress(),
-                  materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                ),
+                    ),
               SizedBox(
                 width: 44,
                 height: 44,
@@ -1142,8 +1141,7 @@ class _FileGridTile extends StatelessWidget {
                     child: Checkbox(
                       value: isSelected,
                       onChanged: (_) => onLongPress(),
-                      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                    ),
+                            ),
                   ),
                 ),
               ),

@@ -107,7 +107,6 @@ class SongListTile extends StatelessWidget {
           ? Checkbox(
               value: selected,
               onChanged: (_) => onLongPress?.call(),
-              materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
             )
           : _SongArtwork(song: song, isCurrent: isCurrent, size: 48),
       title: Text(

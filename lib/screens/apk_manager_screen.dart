@@ -73,6 +73,7 @@ class _ApkManagerScreenState extends State<ApkManagerScreen> {
             ),
             IconButton(
               icon: const Icon(Icons.close),
+              tooltip: 'Fechar seleção',
               onPressed: () => setState(() {
                 _selected.clear();
                 _selectionMode = false;

@@ -311,8 +311,6 @@ class _TrashScreenState extends State<TrashScreen> with MediaSelection<String> {
                                   value: isSelected(entry.trashPath),
                                   onChanged: (_) =>
                                       toggleSelect(entry.trashPath),
-                                  materialTapTargetSize:
-                                      MaterialTapTargetSize.shrinkWrap,
                                 )
                               : const Icon(Icons.delete_outline),
                           title: Text(

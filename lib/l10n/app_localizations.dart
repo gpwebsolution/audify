@@ -1075,6 +1075,30 @@ abstract class AppLocalizations {
   /// In pt, this message translates to:
   /// **'Como a lista de músicas é ordenada ao abrir o app.'**
   String get defaultSortSubtitle;
+
+  /// No description provided for @seekLabel.
+  ///
+  /// In pt, this message translates to:
+  /// **'Posição da música'**
+  String get seekLabel;
+
+  /// No description provided for @emptyPlaylists.
+  ///
+  /// In pt, this message translates to:
+  /// **'Nenhuma playlist ainda.'**
+  String get emptyPlaylists;
+
+  /// No description provided for @newPlaylistBtn.
+  ///
+  /// In pt, this message translates to:
+  /// **'Nova playlist'**
+  String get newPlaylistBtn;
+
+  /// No description provided for @rescanBtn.
+  ///
+  /// In pt, this message translates to:
+  /// **'Atualizar'**
+  String get rescanBtn;
 }
 
 class _AppLocalizationsDelegate

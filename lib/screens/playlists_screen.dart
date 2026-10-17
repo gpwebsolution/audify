@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../l10n/app_localizations.dart';
+import '../l10n/l10n.dart';
 import '../providers/favorites_provider.dart';
 import '../providers/history_provider.dart';
 import '../providers/playlist_provider.dart';
+import '../widgets/playlist_picker_sheet.dart';
 import 'auto_playlist_detail_screen.dart';
 import 'favorites_detail_screen.dart';
 import 'playlist_detail_screen.dart';
@@ -277,8 +280,11 @@ class _HistoryTiles extends StatelessWidget {
 }
 
 class _EmptyPlaylists extends StatelessWidget {
+  const _EmptyPlaylists();
+
   @override
   Widget build(BuildContext context) {
+    final AppLocalizations l10n = l10nOf(context);
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(24),
@@ -292,10 +298,20 @@ class _EmptyPlaylists extends StatelessWidget {
             ),
             const SizedBox(height: 12),
             Text(
-              'Nenhuma playlist ainda.\n'
-              'Toque no + para criar a primeira.',
+              l10n.emptyPlaylists,
               textAlign: TextAlign.center,
               style: Theme.of(context).textTheme.bodyMedium,
+            ),
+            const SizedBox(height: 16),
+            // Item 5.3 — ação clara no estado vazio: mesmo diálogo do
+            // FAB "Nova playlist" (função compartilhada do seletor).
+            FilledButton.icon(
+              icon: const Icon(Icons.add),
+              label: Text(l10n.newPlaylistBtn),
+              onPressed: () => askPlaylistName(
+                context,
+                context.read<PlaylistProvider>(),
+              ),
             ),
           ],
         ),
