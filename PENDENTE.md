@@ -83,3 +83,29 @@ Cada linha: ID do item, o que falta e o motivo.
 - **Não validado em aparelho:** coração persistindo entre reinícios,
   contagem no tile da lista, entrada "Favoritas" e play-all do detalhe
   — checklist no relatório final.
+
+---
+
+## 4.2 — Histórico e mais tocadas
+
+- **Contagem por posição, não por tempo de ouvida.** A regra olha a
+  posição nos ticks em que o player está TOCANDO (30 s ou 50%); um
+  seek adiantado durante a reprodução passa do limiar e conta, mesmo
+  que ninguém ouvisse os 30 s. O "não a cada seek/retorno" está coberto
+  pelo flag por execução — mas segundos tocados de fato não são medidos.
+- **Repetição em loop da mesma faixa conta uma vez.** O reset do flag
+  depende da faixa corrente MUDAR; repeat-one que volta ao início sem
+  trocar de id (mesma execução contínua na tela) não reconta. Trocar de
+  faixa e voltar conta de novo (testado).
+- **Retomada de sessão acima do limiar conta.** O flag vive em memória:
+  abrir o app e retomar uma faixa em 45 s registra o play (o anterior
+  já pode ter sido contado na sessão anterior).
+- **song_stats guarda só `song_id`** (sem `file_path`, ao contrário dos
+  favoritos): mídia reindexada vira linha órfã — os detalhes mostram
+  só o que casa com o catálogo atual, mas as stats velhas continuam na
+  tabela e na contagem dos tiles.
+- **Listas completas, sem limite** de "N mais tocadas"/"N recentes".
+- **Migração 4 → 5 coberta só por sqflite_common_ffi em desktop.**
+- **Não validado em aparelho:** contagem durante ouvida real, tiles na
+  aba Playlists, play-all e "Limpar histórico" — checklist no relatório
+  final.

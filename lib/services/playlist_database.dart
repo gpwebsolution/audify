@@ -21,9 +21,11 @@ import '../models/video_model.dart';
 ///  - favorite_songs(song_id TEXT PK, file_path TEXT como reserva se o
 ///    id do MediaStore mudar ao reindexar, + colunas de exibição,
 ///    added_at INTEGER) — item 4.1 (favoritos de música)
+///  - song_stats(song_id TEXT PK, play_count INTEGER, last_played
+///    INTEGER) — item 4.2 (histórico e mais tocadas)
 class PlaylistDatabase {
   static const String _dbName = 'audify.db';
-  static const int _dbVersion = 4;
+  static const int _dbVersion = 5;
 
   static Database? _db;
 
@@ -80,6 +82,10 @@ class PlaylistDatabase {
             // reindexado — o caminho permite re-associar depois).
             await _createFavoriteSongs(db);
           }
+          if (oldVersion < 5) {
+            // Item 4.2 — histórico de reprodução (contagem por faixa).
+            await _createSongStats(db);
+          }
         },
       );
       _db = opened;
@@ -87,6 +93,11 @@ class PlaylistDatabase {
       return opened;
     } catch (e) {
       // Propaga para todos que aguardavam e libera nova tentativa depois.
+      // `ignore()` ANTES: se esta é a primeira chamada e o chamador é
+      // fire-and-forget (ex.: gravação de histórico), o completer não
+      // tem awaiter — sem ouvinte, o completeError viraria um erro
+      // async não tratado na zona do chamador.
+      completer.future.ignore();
       completer.completeError(e);
       rethrow;
     } finally {
@@ -136,6 +147,7 @@ class PlaylistDatabase {
       )
     ''');
     await _createFavoriteSongs(db);
+    await _createSongStats(db);
   }
 
   /// Item 4.1 — tabela de favoritos (usada no onCreate E no onUpgrade
@@ -155,6 +167,18 @@ class PlaylistDatabase {
         is_asset INTEGER NOT NULL DEFAULT 0,
         duration_ms INTEGER,
         added_at INTEGER NOT NULL
+      )
+    ''');
+  }
+
+  /// Item 4.2 — histórico de reprodução (usada no onCreate E no
+  /// onUpgrade 4→5; mesma DDL nos dois caminhos).
+  static Future<void> _createSongStats(Database db) async {
+    await db.execute('''
+      CREATE TABLE song_stats(
+        song_id TEXT PRIMARY KEY,
+        play_count INTEGER NOT NULL DEFAULT 0,
+        last_played INTEGER NOT NULL
       )
     ''');
   }
@@ -292,6 +316,49 @@ class PlaylistDatabase {
       orderBy: 'title COLLATE NOCASE',
     );
     return rows.map(Song.fromStored).whereType<Song>().toList();
+  }
+
+  // ------------------------------------------------------------------
+  // Item 4.2 — histórico de reprodução (song_stats)
+  // ------------------------------------------------------------------
+
+  /// Registra UMA reprodução da faixa em [playedAtMs] (epoch): soma 1
+  /// na contagem e atualiza o último toque. UPDATE + INSERT em
+  /// transação em vez do "upsert" ON CONFLICT (SQLite < 3.24, que é o
+  /// que roda em Android antigo, não o entende).
+  static Future<void> recordPlay(String songId, {required int playedAtMs}) async {
+    final Database db = await _database();
+    await db.transaction((Transaction txn) async {
+      final int updated = await txn.rawUpdate(
+        'UPDATE song_stats SET play_count = play_count + 1, '
+        'last_played = ? WHERE song_id = ?',
+        <Object>[playedAtMs, songId],
+      );
+      if (updated == 0) {
+        await txn.insert('song_stats', <String, Object?>{
+          'song_id': songId,
+          'play_count': 1,
+          'last_played': playedAtMs,
+        });
+      }
+    });
+  }
+
+  /// Stats de todas as faixas com histórico: mais tocadas primeiro
+  /// (empate: último toque mais recente). A ordem "recentemente" é só
+  /// uma inversão por `last_played`, feita em memória pelo provider.
+  static Future<List<Map<String, Object?>>> getStats() async {
+    final Database db = await _database();
+    return db.query(
+      'song_stats',
+      orderBy: 'play_count DESC, last_played DESC',
+    );
+  }
+
+  /// Apaga todo o histórico (opção "limpar histórico").
+  static Future<void> clearHistory() async {
+    final Database db = await _database();
+    await db.delete('song_stats');
   }
 
   /// Vídeos de uma playlist, na ordem salva.

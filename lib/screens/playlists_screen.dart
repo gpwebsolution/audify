@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../providers/favorites_provider.dart';
+import '../providers/history_provider.dart';
 import '../providers/playlist_provider.dart';
+import 'auto_playlist_detail_screen.dart';
 import 'favorites_detail_screen.dart';
 import 'playlist_detail_screen.dart';
 
@@ -40,6 +42,10 @@ class PlaylistsScreen extends StatelessWidget {
         // antes do carregamento e mesmo sem playlist alguma (a fonte é
         // a tabela favorite_songs, não a tabela playlists).
         const _FavoritesTile(),
+        // Item 4.2 — playlists automáticas de histórico (somente
+        // leitura), logo abaixo de Favoritas e acima das playlists
+        // reais.
+        const _HistoryTiles(),
         Expanded(
           child: provider.isLoading
               ? const Center(child: CircularProgressIndicator())
@@ -185,6 +191,87 @@ class _FavoritesTile extends StatelessWidget {
           );
         },
       ),
+    );
+  }
+}
+
+/// Item 4.2 — entradas fixas do histórico na aba Playlists.
+///
+/// Duas playlists automáticas somente leitura (sem CRUD): a fonte é a
+/// tabela `song_stats` via [HistoryProvider] — a contagem do subtítulo
+/// e os detalhes reagem ao vivo a cada play registrado e ao "Limpar
+/// histórico".
+class _HistoryTiles extends StatelessWidget {
+  const _HistoryTiles();
+
+  Widget _tile(
+    BuildContext context,
+    ColorScheme colors, {
+    required String title,
+    required IconData icon,
+    required String subtitle,
+    required bool recent,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+      child: ListTile(
+        leading: CircleAvatar(
+          backgroundColor: colors.tertiaryContainer,
+          child: Icon(icon, color: colors.onTertiaryContainer),
+        ),
+        title: Text(
+          title,
+          style: const TextStyle(fontWeight: FontWeight.w600),
+        ),
+        subtitle: Text(subtitle),
+        trailing: const Icon(Icons.chevron_right),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12),
+        ),
+        onTap: () => Navigator.of(context).push(
+          MaterialPageRoute<void>(
+            builder: (_) => AutoPlaylistDetailScreen(
+              title: title,
+              recent: recent,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final ColorScheme colors = Theme.of(context).colorScheme;
+
+    return ListenableBuilder(
+      listenable: HistoryProvider.instance,
+      builder: (BuildContext context, _) {
+        final int count = HistoryProvider.instance.count;
+        final String subtitle = count == 0
+            ? 'Ainda sem histórico'
+            : '$count ${count == 1 ? 'faixa' : 'faixas'}';
+        return Column(
+          children: [
+            _tile(
+              context,
+              colors,
+              title: 'Tocadas recentemente',
+              icon: Icons.history,
+              subtitle: subtitle,
+              recent: true,
+            ),
+            _tile(
+              context,
+              colors,
+              title: 'Mais tocadas',
+              icon: Icons.trending_up,
+              subtitle: subtitle,
+              recent: false,
+            ),
+          ],
+        );
+      },
     );
   }
 }

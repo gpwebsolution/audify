@@ -13,6 +13,7 @@ import 'services/error_log_service.dart';
 import 'services/pdf_favorites_service.dart';
 import 'providers/equalizer_provider.dart';
 import 'providers/favorites_provider.dart';
+import 'providers/history_provider.dart';
 import 'providers/player_provider.dart';
 import 'providers/pdf_provider.dart';
 import 'providers/playlist_provider.dart';
@@ -76,6 +77,15 @@ Future<void> _bootstrap() async {
     await FavoritesProvider.instance.load();
   } catch (e, s) {
     ErrorLogService.logSync('boot', 'Falha ao carregar favoritos: $e', s);
+  }
+
+  // Item 4.2 — histórico de reprodução: as playlists automáticas da aba
+  // Playlists já abrem com as contagens certas (mesmo raciocínio dos
+  // favoritos; o load engole a própria falha e loga).
+  try {
+    await HistoryProvider.instance.load();
+  } catch (e, s) {
+    ErrorLogService.logSync('boot', 'Falha ao carregar histórico: $e', s);
   }
 
   // Serviço de áudio com MediaSession: notificação de mídia e controles

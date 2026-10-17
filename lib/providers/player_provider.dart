@@ -10,8 +10,10 @@ import '../services/audio_service.dart';
 import '../services/catalog_snapshot_service.dart';
 import '../services/error_log_service.dart';
 import '../services/permission_service.dart';
+import '../services/playback_history_service.dart';
 import '../utils/playback_queue.dart';
 import '../utils/text_normalize.dart';
+import 'history_provider.dart';
 import 'settings_provider.dart';
 
 export '../models/repeat_mode.dart' show RepeatMode;
@@ -53,6 +55,9 @@ class PlayerProvider extends ChangeNotifier {
   final SongRepository _songRepository;
   final SessionRepository _sessionRepository;
   final PlaybackQueue _playbackQueue;
+
+  /// Item 4.2 — regra do histórico (contagem por posição).
+  final PlaybackHistoryService _history;
 
   List<Song> _songs = const [];
   List<Song> _visibleSongs = const [];
@@ -214,11 +219,17 @@ class PlayerProvider extends ChangeNotifier {
     // limite (isolate não responde fora de zona real — runAsync exporia
     // exceções latentes de canal de plataforma do motor de áudio).
     this.catalogComputeThreshold = defaultCatalogComputeThreshold,
+    // Item 4.2: regra do histórico (30 s / 50%). Testes injetam o
+    // serviço com spy de gravação; o padrão grava em song_stats e
+    // refresca o HistoryProvider da UI ao contar.
+    PlaybackHistoryService? history,
   }) : _songRepository = songRepository ?? SongRepository(),
        _sessionRepository = sessionRepository ?? SessionRepository(),
        _playbackQueue = playbackQueue ?? PlaybackQueue(),
        _requestNotificationPermission = requestNotificationPermission ??
            PermissionService.requestNotificationAccess,
+       _history = history ??
+           PlaybackHistoryService(onRecorded: HistoryProvider.instance.refresh),
        _clock = clock ?? DateTime.now {
     // Botões da notificação/tela de bloqueio (audio_service) delegam a
     // navegação da fila para este provider.
@@ -931,6 +942,14 @@ class PlayerProvider extends ChangeNotifier {
     // notifyListeners. A lista da biblioteca não reconstrói ~5x/s;
     // os widgets de progresso reagem via ValueListenableBuilder.
     _positionNotifier.value = _audioService.position.value;
+    // Item 4.2: mesma fonte de verdade do progresso alimenta a regra
+    // do histórico (30 s / 50%, uma vez por execução da faixa).
+    _history.onProgress(
+      _currentSong,
+      _positionNotifier.value,
+      _duration,
+      isPlaying: _status == PlayerStatus.playing,
+    );
     _maybeSaveSession();
   }
 
