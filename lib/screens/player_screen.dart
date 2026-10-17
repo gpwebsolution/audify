@@ -325,6 +325,26 @@ class _PlayerScreenState extends State<PlayerScreen> {
     );
   }
 
+  /// Item 3.5 — folha "Fila": a ordem que o player segue, com
+  /// tocar-aqui, reordenar (arrastar pelo alça) e remover. O conteúdo
+  /// assiste o provider (ChangeNotifierProvider.value) — remover ou
+  /// reordenar refaz a lista sozinho, sem fechar a folha.
+  Future<void> _showQueueSheet(
+    BuildContext context,
+    PlayerProvider provider,
+  ) async {
+    await showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (BuildContext sheetContext) => SafeArea(
+        child: ChangeNotifierProvider<PlayerProvider>.value(
+          value: provider,
+          child: const _QueueSheet(),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final PlayerProvider provider = context.watch<PlayerProvider>();
@@ -341,6 +361,14 @@ class _PlayerScreenState extends State<PlayerScreen> {
       appBar: AppBar(
         title: const Text('Agora tocando'),
         actions: [
+          // Item 3.5: fila de reprodução — a ordem REAL que o player
+          // segue (gapless), não a lista da biblioteca.
+          if (song != null)
+            IconButton(
+              tooltip: 'Fila de reprodução',
+              icon: const Icon(Icons.queue_music),
+              onPressed: () => _showQueueSheet(context, provider),
+            ),
           // Item 3.1: timer de sono — ícone aceso quando agendado; o
           // tempo restante aparece no chip acima do slider. Sem faixa
           // corrente não há o que dormir, então some junto com as ações.
@@ -591,6 +619,103 @@ class _PlayerScreenState extends State<PlayerScreen> {
           ],
         ),
       ),
+    );
+  }
+}
+
+/// Item 3.5 — conteúdo da folha "Fila" (lista viva do provider).
+class _QueueSheet extends StatelessWidget {
+  const _QueueSheet();
+
+  @override
+  Widget build(BuildContext context) {
+    final PlayerProvider provider = context.watch<PlayerProvider>();
+    final ColorScheme colors = Theme.of(context).colorScheme;
+    final List<Song> queue = provider.queue;
+
+    if (queue.isEmpty) {
+      return const Padding(
+        padding: EdgeInsets.all(24),
+        child: Text(
+          'Fila vazia — use "Tocar a seguir" ou "Adicionar à fila" '
+          'no menu de uma música.',
+          textAlign: TextAlign.center,
+        ),
+      );
+    }
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: <Widget>[
+        Padding(
+          padding: const EdgeInsets.fromLTRB(24, 0, 24, 8),
+          child: Text(
+            '${queue.length} faixa(s) • toque para tocar, segure o '
+            'alça para reordenar',
+            style: Theme.of(context).textTheme.bodySmall,
+            textAlign: TextAlign.center,
+          ),
+        ),
+        // Flexible (não altura fixa): o sheet limita o conteúdo ao que
+        // sobra do viewport — a folha ocupa o máximo disponível e a
+        // lista rola dentro, sem estourar o RenderFlex.
+        Flexible(
+          child: ReorderableListView.builder(
+            // O drag só começa pelo alça: o restante do item é para
+            // TOCAR (sem arraste acidental ao interagir com o tile).
+            buildDefaultDragHandles: false,
+            itemCount: queue.length,
+            // onReorderItem (não o onReorder legado) já entrega o
+            // destino AJUSTADO pós-remoção — a posição FINAL que o
+            // PlaybackQueue.move espera.
+            onReorderItem: provider.queueMove,
+            itemBuilder: (BuildContext context, int index) {
+              final Song song = queue[index];
+              final bool isCurrent = provider.currentSong?.id == song.id;
+              return ListTile(
+                key: ValueKey<String>(song.id),
+                leading: isCurrent
+                    ? Icon(Icons.graphic_eq, color: colors.primary)
+                    : Text(
+                        '${index + 1}',
+                        textAlign: TextAlign.center,
+                      ),
+                title: Text(
+                  song.title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                subtitle: Text(
+                  isCurrent ? 'Tocando agora' : song.displayArtist,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                trailing: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: <Widget>[
+                    IconButton(
+                      tooltip: 'Remover da fila',
+                      icon: const Icon(Icons.close),
+                      onPressed: () => provider.queueRemoveAt(index),
+                    ),
+                    ReorderableDragStartListener(
+                      index: index,
+                      child: const Padding(
+                        padding: EdgeInsets.all(8),
+                        child: Icon(Icons.drag_handle),
+                      ),
+                    ),
+                  ],
+                ),
+                onTap: () {
+                  Navigator.of(context).pop();
+                  provider.playQueue(queue, index);
+                },
+              );
+            },
+          ),
+        ),
+      ],
     );
   }
 }

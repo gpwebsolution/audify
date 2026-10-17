@@ -329,4 +329,193 @@ void main() {
       expect(queue.queue.length, 2);
     });
   });
+
+  group('PlaybackQueue — edição da fila (3.5)', () {
+    test('insertNext entra logo após a corrente e ela não sai do lugar', () {
+      final PlaybackQueue queue = PlaybackQueue();
+      queue.setQueue(_threeSongs(), 1);
+      final bool changed = queue.insertNext(<Song>[_song(4)]);
+
+      expect(changed, isTrue);
+      expect(
+        queue.queue,
+        <Song>[_song(1), _song(2), _song(4), _song(3)],
+      );
+      expect(queue.queueIndex, 1);
+      expect(queue.current, _song(2));
+    });
+
+    test('insertNext sem faixa corrente entra no início (índice -1 segue)', () {
+      final PlaybackQueue queue = PlaybackQueue();
+      final bool changed = queue.insertNext(<Song>[_song(1), _song(2)]);
+
+      expect(changed, isTrue);
+      expect(queue.queue, <Song>[_song(1), _song(2)]);
+      expect(queue.queueIndex, -1);
+      expect(queue.current, isNull);
+    });
+
+    test('insertNext de faixa já presente a MOVE (nunca duplica)', () {
+      final PlaybackQueue queue = PlaybackQueue();
+      queue.setQueue(_threeSongs(), 0);
+
+      final bool changed = queue.insertNext(<Song>[_song(3)]);
+
+      expect(changed, isTrue);
+      expect(queue.queue, <Song>[_song(1), _song(3), _song(2)]);
+      expect(queue.queue.map((Song s) => s.id).toSet().length, 3);
+    });
+
+    test('insertNext de lote preserva a ordem dada e ignora a corrente', () {
+      final PlaybackQueue queue = PlaybackQueue();
+      queue.setQueue(_threeSongs(), 0);
+
+      // A corrente (_song(1)) no lote é ignorada; _song(2) já estava
+      // logo após e entra no BLOCO na ordem do lote (4, 2, 5), nunca
+      // em dobro.
+      final bool changed =
+          queue.insertNext(<Song>[_song(4), _song(1), _song(2), _song(5)]);
+
+      // _song(2) já estava logo após a corrente: entra no BLOCO na
+      // ordem do lote (4, 2, 5), nunca em dobro; a corrente não sai.
+      expect(changed, isTrue);
+      expect(
+        queue.queue,
+        <Song>[_song(1), _song(4), _song(2), _song(5), _song(3)],
+      );
+      expect(queue.queueIndex, 0);
+    });
+
+    test('insertNext sem mudança real devolve false', () {
+      final PlaybackQueue queue = PlaybackQueue();
+      queue.setQueue(_threeSongs(), 0);
+
+      // A faixa 2 já é exatamente a próxima.
+      expect(queue.insertNext(<Song>[_song(2)]), isFalse);
+      // A própria corrente no lote também não muda nada.
+      expect(queue.insertNext(<Song>[_song(1)]), isFalse);
+      expect(queue.queue, _threeSongs());
+      expect(queue.queueIndex, 0);
+    });
+
+    test('append põe no fim e ignora o que já está na fila', () {
+      final PlaybackQueue queue = PlaybackQueue();
+      queue.setQueue(_threeSongs(), 1);
+
+      expect(queue.append(<Song>[_song(4)]), isTrue);
+      expect(queue.queue.last, _song(4));
+      expect(queue.append(<Song>[_song(2)]), isFalse); // já presente
+      expect(queue.append(<Song>[_song(4)]), isFalse); // já entrou
+      expect(queue.queue.length, 4);
+      expect(queue.current, _song(2)); // append não desloca a corrente
+      expect(queue.queueIndex, 1);
+    });
+
+    test('append com shuffle: desligar o embaralhamento mantém a nova', () {
+      final PlaybackQueue queue = PlaybackQueue(random: Random(11));
+      queue.setQueue(_threeSongs(), 0);
+      queue.toggleShuffle();
+
+      expect(queue.append(<Song>[_song(4)]), isTrue);
+      queue.toggleShuffle(); // desativa -> restaura a ordem original
+
+      expect(queue.queue.length, 4);
+      expect(queue.queue.contains(_song(4)), isTrue);
+      expect(queue.queue.contains(_song(1)), isTrue);
+    });
+
+    test('move de outro item desloca o índice da corrente junto', () {
+      final PlaybackQueue queue = PlaybackQueue();
+      queue.setQueue(_threeSongs(), 1); // corrente = faixa 2
+
+      expect(queue.move(0, 2), isTrue);
+      expect(queue.queue, <Song>[_song(2), _song(3), _song(1)]);
+      expect(queue.queueIndex, 0);
+      expect(queue.current, _song(2));
+    });
+
+    test('move da própria corrente a leva para a posição final', () {
+      final PlaybackQueue queue = PlaybackQueue();
+      queue.setQueue(_threeSongs(), 0); // corrente = faixa 1
+
+      expect(queue.move(0, 2), isTrue);
+      expect(queue.queue, <Song>[_song(2), _song(3), _song(1)]);
+      expect(queue.queueIndex, 2);
+      expect(queue.current, _song(1));
+    });
+
+    test('move com índices inválidos ou iguais devolve false', () {
+      final PlaybackQueue queue = PlaybackQueue();
+      queue.setQueue(_threeSongs(), 0);
+
+      expect(queue.move(-1, 0), isFalse);
+      expect(queue.move(0, 3), isFalse);
+      expect(queue.move(2, 2), isFalse);
+      expect(queue.queue, _threeSongs());
+      expect(queue.queueIndex, 0);
+    });
+
+    test('removeAt devolve a faixa e o sucessor assume a posição', () {
+      final PlaybackQueue queue = PlaybackQueue();
+      queue.setQueue(_threeSongs(), 0);
+
+      final Song? removed = queue.removeAt(0);
+
+      expect(removed, _song(1));
+      expect(queue.queue, <Song>[_song(2), _song(3)]);
+      expect(queue.queueIndex, 0);
+      expect(queue.current, _song(2));
+    });
+
+    test('removeAt da corrente no fim aponta o anterior', () {
+      final PlaybackQueue queue = PlaybackQueue();
+      queue.setQueue(_threeSongs(), 2);
+
+      final Song? removed = queue.removeAt(2);
+
+      expect(removed, _song(3));
+      expect(queue.queueIndex, 1);
+      expect(queue.current, _song(2));
+    });
+
+    test('removeAt fora de faixa devolve null e não muda nada', () {
+      final PlaybackQueue queue = PlaybackQueue();
+      queue.setQueue(_threeSongs(), 1);
+
+      expect(queue.removeAt(-1), isNull);
+      expect(queue.removeAt(3), isNull);
+      expect(queue.queue, _threeSongs());
+      expect(queue.queueIndex, 1);
+    });
+
+    test('removeAt com shuffle não ressuscita a faixa ao desativar', () {
+      final PlaybackQueue queue = PlaybackQueue(random: Random(7));
+      queue.setQueue(_threeSongs(), 0);
+      queue.toggleShuffle();
+
+      final Song removed = queue.removeAt(0)!;
+      queue.toggleShuffle(); // desativa -> restaura a ordem original
+
+      expect(queue.queue.contains(removed), isFalse);
+      expect(queue.queue.length, 2);
+    });
+
+    test('edições convivem com repeat (nextIndex coerente)', () {
+      final PlaybackQueue queue = PlaybackQueue();
+      queue.setQueue(_threeSongs(), 2);
+      queue.cycleRepeat(); // all: próxima do fim volta ao início
+
+      queue.insertNext(<Song>[_song(4)]);
+      expect(queue.nextIndex(), 3); // a nova é a próxima da corrente
+
+      // removeAt da própria corrente: o sucessor ocupa o lugar e o
+      // repeat all continua embrulhando a partir dele.
+      queue.removeAt(2);
+      expect(queue.current, _song(4));
+      expect(queue.nextIndex(), 0);
+
+      queue.cycleRepeat(); // one: repete a corrente
+      expect(queue.nextIndex(), 2);
+    });
+  });
 }

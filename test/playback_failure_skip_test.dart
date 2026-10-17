@@ -61,7 +61,7 @@ class _ScriptedAudioService extends AudioService {
       Exception('Unable to load asset: "x.mp3"');
 
   @override
-  Future<void> playSong(Song song) async {
+  Future<void> playSong(Song song, {Duration startAt = Duration.zero}) async {
     playCalls++;
     if (failTitles.contains(song.title)) {
       // Mesmo fluxo do AudioService real: mensagem amigável primeiro,
@@ -259,7 +259,7 @@ class _PlatformFailAudioService extends AudioService {
       Exception('MissingPluginException: No implementation found');
 
   @override
-  Future<void> playSong(Song song) async {
+  Future<void> playSong(Song song, {Duration startAt = Duration.zero}) async {
     playCalls++;
     errorMessage.value =
         AudioService.userMessage('tocar "${song.title}"', _platformError);

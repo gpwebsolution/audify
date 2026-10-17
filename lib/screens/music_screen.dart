@@ -308,6 +308,28 @@ class _MusicScreenState extends State<MusicScreen> with MediaSelection<String> {
             onClear: clearSelection,
             onDelete: () => deleteSelectedSongs(context, provider),
             actions: <SelectionAction>[
+              // Item 3.5 — fila: lote inteiro entra na fila ativa de
+              // uma vez (ordem da seleção); seleção limpa ao concluir.
+              SelectionAction(
+                icon: Icons.playlist_play,
+                label: 'Tocar a seguir',
+                onPressed: () {
+                  provider.queuePlayNext(
+                    selectedFrom(provider.visibleSongs, (Song s) => s.id),
+                  );
+                  clearSelection();
+                },
+              ),
+              SelectionAction(
+                icon: Icons.queue_music,
+                label: 'Adicionar à fila',
+                onPressed: () {
+                  provider.queueAppend(
+                    selectedFrom(provider.visibleSongs, (Song s) => s.id),
+                  );
+                  clearSelection();
+                },
+              ),
               SelectionAction(
                 icon: Icons.share_outlined,
                 label: 'Compartilhar selecionadas',
@@ -526,6 +548,30 @@ class _MusicScreenState extends State<MusicScreen> with MediaSelection<String> {
         child: ListView(
           shrinkWrap: true,
           children: [
+            // Item 3.5 — fila de reprodução: entram na fila ATIVA
+            // (ordem que o player segue), não na lista exibida.
+            ListTile(
+              leading: const Icon(Icons.playlist_play),
+              title: const Text('Tocar a seguir'),
+              onTap: () {
+                Navigator.pop(sheetContext);
+                provider.queuePlayNext([song]);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('A seguir: ${song.title}')),
+                );
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.queue_music),
+              title: const Text('Adicionar à fila'),
+              onTap: () {
+                Navigator.pop(sheetContext);
+                provider.queueAppend([song]);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('Na fila: ${song.title}')),
+                );
+              },
+            ),
             ListTile(
               leading: const Icon(Icons.playlist_add),
               title: const Text('Adicionar à playlist'),

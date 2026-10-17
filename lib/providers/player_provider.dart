@@ -132,6 +132,10 @@ class PlayerProvider extends ChangeNotifier {
   bool _isLoading = true;
   bool _isDisposed = false;
 
+  /// Cadeia de recargas da fila editada (item 3.5) — serializa as
+  /// edições rápidas para o player não receber cargas sobrepostas.
+  Future<void> _pendingQueueReload = Future<void>.value();
+
   /// Todas as faixas (MediaStore + assets).
   List<Song> get songs => _songs;
 
@@ -183,6 +187,14 @@ class PlayerProvider extends ChangeNotifier {
 
   /// Se há uma próxima faixa na fila (respecta repeat/shuffle).
   bool get hasNext => _playbackQueue.nextIndex() != null;
+
+  /// Fila ATIVA de reprodução (ordem que o player segue, item 3.5) —
+  /// o que a folha "Fila" do PlayerScreen lista. NÃO é a lista visível
+  /// da biblioteca (que pode estar filtrada/busca).
+  List<Song> get queue => _playbackQueue.queue;
+
+  /// Índice da faixa corrente na fila (-1 = nada selecionado).
+  int get queueIndex => _playbackQueue.queueIndex;
 
   PlayerProvider(
     this._audioService, {
@@ -707,6 +719,123 @@ class PlayerProvider extends ChangeNotifier {
     settings?.setRepeatMode(_playbackQueue.repeat);
     _syncModesToService();
     _notify();
+  }
+
+  // ------------------------------------------------------------------
+  // Item 3.5 — edição da fila (folha "Fila", "Tocar a seguir" e
+  // "Adicionar à fila"). A fila MUTADA com o player ativo precisa ser
+  // recarregada: o gapless (3.4) só avança dentro das fontes que o
+  // player carregou — sem a recarga, a transição viria da fila ANTIGA.
+  // ------------------------------------------------------------------
+
+  /// "Tocar a seguir": [songs] entram logo após a corrente, na ordem
+  /// dada (seleção em lote chega como lote). Já presentes são MOVIDAS
+  /// (sem duplicatas). Se nunca tocou nada, começa a tocar — senão o
+  /// botão play ficaria morto sem faixa corrente.
+  void queuePlayNext(List<Song> songs) {
+    if (_isDisposed || songs.isEmpty) return;
+    if (!_playbackQueue.insertNext(songs)) return;
+    _afterQueueEdit(startIfIdle: true);
+  }
+
+  /// "Adicionar à fila": [songs] entram no FIM (as já presentes são
+  /// ignoradas). Mesma regra de auto-play da fila vazia do
+  /// [queuePlayNext].
+  void queueAppend(List<Song> songs) {
+    if (_isDisposed || songs.isEmpty) return;
+    if (!_playbackQueue.append(songs)) return;
+    _afterQueueEdit(startIfIdle: true);
+  }
+
+  /// Reordena a folha da fila: [to] é a posição FINAL do item (quem
+  /// chama converte o +1 do ReorderableListView). O player não troca
+  /// de faixa por arrastar — só a ordem muda.
+  void queueMove(int from, int to) {
+    if (_isDisposed) return;
+    if (!_playbackQueue.move(from, to)) return;
+    _afterQueueEdit();
+  }
+
+  /// Remove o item [index] da folha da fila. Se era a corrente, a
+  /// próxima sobrevivente assume a posição e Toca do início.
+  void queueRemoveAt(int index) {
+    if (_isDisposed) return;
+    if (_playbackQueue.removeAt(index) == null) return;
+    _afterQueueEdit();
+  }
+
+  /// Pós-mutação comum: publica na notificação, aciona a UI e, com
+  /// player ativo, recarrega a fila nova preservando posição/estado.
+  void _afterQueueEdit({bool startIfIdle = false}) {
+    if (_isDisposed) return;
+    // Nunca tocou: a edição vira a primeira reprodução (só ações
+    // ADITIVAS fazem isso — reordenar/remover nada tocado não inicia
+    // áudio).
+    if (startIfIdle &&
+        _currentSong == null &&
+        _playbackQueue.queue.isNotEmpty) {
+      _playbackQueue.setIndex(
+        _playbackQueue.queueIndex >= 0 ? _playbackQueue.queueIndex : 0,
+      );
+      unawaited(_playCurrent());
+      return;
+    }
+    final Song? cur = _playbackQueue.current;
+    _currentSong = cur;
+    if (cur == null) {
+      // Fila esvaziou: publica o estado vazio e corta um player que
+      // estivesse ativo (não pode sobrar áudio de faixa removida).
+      _publishQueueToService();
+      final PlayerStatus st = _audioService.status.value;
+      if (st == PlayerStatus.playing || st == PlayerStatus.paused) {
+        unawaited(_audioService.stop());
+      }
+      _positionNotifier.value = Duration.zero;
+      _notify();
+      return;
+    }
+    _publishQueueToService();
+    _notify();
+    _reloadQueueForEdit();
+  }
+
+  /// Recarrega a fila editada no player (item 3.5 + 3.4). Enfileirada:
+  /// edições rápidas em sequência viram cargas SERIAIS (o player não
+  /// recebe duas cargas sobrepostas); o estado é relido DENTRO da
+  /// cadeia para a última edição valer. Só roda com player ativo —
+  /// parado, o próximo play já recarrega pelo caminho normal do
+  /// [AudioService.playSong]. Falha vira log, sem crash.
+  void _reloadQueueForEdit() {
+    try {
+      if (_isDisposed) return;
+      final PlayerStatus st = _audioService.status.value;
+      if (st != PlayerStatus.playing && st != PlayerStatus.paused) return;
+      _pendingQueueReload = _pendingQueueReload.then((_) async {
+        if (_isDisposed) return;
+        try {
+          final PlayerStatus now = _audioService.status.value;
+          if (now != PlayerStatus.playing && now != PlayerStatus.paused) {
+            return; // usuário parou enquanto a edição esperava
+          }
+          final Song? next = _playbackQueue.current;
+          if (next == null) return;
+          // A posição só vale se a faixa que SOA é a que continua
+          // corrente; remoção da atual faz a sobrevivente recomeçar.
+          final String? sounding = _audioService.mediaItem.value?.id;
+          final Duration startAt = next.id == sounding
+              ? _audioService.position.value
+              : Duration.zero;
+          await _audioService.playSong(next, startAt: startAt);
+          if (_isDisposed) return;
+          if (now == PlayerStatus.paused) await _audioService.pause();
+        } catch (e, s) {
+          ErrorLogService.logSync('player/queueReload', e, s);
+        }
+      });
+      unawaited(_pendingQueueReload);
+    } catch (e, s) {
+      ErrorLogService.logSync('player/queueReload', e, s);
+    }
   }
 
   // ---- Item 3.1 — timer de sono (delegação + notificação da UI) ----

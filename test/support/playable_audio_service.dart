@@ -15,6 +15,9 @@
 // play()/setAudioSource — e nenhum teste real toca esses métodos (os
 // testes de unidade publicam broadcast/posição diretamente).
 
+// Só o MediaItem (evita colisão de nome com o AudioService do app).
+import 'package:audio_service/audio_service.dart' show MediaItem;
+
 import 'package:audify/models/song_model.dart';
 import 'package:audify/services/audio_service.dart';
 
@@ -31,6 +34,10 @@ class PlayableAudioService extends AudioService {
   /// mesmo broadcast do serviço real, para a UI/provider verem o estado.
   double _speed = 1.0;
 
+  /// Item 3.5: último `startAt` pedido — a recarga da fila preserva a
+  /// posição quando a faixa que soa continua a mesma.
+  Duration? lastStartAt;
+
   @override
   double get playbackSpeed => _speed;
 
@@ -41,13 +48,24 @@ class PlayableAudioService extends AudioService {
   }
 
   @override
-  Future<void> playSong(Song song) async {
+  Future<void> playSong(Song song, {Duration startAt = Duration.zero}) async {
     played.add(song);
     _current = song;
+    lastStartAt = startAt;
     errorMessage.value = null;
     status.value = PlayerStatus.playing;
     duration.value = song.duration ?? Duration.zero;
-    position.value = Duration.zero;
+    position.value = startAt;
+    // O serviço real publica em _updateMediaItem (sem capa aqui: não há
+    // cache de arte em teste) — a recarga da fila lê mediaItem para
+    // saber se a faixa que SOA é a corrente.
+    mediaItem.add(MediaItem(
+      id: song.id,
+      title: song.title,
+      artist: song.displayArtist,
+      album: song.album,
+      duration: song.duration,
+    ));
   }
 
   Song? _current;

@@ -177,6 +177,129 @@ class PlaybackQueue {
     _repeat = mode;
   }
 
+  // ------------------------------------------------------------------
+  // Item 3.5 — edição da fila (folha "Fila", "Tocar a seguir" e
+  // "Adicionar à fila").
+  //
+  // Sem DUPLICATAS por contrato: ids são usados por todo o app
+  // (sessão, gapless, `indexWhere` do índice corrente), então um id
+  // já presente é MOVIDO (insertNext) ou ignorado (append) — nunca
+  // entra em dobro. Com shuffle ativo a edição vale na ordem
+  // embaralhada; a ordem original só acompanha a COMPOSIÇÃO (membros
+  // novos entram no fim, remoções saem) — mover não muda composição,
+  // então ao desligar o embaralhamento o usuário vê a ordem original
+  // com a mesma lista de faixas.
+  // ------------------------------------------------------------------
+
+  /// Insere [songs] logo APÓS a faixa corrente ("Tocar a seguir"), na
+  /// ordem dada (lote da seleção em lote chega inteiro aqui). Faixas já
+  /// presentes são MOVIDAS para o bloco; a faixa corrente nunca sai do
+  /// lugar (é ignorada no lote). Sem faixa corrente, entra no início.
+  /// Retorna false quando nada muda (fila já nessa ordem).
+  bool insertNext(List<Song> songs) {
+    final Song? keep = current;
+    final List<Song> incoming = <Song>[];
+    for (final Song song in songs) {
+      if (keep != null && song.id == keep.id) continue;
+      if (!incoming.any((Song s) => s.id == song.id)) incoming.add(song);
+    }
+    if (incoming.isEmpty) return false;
+    final List<String> before = <String>[for (final Song s in _queue) s.id];
+
+    _queue = _queue
+        .where((Song s) => !incoming.any((Song x) => x.id == s.id))
+        .toList();
+    if (keep != null) {
+      // Sem duplicatas a rebusca é exata; o índice acompanha a remoção
+      // de itens que estavam ANTES da corrente.
+      _queueIndex = _queue.indexWhere((Song s) => s.id == keep.id);
+    }
+    final int insertAt = keep == null ? 0 : _queueIndex + 1;
+    _queue.insertAll(insertAt, incoming);
+    if (_shuffle) {
+      for (final Song song in incoming) {
+        if (!_originalOrder.any((Song s) => s.id == song.id)) {
+          _originalOrder = <Song>[..._originalOrder, song];
+        }
+      }
+    }
+    final List<String> after = <String>[for (final Song s in _queue) s.id];
+    return !_sameIds(before, after);
+  }
+
+  /// Acrescenta [songs] ao FIM da fila ("Adicionar à fila"). Faixas já
+  /// presentes são ignoradas (sem duplicatas). Retorna true se algo entrou.
+  bool append(List<Song> songs) {
+    final List<Song> fresh = <Song>[];
+    for (final Song song in songs) {
+      if (fresh.any((Song s) => s.id == song.id)) continue;
+      if (_queue.any((Song s) => s.id == song.id)) continue;
+      fresh.add(song);
+    }
+    if (fresh.isEmpty) return false;
+    _queue = <Song>[..._queue, ...fresh];
+    if (_shuffle) _originalOrder = <Song>[..._originalOrder, ...fresh];
+    return true;
+  }
+
+  /// Move o item de [from] para [to], onde [to] é a posição FINAL do
+  /// item na lista resultante (sem o +1 do ReorderableListView — quem
+  /// chama converte). A faixa corrente acompanha o movimento (o player
+  /// não pode trocar de faixa só por arrastar). Retorna false se os
+  /// índices forem inválidos ou iguais.
+  bool move(int from, int to) {
+    if (from < 0 || from >= _queue.length) return false;
+    if (to < 0 || to >= _queue.length) return false;
+    if (from == to) return false;
+    final Song? keep = current;
+    final Song song = _queue.removeAt(from);
+    _queue.insert(to, song);
+    if (keep != null) {
+      _queueIndex = _queue.indexWhere((Song s) => s.id == keep.id);
+    }
+    return true;
+  }
+
+  /// Remove e devolve o item em [index] (null se fora de faixa). Se era
+  /// a faixa corrente, a próxima sobrevivente na MESMA posição assume
+  /// (mesma regra de [removeSongs] — no fim, o anterior); se nada
+  /// sobrar, a fila esvazia (-1). No shuffle a faixa também sai da
+  /// ordem original (desligar o embaralhamento não ressuscita).
+  Song? removeAt(int index) {
+    if (index < 0 || index >= _queue.length) return null;
+    final Song? keep = current;
+    final Song removed = _queue.removeAt(index);
+    if (keep == null) {
+      // Sem corrente selecionada o índice -1 continua -1.
+    } else if (removed.id == keep.id) {
+      _queueIndex = _queue.isEmpty
+          ? -1
+          : index.clamp(0, _queue.length - 1);
+    } else {
+      _queueIndex = _queue.indexWhere((Song s) => s.id == keep.id);
+    }
+    if (_shuffle) {
+      final int pos =
+          _originalOrder.indexWhere((Song s) => s.id == removed.id);
+      if (pos >= 0) {
+        final List<Song> order = List<Song>.of(_originalOrder);
+        order.removeAt(pos);
+        _originalOrder = order;
+      }
+    }
+    return removed;
+  }
+
+  /// Compara ids na ORDEM (fila ordenada — igualdade simples seria
+  /// insuficiente para detectar um move que só trocou posições).
+  static bool _sameIds(List<String> a, List<String> b) {
+    if (a.length != b.length) return false;
+    for (int i = 0; i < a.length; i++) {
+      if (a[i] != b[i]) return false;
+    }
+    return true;
+  }
+
   /// Remove da fila as faixas com os ids informados (arquivos excluídos do
   /// aparelho) e reencaixa o índice corrente.
   ///

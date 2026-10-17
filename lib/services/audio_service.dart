@@ -812,9 +812,13 @@ class AudioService extends BaseAudioHandler {
   ///    (`setAudioSources`) — o player avança sozinho entre faixas;
   ///  - sem fila publicada: fonte única (serviço isolado).
   ///
+  /// [startAt] — posição inicial (item 3.5: a recarga pós-EDIÇÃO da
+  /// fila preserva onde a faixa estava; o toque normal do usuário vem
+  /// com o padrão zero, ou seja, do início).
+  ///
   /// Falha de arquivo/alvo continua no mesmo catch de antes: mensagem
   /// amigável + skip 1.7 (via `onPlaybackFailed`).
-  Future<void> playSong(Song song) async {
+  Future<void> playSong(Song song, {Duration startAt = Duration.zero}) async {
     try {
       _currentSong = song;
       errorMessage.value = null;
@@ -827,17 +831,17 @@ class AudioService extends BaseAudioHandler {
         // dentro da mesma fila): só REPOSICIONA — gapless, sem recarga
         // e sem o corte de stop → setAudioSource antigo.
         _lastPlayerIndex = snapIdx;
-        await _player.seek(Duration.zero, index: snapIdx);
+        await _player.seek(startAt, index: snapIdx);
         if (!_player.playing) await _player.play();
       } else if (snapIdx >= 0) {
-        // Fila nova (primeira carga, shuffle/rebuild, repeat mudou):
-        // carrega a FILA INTEIRA — o player avança sozinho entre
-        // faixas (item 3.4).
+        // Fila nova (primeira carga, shuffle/rebuild, repeat mudou,
+        // edição da fila do item 3.5): carrega a FILA INTEIRA — o
+        // player avança sozinho entre faixas (item 3.4).
         await _player.stop();
         await _player.setAudioSources(
           <AudioSource>[for (final Song s in snap) _sourceFor(s)],
           initialIndex: snapIdx,
-          initialPosition: Duration.zero,
+          initialPosition: startAt,
         );
         _loadedQueueIds = _idsOf(snap);
         _lastPlayerIndex = snapIdx;
@@ -849,6 +853,7 @@ class AudioService extends BaseAudioHandler {
         await _player.setAudioSources(<AudioSource>[_sourceFor(song)]);
         _loadedQueueIds = <String>[song.id];
         _lastPlayerIndex = 0;
+        if (startAt > Duration.zero) await _player.seek(startAt);
         await _player.play();
       }
 
