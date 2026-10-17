@@ -1,3 +1,14 @@
+# CHANGELOG — Audify
+
+Histórico de mudanças do app. A partir do item 6.4 o `CORRECOES.md` passou
+a se chamar `CHANGELOG.md` (conteúdo original preservado abaixo, sem
+reescrita — é o registro do que foi feito na época). Versões: **1.1.0+2**
+(1.0.0+1 era a versão anterior).
+
+Para novas mudanças: descreva o quê e por quê, na data, no topo desta seção.
+
+---
+
 # Correções do Audify — Auditoria de estabilidade (ago/2026)
 
 Este documento explica, em linguagem simples, **o que estava quebrado**, **por quê**

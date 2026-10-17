@@ -403,7 +403,7 @@ Cada linha: ID do item, o que falta e o motivo.
   de exclusão é coeso (companion + ciclo reservar→dialogo→finishDelete);
   partir mais exigiria dividir o estado compartilhado entre arquivos,
   ganhando acoplamento sem ganho de clareza — decisão deliberada.
-- **Não reescrevemos o histórico**: `CORRECOES.md §6` ainda cita
+- **Não reescrevemos o histórico**: `CHANGELOG.md §6` (ex-`CORRECOES.md`) ainda cita
   `MainActivity.deleteWithSystemDialog` — é documentação do que foi
   feito na época; o método hoje vive em `MediaDeleteHandler`.
 
@@ -499,3 +499,32 @@ Cada linha: ID do item, o que falta e o motivo.
   dar push; a primeira execução de fato acontece quando o dono der push.
   Se o runner não trouxer o Build Tools 36/SDK esperados, o passo de
   build é o candidato natural a ajuste (analyze/test não dependem do SDK).
+
+---
+
+## 6.4 — Documentação e versão
+
+- **README**: a tabela de funcionalidades foi de 6 para **7 abas**
+  (entrou **Arquivos**) com descrições atualizadas (módulo agrupado,
+  favoritas/histórico/melhores, idioma, equalizador, log de erros), e duas
+  seções novas: **Telas dentro de Arquivos** (Lixeira com expurgo,
+  Duplicados por SHA-256, Analisador de armazenamento, Gerenciador de
+  APKs) e **Ferramentas** (editor de texto, equalizador — EXIF descrito
+  na Galeria). Corrigida também a mentira de **`audioplayers` →
+  `just_audio`** (troca real do item 3.0) e a árvore de código (`# 7
+  abas`, serviço `file_query_service`). Seção de testes atualizada
+  ("mais de 500") com o passo de CI local equivalente ao workflow do 6.3.
+- **`pubspec.yaml`**: `description` nova cobrindo o app real (mídia
+  local + gerenciador/lixeira/editor/equalizador) no lugar da antiga que
+  falava só em MP3 nos assets; **versão `1.0.0+1` → `1.1.0+2`** —
+  `versionCode`/`versionName` do Android vêm de `flutter.versionCode`/
+  `flutter.versionName`, então nada foi hardcodado em gradle.
+- **`CORRECOES.md` → `CHANGELOG.md`** (rename via `git mv`): o conteúdo
+  histórico foi **preservado sem reescrita** (mesma resolução do item 6.1
+  — o documento registra o que foi feito na época); só ganhou um
+  preâmbulo curto explicando o rename e o formato para novas entradas.
+  A única referência no repositório (PENDENTE §6.1) aponta agora para o
+  nome novo.
+- **Verificado**: `flutter analyze` limpo e suíte **538/538** após as
+  mudanças; nenhum teste depende da versão/packageInfo (o app lê
+  `PackageInfo.fromPlatform()` só para exibir em Configurações).

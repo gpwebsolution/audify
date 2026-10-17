@@ -10,12 +10,31 @@ O Audify lê a biblioteca de mídia do aparelho (MediaStore), toca MP3s empacota
 
 | Aba | O que faz |
 |-----|-----------|
-| 🎵 **Música** | Lista músicas do MediaStore do aparelho **+** MP3s dos assets (`assets/songs/`), capa de álbum, busca, fila de reprodução |
-| 🎬 **Vídeos** | Lista vídeos do aparelho com miniaturas e player em tela cheia |
-| 🖼️ **Galeria** | Fotos do aparelho por álbum, com visualizador e cache de miniaturas em disco |
+| 🎵 **Música** | Lista músicas do MediaStore do aparelho **+** MP3s dos assets (`assets/songs/`), capa de álbum, busca, fila de reprodução, modo agrupado por Álbum/Artista/Pasta, favoritas e histórico |
+| 🎬 **Vídeos** | Lista vídeos do aparelho com miniaturas e player em tela cheia (velocidade, volume, rotação) |
+| 🖼️ **Galeria** | Fotos do aparelho por álbum, com visualizador, cache de miniaturas em disco e visualização de metadados **EXIF** |
+| 📁 **Arquivos** | Gerenciador completo do armazenamento: navegação com breadcrumb, busca recursiva com escopo, seleção múltipla com copiar/mover/renomear, **lixeira interna** com expurgo e menu de atalhos (abaixo) |
 | 📄 **PDFs** | Lista PDFs do aparelho, visualizador com progresso de leitura salvo por arquivo |
-| 📃 **Playlists** | Crie/renomeie/exclua playlists e associe músicas e vídeos a elas (SQLite) |
-| ⚙️ **Configurações** | Tema claro/escuro/sistema, retomada automática de reprodução, permissões e licenças |
+| 📃 **Playlists** | Crie/renomeie/exclua playlists e associe músicas e vídeos a elas (SQLite), playlists automáticas, favoritas e histórico |
+| ⚙️ **Configurações** | Tema claro/escuro/sistema, retomada automática de reprodução, idioma (Sistema/pt/en), permissões, equalizador, log de erros e licenças |
+
+### Telas dentro de Arquivos
+
+- 🗑️ **Lixeira** — exclusão reversível: arquivos movidos para a lixeira
+  interna (restaurar/excluir de vez) com retenção e expurgo automático
+- 🔁 **Duplicados** — arquivos idênticos por hash SHA-256, revisão manual
+  antes de excluir
+- 📊 **Analisador de armazenamento** — uso por categoria (música/vídeo/
+  imagem/documento/outros), maiores arquivos e espaço livre por volume
+- 📦 **Gerenciador de APKs** — instalar, atualizar e desinstalar APKs do
+  aparelho
+
+### Ferramentas
+
+- ✏️ **Editor de texto** — cria e edita `.txt`, `.md`, `.html` e afins
+  direto da aba Arquivos (com conteúdo inicial por extensão)
+- 🎚️ **Equalizador** — equalizador nativo (Android 9+), acessível em
+  Configurações e no player
 
 ### Player
 - Reprodução em **segundo plano** com notificação de mídia e controles na tela de bloqueio (MediaSession via `audio_service`)
@@ -54,15 +73,16 @@ lib/
 │   ├── permission_service.dart    # permissões por versão do SO
 │   ├── playlist_database.dart     # schema SQLite
 │   ├── media_share_service.dart   # compartilhar arquivos
+│   ├── file_query_service.dart  # gerenciador: lista, busca, cópia, lixeira, análise
 │   └── pdf_progress_service.dart  # página salva por PDF
-├── screens/                   # 6 abas + player + visualizadores
+├── screens/                   # 7 abas + player + visualizadores e ferramentas
 ├── widgets/                   # ListTile de música, artwork, controles...
 ├── repositories/              # session/playlist/media-delete/song
 └── utils/                     # format, playback_queue
 ```
 
 - **Estado**: `provider` (ChangeNotifier + InheritedWidget), sem overengineering
-- **Áudio**: `audioplayers` (mesma API para `AssetSource` hoje e `UrlSource` no futuro)
+- **Áudio**: `just_audio` + `audio_service` (MediaSession, gapless e equalizador Android — ver `RELATORIO_3.0.md`)
 - **Persistência**: `sqflite` (playlists) + `shared_preferences` (preferências)
 - **Mídia nativa**: `on_audio_query` (MediaStore) — com **cópia local corrigida** em `third_party/on_audio_query_android` (ver nota no `pubspec.yaml`)
 - **PDF**: `syncfusion_flutter_pdfviewer`; **Vídeo**: `video_player`
@@ -155,10 +175,24 @@ flutter test test/playback_queue_test.dart   # um específico
 
 ## 🧪 Testes
 
-Os testes unitários cobrem filas de reprodução, persistência de sessão e progresso de PDF, álbuns de imagem e agrupamento de vídeos em playlists:
+Mais de 500 testes (unitários e widgets) cobrem reprodução e fila,
+sessão/restauração, i18n, acessibilidade, preferências e todo o
+gerenciador de arquivos (busca, cópia/mover, lixeira, análise de
+armazenamento):
 
 ```bash
 flutter test
+```
+
+### CI
+
+O workflow em `.github/workflows/ci.yml` roda `pub get`, `analyze`,
+`test` e `build apk --debug` (APK como artefato) em **todo push e
+pull request** — sem segredos e sem assinatura de release. Localmente,
+a mesma sequência é apenas:
+
+```bash
+flutter pub get && flutter analyze && flutter test && flutter build apk --debug
 ```
 
 ---
@@ -199,6 +233,7 @@ audify/
 │   └── images/          # Logo do app
 ├── third_party/         # Cópia local corrigida do on_audio_query_android
 ├── test/                # Testes unitários
+├── CHANGELOG.md         # Histórico de correções e mudanças
 ├── pubspec.yaml         # Dependências e assets
 └── .gitignore           # Blindado — não altere sem necessidade
 ```
