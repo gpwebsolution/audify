@@ -585,4 +585,42 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get lyricsTooltip => 'Letras';
+
+  @override
+  String get amoledTitle => 'Tema escuro AMOLED';
+
+  @override
+  String get amoledSubtitle =>
+      'Preto puro nos fundos do modo escuro — só tem efeito com o tema escuro ligado.';
+
+  @override
+  String get defaultSpeedTitle => 'Velocidade padrão';
+
+  @override
+  String get defaultSpeedSubtitle =>
+      'Vale para toda a reprodução e volta no próximo boot.';
+
+  @override
+  String get sleepDefaultTitle => 'Timer de sono padrão';
+
+  @override
+  String get sleepDefaultSubtitle =>
+      'Atalho no topo do menu do sono: agenda sem escolher de novo.';
+
+  @override
+  String get sleepDefaultLabel => 'Padrão do timer';
+
+  @override
+  String get stopPausedTitle => 'Parar serviço após pausar';
+
+  @override
+  String get stopPausedSubtitle =>
+      'Encerra o player depois de N minutos pausado (0 = nunca).';
+
+  @override
+  String get defaultSortTitle => 'Ordenação padrão';
+
+  @override
+  String get defaultSortSubtitle =>
+      'Como a lista de músicas é ordenada ao abrir o app.';
 }

@@ -1,5 +1,6 @@
 import 'package:flutter/widgets.dart';
 
+import '../models/song_sort_key.dart';
 import 'app_localizations.dart';
 import 'app_localizations_pt.dart';
 
@@ -11,3 +12,25 @@ import 'app_localizations_pt.dart';
 /// fallback previsto para idiomas não suportados.
 AppLocalizations l10nOf(BuildContext context) =>
     AppLocalizations.of(context) ?? AppLocalizationsPt();
+
+/// Rótulo do critério de ordenação (itens 4.3/5.1/5.2) — compartilhado
+/// entre o menu da tela de músicas e a seção Biblioteca de
+/// Configurações.
+extension SortKeyL10n on AppLocalizations {
+  String sortKeyLabel(SongSortKey key) {
+    switch (key) {
+      case SongSortKey.title:
+        return sortKeyTitle;
+      case SongSortKey.artist:
+        return sortKeyArtist;
+      case SongSortKey.album:
+        return sortKeyAlbum;
+      case SongSortKey.dateAdded:
+        return sortKeyDateAdded;
+      case SongSortKey.duration:
+        return sortKeyDuration;
+      case SongSortKey.mostPlayed:
+        return sortKeyMostPlayed;
+    }
+  }
+}

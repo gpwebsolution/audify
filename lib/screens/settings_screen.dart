@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import '../l10n/app_localizations.dart';
 import '../l10n/l10n.dart';
 import '../models/app_locale_choice.dart';
+import '../models/song_sort_key.dart';
 import '../providers/player_provider.dart';
 import '../providers/settings_provider.dart';
 import '../services/error_log_service.dart';
@@ -71,6 +72,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
             ],
           ),
+        ),
+        // Item 5.2 — preto puro nos fundos (só age no modo escuro).
+        SwitchListTile(
+          secondary: const Icon(Icons.contrast_outlined),
+          title: Text(l10n.amoledTitle),
+          subtitle: Text(l10n.amoledSubtitle),
+          value: settings.themeAmoled,
+          onChanged: settings.setThemeAmoled,
         ),
         // Item 5.1 — idioma: sistema (padrão) ou fixo, persistido.
         Padding(
@@ -146,6 +155,60 @@ class _SettingsScreenState extends State<SettingsScreen> {
             MaterialPageRoute<void>(builder: (_) => const EqualizerScreen()),
           ),
         ),
+        // Item 5.2 — velocidade padrão (preferência da 3.2, agora
+        // exposta aqui; aplica na hora e persiste).
+        ListTile(
+          leading: const Icon(Icons.speed),
+          title: Text(l10n.defaultSpeedTitle),
+          subtitle: Text(l10n.defaultSpeedSubtitle),
+          // Item 5.2: a preferência é o que vale no boot e o
+          // PlayerProvider a persiste a cada troca — exibir daqui
+          // mantém a aba sem dependência de escopo extra.
+          trailing: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text('${settings.playbackSpeed}x'),
+              const Icon(Icons.chevron_right),
+            ],
+          ),
+          onTap: () => _pickDefaultSpeed(context),
+        ),
+        // Item 5.2 — atalho do timer de sono no topo do menu dele.
+        ListTile(
+          leading: const Icon(Icons.bedtime_outlined),
+          title: Text(l10n.sleepDefaultTitle),
+          subtitle: Text(l10n.sleepDefaultSubtitle),
+          trailing: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                settings.sleepDefaultMinutes == 0
+                    ? l10n.offOption
+                    : l10n.minutesCount(settings.sleepDefaultMinutes),
+              ),
+              const Icon(Icons.chevron_right),
+            ],
+          ),
+          onTap: () => _pickSleepDefault(context, settings),
+        ),
+        // Item 5.2 — encerra o player depois de N minutos pausado.
+        ListTile(
+          leading: const Icon(Icons.pause_circle_outline),
+          title: Text(l10n.stopPausedTitle),
+          subtitle: Text(l10n.stopPausedSubtitle),
+          trailing: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                settings.stopServicePausedMinutes == 0
+                    ? l10n.offOption
+                    : l10n.minutesCount(settings.stopServicePausedMinutes),
+              ),
+              const Icon(Icons.chevron_right),
+            ],
+          ),
+          onTap: () => _pickStopPaused(context, settings),
+        ),
 
         // ---- Biblioteca (item 2.5) ----
         _SectionHeader(title: l10n.settingsLibrary),
@@ -183,6 +246,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
           trailing: const Icon(Icons.chevron_right),
           onTap: () => _editIgnoredFolders(context, settings),
+        ),
+        // Item 5.2 — ordenação padrão (mesma persistência da 4.3).
+        ListTile(
+          leading: const Icon(Icons.sort),
+          title: Text(l10n.defaultSortTitle),
+          subtitle: Text(
+            '${l10n.sortKeyLabel(settings.sortKey)} • '
+            '${settings.sortAscending ? l10n.sortAscendingOption : l10n.sortDescendingOption}',
+          ),
+          trailing: const Icon(Icons.chevron_right),
+          onTap: () => _pickDefaultSort(context, settings),
         ),
 
         // ---- Lixeira ----
@@ -405,6 +479,178 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
         ),
       ),
+    );
+  }
+
+  /// Item 5.2 — velocidade padrão: aplica no serviço na hora (o
+  /// PlayerProvider também persiste na preferência).
+  Future<void> _pickDefaultSpeed(BuildContext context) async {
+    final PlayerProvider player = context.read<PlayerProvider>();
+    await showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (BuildContext sheetContext) => SafeArea(
+        child: RadioGroup<double>(
+          groupValue: player.playbackSpeed,
+          onChanged: (double? value) async {
+            if (value == null) return;
+            await player.setPlaybackSpeed(value);
+            if (sheetContext.mounted) Navigator.pop(sheetContext);
+          },
+          child: ListView(
+            shrinkWrap: true,
+            children: <Widget>[
+              for (final double option
+                  in SettingsProvider.playbackSpeedOptions)
+                RadioListTile<double>(
+                  value: option,
+                  title: Text('${option}x'),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Item 5.2 — duração padrão do timer de sono (0 = desativado).
+  Future<void> _pickSleepDefault(
+    BuildContext context,
+    SettingsProvider settings,
+  ) async {
+    await showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (BuildContext sheetContext) {
+        final AppLocalizations l10n = l10nOf(sheetContext);
+        return SafeArea(
+          child: RadioGroup<int>(
+            groupValue: settings.sleepDefaultMinutes,
+            onChanged: (int? value) async {
+              if (value == null) return;
+              await settings.setSleepDefaultMinutes(value);
+              if (sheetContext.mounted) Navigator.pop(sheetContext);
+            },
+            child: ListView(
+              shrinkWrap: true,
+              children: <Widget>[
+                for (final int option in SettingsProvider.sleepDefaultOptions)
+                  RadioListTile<int>(
+                    value: option,
+                    title: Text(
+                      option == 0 ? l10n.offOption : l10n.minutesCount(option),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  /// Item 5.2 — minutos pausados antes de o serviço parar (0 =
+  /// desativado; padrão 30).
+  Future<void> _pickStopPaused(
+    BuildContext context,
+    SettingsProvider settings,
+  ) async {
+    await showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (BuildContext sheetContext) {
+        final AppLocalizations l10n = l10nOf(sheetContext);
+        return SafeArea(
+          child: RadioGroup<int>(
+            groupValue: settings.stopServicePausedMinutes,
+            onChanged: (int? value) async {
+              if (value == null) return;
+              await settings.setStopServicePausedMinutes(value);
+              if (sheetContext.mounted) Navigator.pop(sheetContext);
+            },
+            child: ListView(
+              shrinkWrap: true,
+              children: <Widget>[
+                for (final int option in SettingsProvider.stopPausedOptions)
+                  RadioListTile<int>(
+                    value: option,
+                    title: Text(
+                      option == 0 ? l10n.offOption : l10n.minutesCount(option),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  /// Item 5.2 — ordenação padrão da lista (critério + sentido). Os dois
+  /// grupos aplicam sem fechar a folha, para combinar antes de sair.
+  Future<void> _pickDefaultSort(
+    BuildContext context,
+    SettingsProvider settings,
+  ) async {
+    await showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (BuildContext sheetContext) {
+        final AppLocalizations l10n = l10nOf(sheetContext);
+        return SafeArea(
+          child: ListView(
+            shrinkWrap: true,
+            children: <Widget>[
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
+                child: Text(
+                  l10n.defaultSortSubtitle,
+                  style: Theme.of(sheetContext).textTheme.bodySmall,
+                ),
+              ),
+              RadioGroup<SongSortKey>(
+                groupValue: settings.sortKey,
+                onChanged: (SongSortKey? value) {
+                  if (value == null) return;
+                  settings.setSort(
+                    key: value,
+                    ascending: settings.sortAscending,
+                  );
+                },
+                child: Column(
+                  children: <Widget>[
+                    for (final SongSortKey key in SongSortKey.values)
+                      RadioListTile<SongSortKey>(
+                        value: key,
+                        title: Text(l10n.sortKeyLabel(key)),
+                      ),
+                  ],
+                ),
+              ),
+              const Divider(height: 1),
+              RadioGroup<bool>(
+                groupValue: settings.sortAscending,
+                onChanged: (bool? value) {
+                  if (value == null) return;
+                  settings.setSort(key: settings.sortKey, ascending: value);
+                },
+                child: Column(
+                  children: <Widget>[
+                    RadioListTile<bool>(
+                      value: true,
+                      title: Text(l10n.sortAscendingOption),
+                    ),
+                    RadioListTile<bool>(
+                      value: false,
+                      title: Text(l10n.sortDescendingOption),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 

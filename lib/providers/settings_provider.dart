@@ -37,6 +37,10 @@ class SettingsProvider extends ChangeNotifier {
 
   // Item 5.1 — idioma escolhido (null/sistema = seguir o aparelho).
   static const String _localeChoiceKey = 'locale_choice';
+  // Item 5.2 — Configurações organizadas.
+  static const String _amoledKey = 'theme_amoled';
+  static const String _sleepDefaultKey = 'sleep_default_minutes';
+  static const String _stopPausedKey = 'stop_service_paused_minutes';
 
   /// Opções de prazo da lixeira, em dias. `0` = manter para sempre.
   static const List<int> trashRetentionOptions = <int>[
@@ -137,6 +141,15 @@ class SettingsProvider extends ChangeNotifier {
   /// Prazo padrão: 30 dias é o padrão de mercado (Google Fotos, Drive).
   static const int defaultTrashRetentionDays = 30;
 
+  /// Item 5.2 — durações oferecidas para o timer de sono padrão.
+  /// `0` = desativado (padrão: o menu de sono continua manual).
+  static const List<int> sleepDefaultOptions = <int>[0, 15, 30, 45, 60];
+
+  /// Item 5.2 — durações oferecidas para "parar o serviço após N minutos
+  /// pausado". `0` = desativado; o padrão é 30 min (spec 5.2).
+  static const List<int> stopPausedOptions = <int>[0, 5, 15, 30, 60];
+  static const int defaultStopPausedMinutes = 30;
+
   /// Limite de colunas escolhido pelo usuário (zoom da grade).
   ///
   /// O número efetivo é calculado por [gridColumns] a partir da largura da
@@ -205,6 +218,11 @@ class SettingsProvider extends ChangeNotifier {
 
   /// Idioma escolhido (item 5.1) — padrão: seguir o sistema.
   AppLocaleChoice _localeChoice = AppLocaleChoice.system;
+
+  // Item 5.2 — preferências novas.
+  bool _themeAmoled = false;
+  int _sleepDefaultMinutes = 0;
+  int _stopServicePausedMinutes = defaultStopPausedMinutes;
 
   bool _isDisposed = false;
 
@@ -279,6 +297,16 @@ class SettingsProvider extends ChangeNotifier {
 
   /// Sentido da ordenação (true = crescente).
   bool get sortAscending => _sortAscending;
+
+  /// Item 5.2 — tema escuro AMOLED (preto puro), só age no modo escuro.
+  bool get themeAmoled => _themeAmoled;
+
+  /// Item 5.2 — duração padrão do timer de sono (0 = desativado).
+  int get sleepDefaultMinutes => _sleepDefaultMinutes;
+
+  /// Item 5.2 — parar o serviço depois de N minutos pausado
+  /// (0 = desativado; padrão 30).
+  int get stopServicePausedMinutes => _stopServicePausedMinutes;
 
   /// Define a duração mínima (apenas valores de [minDurationOptions]).
   Future<void> setLibraryMinDuration(int seconds) async {
@@ -465,6 +493,16 @@ class SettingsProvider extends ChangeNotifier {
       _sortAscending = prefs.getBool(_librarySortAscendingKey) ?? true;
       // Item 5.1: chave desconhecida volta para "seguir o sistema".
       _localeChoice = AppLocaleChoice.fromName(prefs.getString(_localeChoiceKey));
+      // Item 5.2: fora da lista de opções volta para o padrão da spec.
+      _themeAmoled = prefs.getBool(_amoledKey) ?? false;
+      _sleepDefaultMinutes = sleepDefaultOptions
+              .contains(prefs.getInt(_sleepDefaultKey))
+          ? prefs.getInt(_sleepDefaultKey)!
+          : 0;
+      _stopServicePausedMinutes = stopPausedOptions
+              .contains(prefs.getInt(_stopPausedKey))
+          ? prefs.getInt(_stopPausedKey)!
+          : defaultStopPausedMinutes;
       _notify();
     } catch (e) {
       // Sem persistência disponível: mantém o padrão (system).
@@ -636,6 +674,50 @@ class SettingsProvider extends ChangeNotifier {
     try {
       final SharedPreferences prefs = await SharedPreferences.getInstance();
       await prefs.setString(_localeChoiceKey, choice.name);
+    } catch (e) {
+      // Falha de escrita não quebra a sessão atual.
+    }
+  }
+
+  /// Item 5.2 — tema escuro AMOLED (preto puro). Efeito só no modo
+  /// escuro (main.dart escolhe o darkTheme conforme esta flag).
+  Future<void> setThemeAmoled(bool enabled) async {
+    if (_themeAmoled == enabled) return;
+    _themeAmoled = enabled;
+    _notify();
+    try {
+      final SharedPreferences prefs = await SharedPreferences.getInstance();
+      await prefs.setBool(_amoledKey, enabled);
+    } catch (e) {
+      // Falha de escrita não quebra a sessão atual.
+    }
+  }
+
+  /// Item 5.2 — duração padrão do timer de sono (0 = desativado);
+  /// valor fora da lista é ignorado.
+  Future<void> setSleepDefaultMinutes(int minutes) async {
+    if (!sleepDefaultOptions.contains(minutes)) return;
+    if (_sleepDefaultMinutes == minutes) return;
+    _sleepDefaultMinutes = minutes;
+    _notify();
+    try {
+      final SharedPreferences prefs = await SharedPreferences.getInstance();
+      await prefs.setInt(_sleepDefaultKey, minutes);
+    } catch (e) {
+      // Falha de escrita não quebra a sessão atual.
+    }
+  }
+
+  /// Item 5.2 — minutos pausados antes de o serviço parar (0 =
+  /// desativado); valor fora da lista é ignorado.
+  Future<void> setStopServicePausedMinutes(int minutes) async {
+    if (!stopPausedOptions.contains(minutes)) return;
+    if (_stopServicePausedMinutes == minutes) return;
+    _stopServicePausedMinutes = minutes;
+    _notify();
+    try {
+      final SharedPreferences prefs = await SharedPreferences.getInstance();
+      await prefs.setInt(_stopPausedKey, minutes);
     } catch (e) {
       // Falha de escrita não quebra a sessão atual.
     }

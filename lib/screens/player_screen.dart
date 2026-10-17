@@ -193,6 +193,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
     BuildContext context,
     PlayerProvider provider,
   ) async {
+    // Item 5.2 — duração padrão escolhida em Configurações (0 = off).
+    final int defaultMinutes = provider.sleepDefaultMinutes;
     await showModalBottomSheet<void>(
       context: context,
       showDragHandle: true,
@@ -202,6 +204,19 @@ class _PlayerScreenState extends State<PlayerScreen> {
           child: ListView(
             shrinkWrap: true,
             children: <Widget>[
+              // Item 5.2 — atalho do padrão: agenda sem escolher.
+              if (defaultMinutes > 0)
+                ListTile(
+                  leading: const Icon(Icons.timer_outlined),
+                  title: Text(l10n.minutesCount(defaultMinutes)),
+                  subtitle: Text(l10n.sleepDefaultLabel),
+                  onTap: () {
+                    Navigator.pop(sheetContext);
+                    provider.startSleepTimer(
+                      Duration(minutes: defaultMinutes),
+                    );
+                  },
+                ),
               if (provider.sleepTimerActive)
                 ListTile(
                   leading: const Icon(Icons.timer_outlined),
@@ -264,7 +279,11 @@ class _PlayerScreenState extends State<PlayerScreen> {
     BuildContext context,
     PlayerProvider provider,
   ) async {
-    final TextEditingController controller = TextEditingController();
+    // Item 5.2: começa no valor padrão de Configurações (se houver).
+    final int defaultMinutes = provider.sleepDefaultMinutes;
+    final TextEditingController controller = TextEditingController(
+      text: defaultMinutes > 0 ? '$defaultMinutes' : '',
+    );
     String? error;
     final int? minutes = await showDialog<int>(
       context: context,

@@ -272,5 +272,16 @@
   "timerRangeError": "Informe um número de 1 a 720.",
   "cancelTimer": "Desligar timer",
   "next": "Próxima",
-  "lyricsTooltip": "Letras"
+  "lyricsTooltip": "Letras",
+  "amoledTitle": "Tema escuro AMOLED",
+  "amoledSubtitle": "Preto puro nos fundos do modo escuro — só tem efeito com o tema escuro ligado.",
+  "defaultSpeedTitle": "Velocidade padrão",
+  "defaultSpeedSubtitle": "Vale para toda a reprodução e volta no próximo boot.",
+  "sleepDefaultTitle": "Timer de sono padrão",
+  "sleepDefaultSubtitle": "Atalho no topo do menu do sono: agenda sem escolher de novo.",
+  "sleepDefaultLabel": "Padrão do timer",
+  "stopPausedTitle": "Parar serviço após pausar",
+  "stopPausedSubtitle": "Encerra o player depois de N minutos pausado (0 = nunca).",
+  "defaultSortTitle": "Ordenação padrão",
+  "defaultSortSubtitle": "Como a lista de músicas é ordenada ao abrir o app."
 }

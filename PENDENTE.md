@@ -279,3 +279,48 @@ Cada linha: ID do item, o que falta e o motivo.
   `'/storage/.../WhatsApp/Audio'` e o nome próprio `Audify`
   (localização de nome próprio não é string de UI), e os nomes
   "Português"/"English" do seletor (nome de idioma não se traduz).
+
+---
+
+## 5.2 — Configurações organizadas e completas
+
+- **Preferências NOVAS (3) com teste do provider cada**: tema AMOLED
+  (`theme_amoled`), timer de sono padrão (`sleep_default_minutes`,
+  opções 0/15/30/45/60, padrão desligado) e parar o serviço após N
+  minutos pausado (`stop_service_paused_minutes`, opções 0/5/15/30/60,
+  **padrão 30 min** — fora da lista volta para 30). Velocidade padrão e
+  ordenação padrão NÃO são chaves novas: são as preferências da 3.2 e
+  da 4.3, agora EXPOSTAS em Configurações.
+- **O padrão de 30 min do "parar após pausa" muda o comportamento
+  anterior** (o serviço vivia indefinidamente pausado). Quem quiser o
+  antigo escolhe "Desligado". A parada usa o `stop()` normal do
+  serviço (cursor volta ao início; fila não é salva no ponto) — e a
+  preferência é lida AO VIVO (trocar para 0 cancela o prazo na
+  checagem seguinte, coberto por teste).
+- **O agendamento depende do stream de estado do just_audio**: um
+  `pause()` normal (tela, notificação, fone) passa por ele e agenda;
+  um estado pausado setado sem evento do player não agenda (nunca
+  agenda errado às custas de uma parada indevida). Só é validado em
+  teste unitário (relógio injetado), não em aparelho.
+- **AMOLED escurece só os fundos "large"** (scaffold, app bar, folhas,
+  menus, diálogos): as superfícies da paleta M3 (cards/tiles) seguem o
+  dark normal, de propósito, para o contraste do texto não mudar.
+  Contraste fino do tema AMOLED é do item 5.3.
+- **Velocidade em Configurações lê a preferência persistida** (o
+  PlayerProvider grava a cada troca) — não há watch do player na aba;
+  a leitura acompanha porque persistir notifica o provider. O SHEET de
+  velocidade é o único lugar da tela que usa o PlayerProvider (só em
+  `onTap`).
+- **Timer sono padrão é um ATALHO**: aparece no topo do menu do sono e
+  pré-preenche o campo do "personalizado" — nunca dispara sozinho.
+- **Ordenação padrão reusa a persistência da 4.3** (chave
+  `library_sort_key`/`..._ascending`, sem chave nova) e a folha NÃO
+  fecha ao escolher, para combinar critério + sentido antes de sair.
+- **Testes novos**: 5 do serviço (`test/paused_stop_test.dart`:
+  dispara no prazo, cancela na retomada, desativar no meio, no-op com
+  0, guarda fora da pausa — com drenagem do replay do just_audio no
+  `setUp`, senão o listener sobrescreve o status manual), 4 do
+  provider (padrões, persistência/restauração, escrita fora da lista,
+  storage corrompido) e 3 do tema (`test/amoled_theme_test.dart`).
+  Sheets/toast da nova UI NÃO têm teste de widget (só a aba em
+  Configurações via teste do 5.1).

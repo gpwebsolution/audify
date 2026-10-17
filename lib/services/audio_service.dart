@@ -139,6 +139,13 @@ class AudioService extends BaseAudioHandler {
   /// recriar o serviço — mesmo padrão de [pauseOnNoisyEnabled].
   int Function()? crossfadeSeconds;
 
+  /// Leitura ao vivo da preferência "parar o serviço após N minutos
+  /// pausado" ([SettingsProvider.stopServicePausedMinutes]); null ou 0
+  /// = desativado (padrão da spec: 30 min). Mesmo padrão de
+  /// [crossfadeSeconds]: callback para refletir Configurações sem
+  /// recriar o serviço.
+  int Function()? stopAfterPausedMinutes;
+
   /// Fila enviada por último em [publishQueue]. Quando contém a faixa
   /// pedida, [playSong] carrega a FILA INTEIRA no player (gapless) em
   /// vez de uma fonte única. A lista nunca é mutada in-place pelo
@@ -370,6 +377,7 @@ class AudioService extends BaseAudioHandler {
     this.degradedMode = false,
     this.pauseOnNoisyEnabled,
     this.crossfadeSeconds,
+    this.stopAfterPausedMinutes,
     this.eqProbeTimeout = const Duration(seconds: 5),
     DateTime Function()? clock,
   }) : _clock = clock ?? DateTime.now {
@@ -438,6 +446,9 @@ class AudioService extends BaseAudioHandler {
           // PlaybackState à toa e o throttle sairia aberto cedo (contrato
           // do teste de throttle: 1 emissão por intervalo).
           if (status.value != before) {
+            // Item 5.2: virou pausado agenda o encerramento automático;
+            // saiu da pausa (tocou/parou) cancela.
+            _syncPausedStop(before);
             broadcastPlaybackState();
           }
         } catch (e, s) {
@@ -924,6 +935,78 @@ class AudioService extends BaseAudioHandler {
     }
   }
 
+  // ---------------------------------------------------------------------
+  // Item 5.2 — parar o serviço depois de N minutos pausado.
+  //
+  // Mesmo desenho do timer de sono: deadline de RELÓGIO DE PAREDE com
+  // relógio injetável + checagem por tick (Timer.periodic de 1 min,
+  // criado só enquanto há prazo agendado). A preferência é lida AO VIVO
+  // pelo callback — trocar para 0 (desativado) cancela na próxima
+  // checagem. O listener de estado do player chama
+  // [schedulePausedStop]/[cancelPausedStop]; em teste eles são chamados
+  // direto, como [checkSleepTimer] (contrato documentado do sono).
+  // ---------------------------------------------------------------------
+
+  DateTime? _pausedStopDeadline;
+  Timer? _pausedStopTicker;
+
+  /// Gatilho do listener de estado: agenda quando a reprodução entra em
+  /// pausa e cancela quando sai dela.
+  void _syncPausedStop(PlayerStatus before) {
+    if (status.value == PlayerStatus.paused && before != PlayerStatus.paused) {
+      schedulePausedStop();
+    } else if (status.value != PlayerStatus.paused) {
+      cancelPausedStop();
+    }
+  }
+
+  /// Agenda o [stop] para [stopServicePausedMinutes] a partir de agora
+  /// (no-op quando a preferência está desativada). Sobrescreve o prazo
+  /// anterior.
+  void schedulePausedStop() {
+    try {
+      final int minutes = stopAfterPausedMinutes?.call() ?? 0;
+      if (minutes <= 0) return;
+      _pausedStopDeadline = _clock().add(Duration(minutes: minutes));
+      _pausedStopTicker ??= Timer.periodic(
+        const Duration(minutes: 1),
+        (_) {
+          unawaited(checkPausedStop());
+        },
+      );
+    } catch (e, s) {
+      ErrorLogService.logSync('audio/pausedStopSchedule', e, s);
+    }
+  }
+
+  /// Cancela o encerramento agendado (retomada, stop ou dispose).
+  void cancelPausedStop() {
+    _pausedStopDeadline = null;
+    _pausedStopTicker?.cancel();
+    _pausedStopTicker = null;
+  }
+
+  /// Checagem por relógio injetado. Retorna `true` quando o prazo
+  /// venceu e o stop já disparou. Re-lê a preferência a cada chamada:
+  /// desativada (0) ou fora da pausa, cancela sem parar o serviço.
+  Future<bool> checkPausedStop() async {
+    try {
+      final DateTime? deadline = _pausedStopDeadline;
+      if (deadline == null) return false;
+      final int minutes = stopAfterPausedMinutes?.call() ?? 0;
+      if (minutes <= 0 || status.value != PlayerStatus.paused) {
+        cancelPausedStop();
+        return false;
+      }
+      if (_clock().isBefore(deadline)) return false;
+      await stop();
+      return true;
+    } catch (e, s) {
+      ErrorLogService.logSync('audio/pausedStopCheck', e, s);
+      return false;
+    }
+  }
+
   /// Para a reprodução e volta o cursor para o início.
   ///
   /// Item 3.1: também CANCELA o timer de sono (stop explícito do usuário/
@@ -946,6 +1029,9 @@ class AudioService extends BaseAudioHandler {
     } finally {
       status.value = PlayerStatus.idle;
       position.value = Duration.zero;
+      // Item 5.2: stop explícito encerra qualquer encerramento
+      // automático que estiver agendado.
+      cancelPausedStop();
       // Republica o estado final (tudo parado) — o stream do just_audio
       // pode não emitir aqui (sem mudança percebida) e a notificação não
       // pode ficar mostrando "tocando".
@@ -1452,6 +1538,8 @@ class AudioService extends BaseAudioHandler {
   /// streams ANTES de descartar o player, garantindo que nenhum callback
   /// seja disparado depois que a UI já foi destruída.
   Future<void> dispose() async {
+    // Item 5.2: nenhum Timer sobrevive ao serviço.
+    cancelPausedStop();
     for (final subscription in List.of(_subscriptions)) {
       try {
         await subscription.cancel();

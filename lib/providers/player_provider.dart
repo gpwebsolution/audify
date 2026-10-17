@@ -197,6 +197,11 @@ class PlayerProvider extends ChangeNotifier {
   /// Velocidade de reprodução corrente (item 3.2; 1.0 = normal).
   double get playbackSpeed => _audioService.playbackSpeed;
 
+  /// Item 5.2 — duração padrão do timer de sono (0 = desativado; vem
+  /// das Configurações; sem preferência injetada, 0 — mesmo
+  /// comportamento de antes).
+  int get sleepDefaultMinutes => settings?.sleepDefaultMinutes ?? 0;
+
   /// Se há uma próxima faixa na fila (respecta repeat/shuffle).
   bool get hasNext => _playbackQueue.nextIndex() != null;
 

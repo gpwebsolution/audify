@@ -165,5 +165,16 @@
   "timerRangeError": "Enter a number from 1 to 720.",
   "cancelTimer": "Turn off timer",
   "next": "Next",
-  "lyricsTooltip": "Lyrics"
+  "lyricsTooltip": "Lyrics",
+  "amoledTitle": "AMOLED dark theme",
+  "amoledSubtitle": "Pure black backgrounds in dark mode — only applies while the dark theme is on.",
+  "defaultSpeedTitle": "Default speed",
+  "defaultSpeedSubtitle": "Applies to all playback and is restored on the next boot.",
+  "sleepDefaultTitle": "Default sleep timer",
+  "sleepDefaultSubtitle": "Shortcut at the top of the sleep menu: schedule without choosing again.",
+  "sleepDefaultLabel": "Timer default",
+  "stopPausedTitle": "Stop service after pausing",
+  "stopPausedSubtitle": "Stops the player after N minutes paused (0 = never).",
+  "defaultSortTitle": "Default sort",
+  "defaultSortSubtitle": "How the song list is ordered when the app opens."
 }

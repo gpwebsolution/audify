@@ -582,4 +582,42 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get lyricsTooltip => 'Lyrics';
+
+  @override
+  String get amoledTitle => 'AMOLED dark theme';
+
+  @override
+  String get amoledSubtitle =>
+      'Pure black backgrounds in dark mode — only applies while the dark theme is on.';
+
+  @override
+  String get defaultSpeedTitle => 'Default speed';
+
+  @override
+  String get defaultSpeedSubtitle =>
+      'Applies to all playback and is restored on the next boot.';
+
+  @override
+  String get sleepDefaultTitle => 'Default sleep timer';
+
+  @override
+  String get sleepDefaultSubtitle =>
+      'Shortcut at the top of the sleep menu: schedule without choosing again.';
+
+  @override
+  String get sleepDefaultLabel => 'Timer default';
+
+  @override
+  String get stopPausedTitle => 'Stop service after pausing';
+
+  @override
+  String get stopPausedSubtitle =>
+      'Stops the player after N minutes paused (0 = never).';
+
+  @override
+  String get defaultSortTitle => 'Default sort';
+
+  @override
+  String get defaultSortSubtitle =>
+      'How the song list is ordered when the app opens.';
 }

@@ -101,6 +101,10 @@ Future<void> _bootstrap() async {
         // Item 3.4: crossfade lido ao vivo (0–12 s, Configurações →
         // Reprodução) — mudou na tela, vale na próxima transição.
         crossfadeSeconds: () => settingsProvider.crossfadeSeconds,
+        // Item 5.2: "parar o serviço após N min pausado" lido ao vivo
+        // (0 = desativado; padrão 30 min — Configurações → Reprodução).
+        stopAfterPausedMinutes: () =>
+            settingsProvider.stopServicePausedMinutes,
       ),
       config: const audio_service.AudioServiceConfig(
         androidNotificationChannelId: 'com.example.music_app.audio',
@@ -200,7 +204,9 @@ class MusicApp extends StatelessWidget {
       // do próprio gen-l10n.
       localizationsDelegates: AppLocalizations.localizationsDelegates,
       theme: AppTheme.light,
-      darkTheme: AppTheme.dark,
+      // Item 5.2: AMOLED (preto puro) quando a preferência está ligada;
+      // o watch acima reconstrói o tema na hora da troca.
+      darkTheme: settings.themeAmoled ? AppTheme.amoled : AppTheme.dark,
       themeMode: settings.themeMode,
       home: const MainScreen(),
     );

@@ -1009,6 +1009,72 @@ abstract class AppLocalizations {
   /// In pt, this message translates to:
   /// **'Letras'**
   String get lyricsTooltip;
+
+  /// No description provided for @amoledTitle.
+  ///
+  /// In pt, this message translates to:
+  /// **'Tema escuro AMOLED'**
+  String get amoledTitle;
+
+  /// No description provided for @amoledSubtitle.
+  ///
+  /// In pt, this message translates to:
+  /// **'Preto puro nos fundos do modo escuro — só tem efeito com o tema escuro ligado.'**
+  String get amoledSubtitle;
+
+  /// No description provided for @defaultSpeedTitle.
+  ///
+  /// In pt, this message translates to:
+  /// **'Velocidade padrão'**
+  String get defaultSpeedTitle;
+
+  /// No description provided for @defaultSpeedSubtitle.
+  ///
+  /// In pt, this message translates to:
+  /// **'Vale para toda a reprodução e volta no próximo boot.'**
+  String get defaultSpeedSubtitle;
+
+  /// No description provided for @sleepDefaultTitle.
+  ///
+  /// In pt, this message translates to:
+  /// **'Timer de sono padrão'**
+  String get sleepDefaultTitle;
+
+  /// No description provided for @sleepDefaultSubtitle.
+  ///
+  /// In pt, this message translates to:
+  /// **'Atalho no topo do menu do sono: agenda sem escolher de novo.'**
+  String get sleepDefaultSubtitle;
+
+  /// No description provided for @sleepDefaultLabel.
+  ///
+  /// In pt, this message translates to:
+  /// **'Padrão do timer'**
+  String get sleepDefaultLabel;
+
+  /// No description provided for @stopPausedTitle.
+  ///
+  /// In pt, this message translates to:
+  /// **'Parar serviço após pausar'**
+  String get stopPausedTitle;
+
+  /// No description provided for @stopPausedSubtitle.
+  ///
+  /// In pt, this message translates to:
+  /// **'Encerra o player depois de N minutos pausado (0 = nunca).'**
+  String get stopPausedSubtitle;
+
+  /// No description provided for @defaultSortTitle.
+  ///
+  /// In pt, this message translates to:
+  /// **'Ordenação padrão'**
+  String get defaultSortTitle;
+
+  /// No description provided for @defaultSortSubtitle.
+  ///
+  /// In pt, this message translates to:
+  /// **'Como a lista de músicas é ordenada ao abrir o app.'**
+  String get defaultSortSubtitle;
 }
 
 class _AppLocalizationsDelegate
