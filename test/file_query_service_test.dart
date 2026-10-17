@@ -5,8 +5,25 @@ import 'package:audify/models/file_item.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:audify/services/file_query_service.dart';
 
+// A interface do path_provider é transitiva do path_provider direto do
+// pubspec; o teste injeta o fake por ela (padrão suportado pelo plugin).
+// ignore_for_file: depend_on_referenced_packages
+import 'package:path_provider_platform_interface/path_provider_platform_interface.dart';
+
 /// Testes do FileQueryService em dart:io puro — rodam no host sem canal
 /// nativo (as funções testadas não tocam MethodChannel).
+/// Fake do path_provider: o trash do FileQueryService vive no diretório de
+/// suporte, e em host não há plugin — o platform interface é o ponto de
+/// injeção suportado pelo próprio pacote.
+class _FakePathProvider extends PathProviderPlatform {
+  _FakePathProvider(this.root);
+
+  final String root;
+
+  @override
+  Future<String?> getApplicationSupportPath() async => root;
+}
+
 void main() {
   late Directory temp;
 
@@ -264,6 +281,140 @@ void main() {
       expect(info.versionName, '?');
       expect(info.versionCode, 0);
       expect(info.icon, isNull);
+    });
+  });
+
+  // =========================================================================
+  // CARACTERIZAÇÃO (item 6.2) — cobre a lixeira ANTES da extração para o
+  // TrashService: mesmo código, mesmas respostas, testes intocados.
+  // =========================================================================
+  group('lixeira', () {
+    late Directory support;
+    late PathProviderPlatform previous;
+
+    setUp(() {
+      previous = PathProviderPlatform.instance;
+      support = Directory('${temp.path}/support')..createSync(recursive: true);
+      PathProviderPlatform.instance = _FakePathProvider(support.path);
+      addTearDown(() => PathProviderPlatform.instance = previous);
+    });
+
+    test('delete(useTrash) move para a lixeira e lista no manifest', () async {
+      final File original = mkFile('orig.txt', 'conteudo-x');
+      final String originalPath = original.path;
+
+      final bool ok = await FileQueryService.delete(
+        path: originalPath,
+        useTrash: true,
+      );
+
+      expect(ok, isTrue);
+      expect(original.existsSync(), isFalse);
+
+      final List<TrashEntry> entries = await FileQueryService.listTrash();
+      expect(entries, hasLength(1));
+      expect(entries.single.originalPath, originalPath);
+      expect(
+        entries.single.trashPath,
+        contains('${support.path}/trash/files/'),
+      );
+      expect(entries.single.sizeBytes, 'conteudo-x'.length);
+      expect(File(entries.single.trashPath).readAsStringSync(), 'conteudo-x');
+    });
+
+    test('restore devolve ao original e limpa o manifest', () async {
+      final File original = mkFile('volta.txt', 'abc');
+      await FileQueryService.delete(path: original.path, useTrash: true);
+
+      final TrashEntry entry = (await FileQueryService.listTrash()).single;
+      final bool restored = await FileQueryService.restoreFromTrash(entry);
+
+      expect(restored, isTrue);
+      expect(File(entry.originalPath).readAsStringSync(), 'abc');
+      expect(await FileQueryService.listTrash(), isEmpty);
+      expect(File(entry.trashPath).existsSync(), isFalse);
+    });
+
+    test('deleteForever remove arquivo e entrada', () async {
+      await FileQueryService.delete(
+        path: mkFile('fixo.txt', 'z').path,
+        useTrash: true,
+      );
+      final TrashEntry entry = (await FileQueryService.listTrash()).single;
+
+      final bool gone = await FileQueryService.deleteForever(entry.trashPath);
+
+      expect(gone, isTrue);
+      expect(File(entry.trashPath).existsSync(), isFalse);
+      expect(await FileQueryService.listTrash(), isEmpty);
+    });
+
+    test('purgeExpired: 0 mantém tudo; retenção vencida purga', () async {
+      await FileQueryService.delete(
+        path: mkFile('velho.txt', 'old-content').path,
+        useTrash: true,
+      );
+
+      expect(await FileQueryService.purgeExpired(0), 0);
+      expect(await FileQueryService.listTrash(), hasLength(1));
+
+      // Reescreve o manifest com data além da retenção de 3 dias.
+      final TrashEntry entry = (await FileQueryService.listTrash()).single;
+      final File manifest = File('${support.path}/trash/manifest.jsonl');
+      final int ancient = DateTime.now()
+          .subtract(const Duration(days: 7))
+          .millisecondsSinceEpoch;
+      manifest.writeAsStringSync(
+        '{"original":"${entry.originalPath}","trashPath":"${entry.trashPath}","deletedAtMs":$ancient}\n',
+      );
+
+      expect(await FileQueryService.purgeExpired(3), 1);
+      expect(await FileQueryService.listTrash(), isEmpty);
+      expect(File(entry.trashPath).existsSync(), isFalse);
+    });
+
+    test('trashSize soma o tamanho de cada entrada', () async {
+      await FileQueryService.delete(
+        path: mkFile('a.txt', '12345').path,
+        useTrash: true,
+      );
+      await FileQueryService.delete(
+        path: mkFile('b.txt', '123').path,
+        useTrash: true,
+      );
+
+      expect(await FileQueryService.trashSize(), 5 + 3);
+    });
+
+    test('emptyTrash esvazia manifest e diretório de arquivos', () async {
+      await FileQueryService.delete(
+        path: mkFile('um.txt', 'u').path,
+        useTrash: true,
+      );
+      await FileQueryService.delete(
+        path: mkFile('dois.txt', 'dd').path,
+        useTrash: true,
+      );
+
+      await FileQueryService.emptyTrash();
+
+      expect(await FileQueryService.listTrash(), isEmpty);
+      final Directory files = Directory('${support.path}/trash/files');
+      expect(files.existsSync(), isTrue);
+      expect(files.listSync(), isEmpty);
+    });
+
+    test('delete sem lixeira apaga direto (useTrash:false)', () async {
+      final File original = mkFile('direto.txt', 'bye');
+
+      final bool ok = await FileQueryService.delete(
+        path: original.path,
+        useTrash: false,
+      );
+
+      expect(ok, isTrue);
+      expect(original.existsSync(), isFalse);
+      expect(await FileQueryService.listTrash(), isEmpty);
     });
   });
 }

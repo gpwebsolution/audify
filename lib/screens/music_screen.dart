@@ -10,10 +10,11 @@ import '../providers/player_provider.dart';
 import '../providers/favorites_provider.dart';
 import '../providers/playlist_provider.dart';
 import '../services/permission_service.dart';
-import '../utils/motion.dart';
 import '../widgets/media_actions.dart';
+import '../widgets/group_header.dart';
 import '../widgets/media_details_sheet.dart';
 import '../widgets/playlist_picker_sheet.dart';
+import '../widgets/permission_banner.dart';
 import '../widgets/selection_bar.dart';
 import '../widgets/song_list_tile.dart';
 
@@ -428,7 +429,7 @@ class _MusicScreenState extends State<MusicScreen> with MediaSelection<String> {
         // ---- Banner de permissão (quando negada/bloqueada) ----
         if (view.permission == AudioPermissionState.denied ||
             view.permission == AudioPermissionState.permanentlyDenied)
-          _PermissionBanner(provider: provider),
+          PermissionBanner(provider: provider),
 
         // ---- Lista de músicas (expande) + pull-to-refresh (item 2.4) ----
         Expanded(
@@ -557,12 +558,12 @@ class _MusicScreenState extends State<MusicScreen> with MediaSelection<String> {
     // faixas dos grupos expandidos) e renderiza com ListView.builder —
     // a árvore só materializa a viewport, não os milhares de tiles.
     final List<SongGroup> groups = provider.visibleGroups(_groupMode);
-    final List<_GroupRow> rows = <_GroupRow>[];
+    final List<GroupRow> rows = <GroupRow>[];
     for (final SongGroup group in groups) {
-      rows.add(_GroupRow.header(group));
+      rows.add(GroupRow.header(group));
       if (_collapsedGroups.contains(group.key)) continue;
       for (int i = 0; i < group.songs.length; i++) {
-        rows.add(_GroupRow.item(group, i));
+        rows.add(GroupRow.item(group, i));
       }
     }
 
@@ -571,12 +572,12 @@ class _MusicScreenState extends State<MusicScreen> with MediaSelection<String> {
       padding: const EdgeInsets.symmetric(vertical: 8),
       itemCount: rows.length,
       itemBuilder: (context, index) {
-        final _GroupRow row = rows[index];
+        final GroupRow row = rows[index];
         if (row.indexInGroup < 0) {
           // Cabeçalho: expandir/recolher + "tocar grupo".
           final SongGroup group = row.group;
           final bool collapsed = _collapsedGroups.contains(group.key);
-          return _GroupHeader(
+          return GroupHeader(
             icon: _modeIcon(_groupMode),
             title: group.key,
             count: group.songs.length,
@@ -888,122 +889,6 @@ class _MusicScreenState extends State<MusicScreen> with MediaSelection<String> {
             ],
           ],
         ),
-      ),
-    );
-  }
-}
-
-/// Linha achatada do modo agrupado (item 2.2): cabeçalho
-/// (indexInGroup < 0) ou faixa do grupo (indexInGroup >= 0 — a faixa
-/// mora em group.songs[indexInGroup]).
-class _GroupRow {
-  final SongGroup group;
-  final int indexInGroup;
-
-  _GroupRow.header(this.group) : indexInGroup = -1;
-
-  _GroupRow.item(this.group, this.indexInGroup);
-}
-
-/// Cabeçalho de grupo (Álbum/Artista/Pasta): expande/recolhe e toca o
-/// grupo inteiro.
-class _GroupHeader extends StatelessWidget {
-  final IconData icon;
-  final String title;
-  final int count;
-  final bool collapsed;
-  final VoidCallback onToggle;
-  final VoidCallback onPlayAll;
-
-  const _GroupHeader({
-    required this.icon,
-    required this.title,
-    required this.count,
-    required this.collapsed,
-    required this.onToggle,
-    required this.onPlayAll,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final ColorScheme colors = Theme.of(context).colorScheme;
-    final AppLocalizations l10n = l10nOf(context);
-
-    return ListTile(
-      leading: Icon(icon, color: colors.primary),
-      title: Text(
-        title,
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-        style: Theme.of(
-          context,
-        ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600),
-      ),
-      subtitle: Text(l10n.tracksCount(count)),
-      trailing: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          IconButton(
-            tooltip: l10n.playGroupTooltip,
-            icon: const Icon(Icons.play_circle_outline),
-            onPressed: onPlayAll,
-          ),
-          AnimatedRotation(
-            turns: collapsed ? -0.25 : 0,
-            duration: Motion.scale(context, Motion.fast),
-            child: IconButton(
-              tooltip: collapsed ? l10n.expandTooltip : l10n.collapseTooltip,
-              icon: const Icon(Icons.expand_more),
-              onPressed: onToggle,
-            ),
-          ),
-        ],
-      ),
-      onTap: onToggle,
-    );
-  }
-}
-
-/// Cartão de permissão negada com ação de nova tentativa / ajustes.
-class _PermissionBanner extends StatelessWidget {
-  final PlayerProvider provider;
-
-  const _PermissionBanner({required this.provider});
-
-  @override
-  Widget build(BuildContext context) {
-    final ColorScheme colors = Theme.of(context).colorScheme;
-    final AppLocalizations l10n = l10nOf(context);
-    final bool permanent =
-        provider.permission == AudioPermissionState.permanentlyDenied;
-
-    return Container(
-      margin: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      decoration: BoxDecoration(
-        color: colors.errorContainer.withValues(alpha: 0.5),
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Row(
-        children: [
-          Icon(Icons.info_outline, color: colors.onErrorContainer),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Text(
-              permanent ? l10n.permissionBlocked : l10n.permissionAllow,
-              style: Theme.of(
-                context,
-              ).textTheme.bodySmall?.copyWith(color: colors.onErrorContainer),
-            ),
-          ),
-          const SizedBox(width: 8),
-          TextButton(
-            onPressed: permanent
-                ? PermissionService.openSettings
-                : provider.requestPermissionAndReload,
-            child: Text(permanent ? l10n.openSettingsBtn : l10n.allowBtn),
-          ),
-        ],
       ),
     );
   }

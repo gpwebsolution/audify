@@ -1,5 +1,4 @@
 import 'dart:io';
-import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -21,6 +20,10 @@ import 'storage_analyzer_screen.dart';
 import 'text_editor_screen.dart';
 import 'trash_screen.dart';
 import '../widgets/selection_bar.dart';
+import '../widgets/destination_picker.dart';
+import '../widgets/file_screen_states.dart';
+import '../widgets/file_tiles.dart';
+import '../widgets/new_file_dialog.dart';
 import 'video_player_screen.dart';
 
 /// Aba "Arquivos": gerenciador completo do armazenamento real do aparelho.
@@ -527,13 +530,13 @@ class _FilesScreenState extends State<FilesScreen> {
 
   Widget _buildBody(BuildContext context, FileProvider provider) {
     if (!Platform.isAndroid) {
-      return const _EmptyState(
+      return const EmptyState(
         icon: Icons.folder_outlined,
         message: 'Gerenciador disponível apenas no Android.',
       );
     }
     if (!provider.allFilesAccess) {
-      return _AllFilesAccessState(
+      return AllFilesAccessState(
         onRequest: () => provider.requestAllFilesAccess(),
       );
     }
@@ -546,7 +549,7 @@ class _FilesScreenState extends State<FilesScreen> {
       return const Center(child: CircularProgressIndicator());
     }
     if (visible.isEmpty) {
-      return _EmptyState(
+      return EmptyState(
         icon: provider.searchQuery.isNotEmpty
             ? Icons.search_off
             : Icons.folder_open_outlined,
@@ -574,7 +577,7 @@ class _FilesScreenState extends State<FilesScreen> {
                   childAspectRatio: 0.72,
                 ),
                 itemCount: visible.length,
-                itemBuilder: (context, index) => _FileGridTile(
+                itemBuilder: (context, index) => FileGridTile(
                   item: visible[index],
                   isSelected: provider.selectedPaths.contains(
                     visible[index].path,
@@ -588,7 +591,7 @@ class _FilesScreenState extends State<FilesScreen> {
                 key: const ValueKey('list'),
                 itemCount: visible.length,
                 separatorBuilder: (_, _) => const Divider(height: 1),
-                itemBuilder: (context, index) => _FileListTile(
+                itemBuilder: (context, index) => FileListTile(
                   item: visible[index],
                   isSelected: provider.selectedPaths.contains(
                     visible[index].path,
@@ -704,7 +707,7 @@ class _FilesScreenState extends State<FilesScreen> {
   Future<void> _createTextFile(FileProvider provider) async {
     final String? name = await showDialog<String>(
       context: context,
-      builder: (BuildContext dialogContext) => const _NewFileDialog(),
+      builder: (BuildContext dialogContext) => const NewFileDialog(),
     );
     if (name == null || name.trim().isEmpty || !mounted) return;
 
@@ -746,7 +749,7 @@ class _FilesScreenState extends State<FilesScreen> {
     final FileProvider provider = context.read<FileProvider>();
     final String? destPath = await showDialog<String>(
       context: context,
-      builder: (_) => _DestinationPicker(initialPath: provider.currentPath),
+      builder: (_) => DestinationPicker(initialPath: provider.currentPath),
     );
     if (destPath == null || !mounted) return;
 
@@ -984,503 +987,6 @@ class _FilesScreenState extends State<FilesScreen> {
           ],
         ),
       ),
-    );
-  }
-}
-
-// =============================================================================
-// TILES
-// =============================================================================
-
-class _FileListTile extends StatelessWidget {
-  final FileItem item;
-  final bool isSelected;
-  final bool selectionMode;
-  final VoidCallback onTap;
-  final VoidCallback onLongPress;
-
-  const _FileListTile({
-    required this.item,
-    required this.isSelected,
-    required this.selectionMode,
-    required this.onTap,
-    required this.onLongPress,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final ColorScheme colors = Theme.of(context).colorScheme;
-
-    return Material(
-      color: isSelected && selectionMode
-          ? colors.secondaryContainer.withValues(alpha: 0.5)
-          : colors.surface,
-      child: InkWell(
-        onTap: onTap,
-        onLongPress: onLongPress,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-          child: Row(
-            children: [
-              if (selectionMode)
-                Checkbox(
-                  value: isSelected,
-                  onChanged: (_) => onLongPress(),
-                    ),
-              SizedBox(
-                width: 44,
-                height: 44,
-                child: _FileThumbnail(item: item),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      item.name,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: Theme.of(context).textTheme.bodyMedium,
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      item.isDirectory
-                          ? item.displayDateModified
-                          : '${formatBytes(item.size)} • ${item.displayDateModified}',
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: colors.onSurfaceVariant,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              Icon(
-                item.isDirectory ? Icons.chevron_right : Icons.open_in_new,
-                size: 20,
-                color: colors.onSurfaceVariant,
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _FileGridTile extends StatelessWidget {
-  final FileItem item;
-  final bool isSelected;
-  final bool selectionMode;
-  final VoidCallback onTap;
-  final VoidCallback onLongPress;
-
-  const _FileGridTile({
-    required this.item,
-    required this.isSelected,
-    required this.selectionMode,
-    required this.onTap,
-    required this.onLongPress,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final ColorScheme colors = Theme.of(context).colorScheme;
-
-    return Material(
-      color: colors.surfaceContainerHigh,
-      borderRadius: BorderRadius.circular(10),
-      clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        onTap: onTap,
-        onLongPress: onLongPress,
-        child: Stack(
-          fit: StackFit.expand,
-          children: [
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Expanded(
-                  child: Container(
-                    color: colors.surfaceContainerHighest,
-                    alignment: Alignment.center,
-                    child: SizedBox.expand(child: _FileThumbnail(item: item)),
-                  ),
-                ),
-                Padding(
-                  padding: const EdgeInsets.all(6),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        item.name,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: Theme.of(context).textTheme.labelMedium,
-                      ),
-                      Text(
-                        item.isDirectory ? 'Pasta' : formatBytes(item.size),
-                        maxLines: 1,
-                        style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                          color: colors.onSurfaceVariant,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-            if (selectionMode)
-              Positioned.fill(
-                child: ColoredBox(
-                  color: isSelected
-                      ? colors.secondaryContainer.withValues(alpha: 0.55)
-                      : Colors.transparent,
-                  child: Align(
-                    alignment: Alignment.topRight,
-                    child: Checkbox(
-                      value: isSelected,
-                      onChanged: (_) => onLongPress(),
-                            ),
-                  ),
-                ),
-              ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-/// Miniatura por tipo: imagem decodifica direto do disco (rápido); vídeo/PDF
-/// pedem ao canal nativo (com cache em memória no serviço); demais tipos usam
-/// ícone por extensão.
-class _FileThumbnail extends StatelessWidget {
-  final FileItem item;
-
-  const _FileThumbnail({required this.item});
-
-  @override
-  Widget build(BuildContext context) {
-    final ColorScheme colors = Theme.of(context).colorScheme;
-
-    if (item.isDirectory) {
-      return Center(child: Icon(Icons.folder, color: colors.primary));
-    }
-
-    if (item.type == FileType.image) {
-      final File file = File(item.path);
-      return Image.file(
-        file,
-        fit: BoxFit.cover,
-        cacheWidth: 200,
-        errorBuilder: (_, _, _) =>
-            Icon(Icons.image_outlined, color: colors.onSurfaceVariant),
-      );
-    }
-
-    if (item.type == FileType.video || item.type == FileType.pdf) {
-      return FutureBuilder<Uint8List?>(
-        future: FileQueryService.getThumbnail(item.path),
-        builder: (context, snapshot) {
-          final bytes = snapshot.data;
-          if (bytes != null && bytes.isNotEmpty) {
-            return Image.memory(
-              bytes,
-              fit: BoxFit.cover,
-              gaplessPlayback: true,
-            );
-          }
-          return Icon(item.icon, color: colors.onSurfaceVariant);
-        },
-      );
-    }
-
-    return Center(child: Icon(item.icon, color: colors.onSurfaceVariant));
-  }
-}
-
-// =============================================================================
-// SELETOR DE DESTINO (copiar/mover)
-// =============================================================================
-
-class _DestinationPicker extends StatefulWidget {
-  final String initialPath;
-
-  const _DestinationPicker({required this.initialPath});
-
-  @override
-  State<_DestinationPicker> createState() => _DestinationPickerState();
-}
-
-class _DestinationPickerState extends State<_DestinationPicker> {
-  late String _currentPath;
-  List<FileItem> _folders = [];
-  bool _isLoading = true;
-
-  @override
-  void initState() {
-    super.initState();
-    _currentPath = widget.initialPath;
-    _load();
-  }
-
-  Future<void> _load() async {
-    setState(() => _isLoading = true);
-    final FileListResult result = await FileQueryService.listDirectory(
-      path: _currentPath,
-      limit: 5000,
-    );
-    if (!mounted) return;
-    setState(() {
-      _folders = result.items
-          .where((i) => i.isDirectory && !i.name.startsWith('.'))
-          .toList();
-      _isLoading = false;
-    });
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return AlertDialog(
-      title: const Text('Escolher destino'),
-      content: SizedBox(
-        width: double.maxFinite,
-        height: 380,
-        child: Column(
-          children: [
-            Row(
-              children: [
-                IconButton(
-                  icon: const Icon(Icons.arrow_upward, size: 20),
-                  tooltip: 'Subir um nível',
-                  onPressed: () => setState(() {
-                    _currentPath = Directory(_currentPath).parent.path;
-                    _load();
-                  }),
-                ),
-                Expanded(
-                  child: Text(
-                    _currentPath,
-                    overflow: TextOverflow.ellipsis,
-                    style: Theme.of(context).textTheme.bodySmall,
-                  ),
-                ),
-              ],
-            ),
-            const Divider(height: 1),
-            Expanded(
-              child: _isLoading
-                  ? const Center(child: CircularProgressIndicator())
-                  : _folders.isEmpty
-                  ? const Center(child: Text('Nenhuma subpasta aqui.'))
-                  : ListView.builder(
-                      itemCount: _folders.length,
-                      itemBuilder: (context, index) => ListTile(
-                        dense: true,
-                        leading: Icon(
-                          _folders[index].icon,
-                          color: Theme.of(context).colorScheme.primary,
-                        ),
-                        title: Text(_folders[index].name),
-                        onTap: () {
-                          _currentPath = _folders[index].path;
-                          _load();
-                        },
-                      ),
-                    ),
-            ),
-          ],
-        ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('Cancelar'),
-        ),
-        FilledButton(
-          onPressed: () => Navigator.pop(context, _currentPath),
-          child: const Text('Selecionar esta pasta'),
-        ),
-      ],
-    );
-  }
-}
-
-// =============================================================================
-// ESTADOS VAZIOS / PERMISSÃO
-// =============================================================================
-
-class _AllFilesAccessState extends StatelessWidget {
-  final VoidCallback onRequest;
-
-  const _AllFilesAccessState({required this.onRequest});
-
-  @override
-  Widget build(BuildContext context) {
-    final ColorScheme colors = Theme.of(context).colorScheme;
-
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.folder_off_outlined, size: 64, color: colors.outline),
-            const SizedBox(height: 12),
-            Text(
-              'O Audify precisa do acesso especial "Todos os arquivos" '
-              'para funcionar como gerenciador de arquivos.\n\n'
-              'Na tela do sistema que abrir, ative o acesso para este app.',
-              textAlign: TextAlign.center,
-              style: Theme.of(context).textTheme.bodyMedium,
-            ),
-            const SizedBox(height: 16),
-            FilledButton.icon(
-              onPressed: onRequest,
-              icon: const Icon(Icons.settings_outlined),
-              label: const Text('Conceder acesso'),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _EmptyState extends StatelessWidget {
-  final IconData icon;
-  final String message;
-
-  const _EmptyState({required this.icon, required this.message});
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, size: 56, color: Theme.of(context).colorScheme.outline),
-            const SizedBox(height: 12),
-            Text(message, textAlign: TextAlign.center),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-/// Diálogo "novo arquivo de texto".
-///
-/// A extensão é escolhida por um seletor em vez de ser digitada: os tipos
-/// aceitos são poucos, e digitar ".htlm" e errar numa lista livre seria
-/// descobrir o problema só ao abrir o arquivo em outro programa.
-class _NewFileDialog extends StatefulWidget {
-  const _NewFileDialog();
-
-  @override
-  State<_NewFileDialog> createState() => _NewFileDialogState();
-}
-
-class _NewFileDialogState extends State<_NewFileDialog> {
-  final TextEditingController _name = TextEditingController();
-  String _extension = 'html';
-  String? _error;
-
-  @override
-  void dispose() {
-    _name.dispose();
-    super.dispose();
-  }
-
-  void _submit() {
-    final String fullName = '${_name.text.trim()}.$_extension';
-    final String? problem = TextFileService.validateName(fullName);
-    if (problem != null) {
-      setState(() => _error = problem);
-      return;
-    }
-    Navigator.pop(context, fullName);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return AlertDialog(
-      title: const Text('Novo arquivo de texto'),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: <Widget>[
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: <Widget>[
-              Expanded(
-                child: TextField(
-                  controller: _name,
-                  autofocus: true,
-                  textCapitalization: TextCapitalization.none,
-                  decoration: const InputDecoration(
-                    labelText: 'Nome',
-                    hintText: 'index',
-                  ),
-                  onChanged: (_) {
-                    if (_error != null) setState(() => _error = null);
-                  },
-                  onSubmitted: (_) => _submit(),
-                ),
-              ),
-              const SizedBox(width: 10),
-              DropdownButton<String>(
-                value: _extension,
-                underline: const SizedBox.shrink(),
-                items: <DropdownMenuItem<String>>[
-                  for (final String ext in TextFileService.textExtensions)
-                    DropdownMenuItem<String>(value: ext, child: Text('.$ext')),
-                ],
-                onChanged: (String? value) {
-                  if (value == null) return;
-                  setState(() {
-                    _extension = value;
-                    _error = null;
-                  });
-                },
-              ),
-            ],
-          ),
-          if (_error != null) ...<Widget>[
-            const SizedBox(height: 10),
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: <Widget>[
-                Icon(
-                  Icons.error_outline,
-                  size: 16,
-                  color: Theme.of(context).colorScheme.error,
-                ),
-                const SizedBox(width: 6),
-                Expanded(
-                  child: Text(
-                    _error!,
-                    style: TextStyle(
-                      fontSize: 12.5,
-                      color: Theme.of(context).colorScheme.error,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ],
-      ),
-      actions: <Widget>[
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('Cancelar'),
-        ),
-        FilledButton(onPressed: _submit, child: const Text('Criar e editar')),
-      ],
     );
   }
 }

@@ -406,3 +406,71 @@ Cada linha: ID do item, o que falta e o motivo.
 - **Não reescrevemos o histórico**: `CORRECOES.md §6` ainda cita
   `MainActivity.deleteWithSystemDialog` — é documentação do que foi
   feito na época; o método hoje vive em `MediaDeleteHandler`.
+
+---
+
+## 6.2 — Dividir arquivos Dart gigantes
+
+- **Serviços extraídos de `file_query_service.dart` (1.669 → 979 linhas)**:
+  `file_ops_jobs.dart` (114 — jobs puros de dart:io: copiar/mover/renomear/
+  apagar/permanente/criar pasta), `trash_service.dart` (304 — lixeira com
+  manifesto JSONL + `moveToTrash` + `TrashEntry` + restore em isolate) e
+  `storage_analysis_service.dart` (370 — uso por categoria, maiores
+  arquivos, duplicados SHA-256 e seus jobs). A **API pública não mudou**:
+  `FileQueryService` continua expondo `listTrash`/`restoreFromTrash`/
+  `deleteForever`/`purgeExpired`/`trashSize`/`emptyTrash` e os métodos de
+  análise por **delegação**, e re-exporta `TrashEntry`/`StorageUsage`/
+  `DuplicateGroup` (`export … show`) — nenhum consumidor ou teste precisou
+  de import novo. `delete(useTrash: true)` agora chama
+  `TrashService.moveToTrash` (mesmo código, antes inline no serviço);
+  `useTrash: false` segue com `deletePermanentJob` no try/catch com a mesma
+  mensagem de log. `_isExcluded`/`_jobExt` viraram `isExcludedPath`/`jobExt`
+  (top-level públicos, porque a análise de storage importa o núcleo).
+- **Ciclo de import aceito (Dart)**: `file_query_service` ⇄ `trash_service`
+  (o `formatBytes` continua no núcleo e a lixeira o usa) e
+  `file_query_service` ⇄ `storage_analysis_service` (modelo `StorageVolume`
+  e jobs compartilhados). Ciclos são legais em Dart; a alternativa seria
+  um quarto arquivo utilitário — decisão consciente para não criar mais um
+  ponto de fragmentação.
+- **Telas divididas (widgets públicos novos em `lib/widgets/`)**:
+  `file_tiles.dart` (FileListTile/FileGridTile/FileThumbnail),
+  `destination_picker.dart`, `file_screen_states.dart`
+  (AllFilesAccessState/EmptyState), `new_file_dialog.dart`,
+  `video_controls.dart` (VideoVolumeOsd/VideoControlsBar/VideoErrorState),
+  `group_header.dart` (GroupRow/GroupHeader) e `permission_banner.dart`.
+  Tamanhos: `files_screen` 1.486 → **992**, `video_player_screen` 906 →
+  **619**, `music_screen` 1.010 → **895**. Todos ganharam `super.key`
+  (lint `use_key_in_widget_constructors`); as telas só trocaram os nomes
+  nos pontos de uso e os imports — nenhum outro arquivo de tela mudou.
+- **Caracterização prévia (antes de extrair)**: diálogo "novo arquivo de
+  texto" (teste novo no `files_screen_test` — casca, extensões do
+  dropdown e validação de nome com "/"); `GroupHeader` já era coberto por
+  `grouped_library_test` (tooltip "Recolher", colapsar/expandir), e
+  `EmptyState` + `VideoErrorState` já apareciam nos testes de casca do
+  host (5.3 / estado de erro do player).
+- **Testes diretos escritos na extração** (widgets **inalcançáveis via
+  tela em host** — honestidade: a spec pedia cobertura *antes*, mas sem
+  Android/decoder estes widgets não montam na árvore de teste prévia):
+  FileListTile/FileGridTile (nome, seleção, toque/long-press), FileThumbnail
+  (diretório, genérico e vídeo→fallback pelo canal ausente),
+  DestinationPicker (subpasta listada via `runAsync`+compute e fecho em
+  "Selecionar esta pasta"), AllFilesAccessState (ação do botão),
+  VideoControlsBar (tempos `formatDuration`, transporte, menu de
+  velocidade → 1.5x, mudo, seek start/update/end), VideoVolumeOsd
+  (opacidade 0 sem mensagem / "70%" visível) e PermissionBanner (dois
+  ramos de texto/botão com `permission` forçado por override — em host a
+  permissão volta concedida e o banner nunca aparece na tela).
+- **Suíte 538/538 e `flutter analyze` limpo** (512 + 26 testes: +7 do
+  grupo lixeira no `file_query_service_test` com fake de path_provider,
+  12 no `files_screen_test`, 2 no `video_player_screen_test`, 3 no
+  `video_controls_test`, 2 no `permission_banner_test`). `flutter build
+  apk --debug` **não foi refeito neste item** (nenhum código Kotlin/manifest
+  mudou — a proteção é a suíte Dart, que cobre os serviços extraídos).
+- **Limitações conhecidas**: (1) o ramo de imagem do `FileThumbnail`
+  (`Image.file`) não tem teste — o decode/I/O real foge do FakeAsync;
+  (2) as ações do PermissionBanner (`openSettings`/
+  `requestPermissionAndReload`) só são verificadas por renderização, não
+  por tap — o plugin de permissão não responde em host; (3) o diálogo de
+  `DestinationPicker` usa `pump` datado porque o `CircularProgressIndicator`
+  faria `pumpAndSettle` estourar o timeout; (4) caminho de APK
+  (`Platform.isAndroid`) segue sem cobertura host, como antes.
