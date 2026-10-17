@@ -1,0 +1,52 @@
+# CI do item 6.3 — sem segredos e sem assinatura de release: só pub get,
+# analyze, test e o APK de DEBUG publicado como artefato.
+#
+# Versões fixas (nada de "stable" flutuante): Flutter conforme o README
+# (3.44+ / Dart 3.12+ — aqui 3.47.2, a mesma do desenvolvimento) e JDK 17
+# (mínimo do AGP 9.0.1 usado pelo projeto; Gradle 9.1 também pede 17+).
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  build:
+    name: Analyze, test e APK debug
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: JDK 17 (AGP 9.0.1 / Gradle 9.1)
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Flutter 3.47.2 fixo (README pede 3.44+ / Dart 3.12+)
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.2'
+          channel: stable
+          cache: true
+
+      - name: flutter pub get
+        run: flutter pub get
+
+      - name: flutter analyze
+        run: flutter analyze
+
+      - name: flutter test
+        run: flutter test
+
+      - name: flutter build apk --debug
+        run: flutter build apk --debug
+
+      - name: Publicar app-debug.apk como artefato
+        uses: actions/upload-artifact@v4
+        with:
+          name: audify-debug-apk
+          path: build/app/outputs/flutter-apk/app-debug.apk
+          if-no-files-found: error

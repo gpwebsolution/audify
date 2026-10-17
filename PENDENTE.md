@@ -474,3 +474,28 @@ Cada linha: ID do item, o que falta e o motivo.
   `DestinationPicker` usa `pump` datado porque o `CircularProgressIndicator`
   faria `pumpAndSettle` estourar o timeout; (4) caminho de APK
   (`Platform.isAndroid`) segue sem cobertura host, como antes.
+
+---
+
+## 6.3 — CI (GitHub Actions)
+
+- **`.github/workflows/ci.yml`**: em **todo push e pull_request** roda
+  `flutter pub get` → `flutter analyze` → `flutter test` →
+  `flutter build apk --debug`, publicando
+  `build/app/outputs/flutter-apk/app-debug.apk` como artefato
+  (`audify-debug-apk`, `if-no-files-found: error`).
+- **Versões fixas, sem "stable" flutuante**: Flutter **3.47.2** (a mesma
+  do desenvolvimento; satisfaz o README — 3.44+ / Dart 3.12+) via
+  `subosito/flutter-action@v2` com cache; **JDK 17 (temurin)** porque o
+  projeto usa **AGP 9.0.1 + Gradle 9.1**, cujo mínimo documentado é 17
+  (Build Tools 36 exigido pelo AGP vem do SDK do runner/loja).
+- **Sem segredos, sem assinatura de release**: só `build apk --debug`
+  (assinatura debug automática); nenhum keystore, token ou variável de
+  ambiente é lido pelo workflow.
+- **Verificado localmente, não no GitHub**: o YAML foi validado por parser
+  e os mesmos 4 comandos rodam verdes aqui (`analyze` limpo, `test`
+  538/538, `build apk --debug` → `✓ Built …/app-debug.apk`). O workflow
+  em si **não foi executado num runner real** — regra do prompt de não
+  dar push; a primeira execução de fato acontece quando o dono der push.
+  Se o runner não trouxer o Build Tools 36/SDK esperados, o passo de
+  build é o candidato natural a ajuste (analyze/test não dependem do SDK).
