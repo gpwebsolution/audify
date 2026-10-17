@@ -9,8 +9,8 @@ import 'album_artwork.dart';
 /// Mini player fixo no rodapé da Home.
 ///
 /// Responsabilidade: resumo da faixa atual (capa, título/artista, barra de
-/// progresso), botões play/pause e próxima — e tocar no cartão abre o
-/// player em tela cheia ([PlayerScreen]). Sem lógica de áudio própria.
+/// progresso), botões anterior/play/pause e próxima — e tocar no cartão
+/// abre o player em tela cheia ([PlayerScreen]). Sem lógica de áudio própria.
 class PlayerControls extends StatelessWidget {
   const PlayerControls({super.key});
 
@@ -105,7 +105,16 @@ class PlayerControls extends StatelessWidget {
                     ),
                     const SizedBox(width: 8),
 
-                    // ---- Play/Pause + Próxima ----
+                    // ---- Anterior / Play/Pause + Próxima ----
+                    // Item 3.7: o mini player tinha só play/pause e
+                    // próxima; anterior entra aqui, mesma ordem do player
+                    // em tela cheia.
+                    IconButton(
+                      tooltip: 'Anterior',
+                      icon: const Icon(Icons.skip_previous),
+                      onPressed:
+                          provider.hasCurrentSong ? provider.previous : null,
+                    ),
                     IconButton(
                       tooltip: provider.isPlaying ? 'Pausar' : 'Tocar',
                       icon: Icon(

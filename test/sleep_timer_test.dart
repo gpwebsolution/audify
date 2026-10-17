@@ -208,7 +208,7 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      // Sem sono agendado: ícone no AppBar, sem chip.
+      // Sem sono agendado: ícone na tela do player (3.7), sem chip.
       expect(find.byTooltip('Timer de sono'), findsOneWidget);
       expect(find.textContaining('Dormir'), findsNothing);
 

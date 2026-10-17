@@ -44,3 +44,20 @@ Cada linha: ID do item, o que falta e o motivo.
   letra); players que interpretam ao contrário terão letra 2×off.
 - **Não validado em aparelho:** folha com letra real, rolagem automática
   e legibilidade em telas pequenas — checklist no relatório final.
+
+---
+
+## 3.7 — Mini player e PlayerScreen
+
+- **Botão de favorito (coração) NÃO entrou na tela.** O 3.7 pede
+  fila/timer/velocidade/favorito, mas favoritos de música só existem a
+  partir do item 4.1 (tabela favorite_songs); um coração morto hoje
+  enganaria o usuário. Entra no 4.1 junto com a tabela — fila, timer e
+  velocidade já são botões visíveis na tela (_quickActions).
+- **Cor derivada da capa só para faixa de aparelho.** Faixas asset (os
+  dois MP3 do bundle) não têm MediaStore/capa → o player usa o tema da
+  casa; se a extração de cor falhar, também (log 'player/capaColors'),
+  nunca derrubando a tela.
+- **Não validado em aparelho:** rotação real retrato↔paisagem, capa
+  com cor dominante de álbum de verdade e legibilidade da coluna
+  direita em telas baixas — checklist no relatório final.

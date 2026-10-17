@@ -1,3 +1,6 @@
+import 'dart:math' as math;
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart' hide RepeatMode;
 import 'package:provider/provider.dart';
 
@@ -6,7 +9,9 @@ import '../models/song_model.dart';
 import '../providers/player_provider.dart';
 import '../providers/playlist_provider.dart';
 import '../providers/settings_provider.dart';
+import '../services/album_artwork_cache.dart';
 import '../services/audio_service.dart';
+import '../services/error_log_service.dart';
 import '../utils/format.dart';
 import '../widgets/album_artwork.dart';
 import '../widgets/lyrics_sheet.dart';
@@ -366,10 +371,350 @@ class _PlayerScreenState extends State<PlayerScreen> {
     );
   }
 
+  // ------------------------------------------------------------------
+  // Item 3.7 — cores derivadas da capa + blocos de layout
+  // ------------------------------------------------------------------
+
+  /// ColorScheme derivado da capa da faixa corrente (quando existe).
+  ColorScheme? _capaScheme;
+
+  /// MediaId a que [_capaScheme] pertence — só vale se for o mesmo da
+  /// faixa corrente (guarda de uso em [_colorsFor]).
+  int? _capaForMediaId;
+
+  /// Última requisição em voo — evita corrida quando o usuário troca de
+  /// faixa rápido (o resultado antigo é descartado no retorno).
+  int? _capaRequest;
+
+  /// Item 3.7 — tema da tela: o da casa, a menos que a capa corrente
+  /// tenha gerado um ColorScheme ([ColorScheme.fromImageProvider]).
+  ColorScheme _colorsFor(ColorScheme base, Song? song) {
+    final int? mediaId = song?.mediaId;
+    final bool match = mediaId != null &&
+        mediaId == _capaForMediaId &&
+        _capaScheme != null;
+    return match ? _capaScheme! : base;
+  }
+
+  /// Dispara a derivação da capa uma vez por mediaId (guardado — não é
+  /// setState; o resultado chega assíncrono em [_deriveCapaScheme]).
+  void _requestCapaScheme(Song? song, Brightness brightness) {
+    final int? mediaId = song?.mediaId;
+    if (mediaId == null) return;
+    if (mediaId == _capaForMediaId || mediaId == _capaRequest) return;
+    _capaRequest = mediaId;
+    _deriveCapaScheme(mediaId, brightness);
+  }
+
+  Future<void> _deriveCapaScheme(int mediaId, Brightness brightness) async {
+    try {
+      final Uint8List? bytes = await AlbumArtworkCache.instance.load(mediaId);
+      if (!mounted || _capaRequest != mediaId) return;
+      ColorScheme? derived;
+      if (bytes != null && bytes.isNotEmpty) {
+        derived = await ColorScheme.fromImageProvider(
+          provider: MemoryImage(bytes),
+          brightness: brightness,
+        );
+      }
+      if (!mounted || _capaRequest != mediaId) return;
+      setState(() {
+        _capaForMediaId = mediaId;
+        _capaScheme = derived;
+        _capaRequest = null;
+      });
+    } catch (e, s) {
+      if (!mounted || _capaRequest != mediaId) return;
+      // Sem cor derivada: a tela segue com o tema da casa — a falha de
+      // extração de cor nunca derruba o player.
+      setState(() {
+        _capaForMediaId = mediaId;
+        _capaScheme = null;
+        _capaRequest = null;
+      });
+      ErrorLogService.logSync('player/capaColors', e, s);
+    }
+  }
+
+  /// Item 3.7 — capa com lado `min(320, espaço)`: em bloco menor que
+  /// 320 (tela baixa, coluna de paisagem) ela ENCOLHE em vez de ser
+  /// esmagada — o código antigo forçava 320 fixo e o Container virava
+  /// 320×altura do bloco (capa deformada).
+  Widget _artwork(
+    BoxConstraints constraints, {
+    required Song? song,
+    required ColorScheme colors,
+  }) {
+    final double side = math.min(
+      320.0,
+      math.min(constraints.maxWidth, constraints.maxHeight),
+    );
+    if (song == null) {
+      return Icon(
+        Icons.music_note,
+        size: math.min(120.0, side),
+        color: colors.outlineVariant,
+      );
+    }
+    return AlbumArtwork(
+      song: song,
+      size: side,
+      fallbackColor: colors.surfaceContainerHighest,
+    );
+  }
+
+  Widget _titleBlock(
+    BuildContext context,
+    Song? song,
+    ColorScheme colors,
+  ) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 24),
+      child: Column(
+        children: [
+          Text(
+            song?.title ?? 'Nenhuma faixa selecionada',
+            textAlign: TextAlign.center,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            song?.displayArtist ?? '',
+            textAlign: TextAlign.center,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+              color: colors.onSurfaceVariant,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Slider de progresso (seek arrastável) + chip do timer de sono.
+  ///
+  /// Item 2.1: slider e tempos reagem SÓ ao notifier de posição
+  /// (ValueListenableBuilder) — o resto desta tela reconstrói em
+  /// mudança de faixa/status/modo, não a cada tick de 200ms.
+  Widget _seekBlock(
+    BuildContext context,
+    PlayerProvider provider,
+    Song? song,
+    ColorScheme colors,
+    bool sliderEnabled,
+    double maxMs,
+  ) {
+    return ValueListenableBuilder<Duration>(
+      valueListenable: provider.positionListenable,
+      builder: (context, position, _) {
+        final double sliderValue =
+            (_dragValueMs ?? position.inMilliseconds.toDouble()).clamp(
+              0,
+              maxMs,
+            );
+        return Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Item 3.1: chip do timer de sono — vive dentro do
+            // builder de posição, então a contagem regressiva
+            // atualiza a cada tick enquanto toca (e a cada rebuild
+            // da tela, ex.: faixa pausada, ao iniciar/cancelar).
+            if (song != null && provider.sleepTimerActive)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: <Widget>[
+                    Icon(
+                      Icons.timer_outlined,
+                      size: 16,
+                      color: colors.primary,
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      provider.sleepMode == SleepTimerMode.trackEnd
+                          ? 'Dormir ao fim da faixa'
+                          : 'Dormir em '
+                                '${formatDuration(provider.sleepRemaining)}',
+                      style: Theme.of(context)
+                          .textTheme
+                          .labelMedium
+                          ?.copyWith(color: colors.primary),
+                    ),
+                    IconButton(
+                      tooltip: 'Desligar timer',
+                      icon: const Icon(Icons.close, size: 16),
+                      onPressed: provider.cancelSleepTimer,
+                    ),
+                  ],
+                ),
+              ),
+            Slider(
+              value: sliderValue,
+              max: maxMs,
+              onChanged: sliderEnabled
+                  ? (double value) {
+                      setState(() => _dragValueMs = value);
+                    }
+                  : null,
+              onChangeStart: sliderEnabled
+                  ? (_) => setState(() => _dragValueMs = sliderValue)
+                  : null,
+              onChangeEnd: sliderEnabled
+                  ? (double value) {
+                      provider.seek(
+                        Duration(milliseconds: value.round()),
+                      );
+                      setState(() => _dragValueMs = null);
+                    }
+                  : null,
+            ),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 24),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    formatDuration(
+                      Duration(milliseconds: sliderValue.round()),
+                    ),
+                    style: Theme.of(context).textTheme.labelMedium,
+                  ),
+                  Text(
+                    formatDuration(provider.duration),
+                    style: Theme.of(context).textTheme.labelMedium,
+                  ),
+                ],
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  /// Controles: shuffle / anterior / play / próxima / repetir.
+  Widget _transportRow(
+    PlayerProvider provider,
+    ColorScheme colors,
+    bool canControl,
+  ) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+        children: [
+          IconButton(
+            tooltip: 'Embaralhar',
+            iconSize: 26,
+            color: provider.shuffle ? colors.primary : null,
+            icon: const Icon(Icons.shuffle),
+            onPressed: provider.toggleShuffle,
+          ),
+          IconButton(
+            tooltip: 'Anterior',
+            iconSize: 40,
+            icon: const Icon(Icons.skip_previous),
+            onPressed: canControl ? provider.previous : null,
+          ),
+          IconButton.filled(
+            tooltip: provider.isPlaying ? 'Pausar' : 'Tocar',
+            iconSize: 52,
+            icon: Icon(
+              provider.isPlaying
+                  ? Icons.pause
+                  : (provider.status == PlayerStatus.completed
+                        ? Icons.replay
+                        : Icons.play_arrow),
+            ),
+            onPressed: canControl ? provider.togglePlayPause : null,
+          ),
+          IconButton(
+            tooltip: 'Próxima',
+            iconSize: 40,
+            icon: const Icon(Icons.skip_next),
+            onPressed: canControl ? provider.next : null,
+          ),
+          IconButton(
+            tooltip: 'Repetir',
+            iconSize: 26,
+            color: provider.repeat != RepeatMode.off ? colors.primary : null,
+            icon: Icon(
+              provider.repeat == RepeatMode.one
+                  ? Icons.repeat_one
+                  : Icons.repeat,
+            ),
+            onPressed: provider.cycleRepeat,
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Item 3.7 — fila, timer e velocidade como botões VISÍVEIS na tela
+  /// (antes só no AppBar, que ficava com cinco ações). O coração do
+  /// favorito entra no item 4.1, com a tabela favorite_songs — PENDENTE.
+  Widget _quickActions(
+    BuildContext context,
+    PlayerProvider provider,
+    ColorScheme colors,
+  ) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 4, bottom: 16),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+        children: [
+          IconButton(
+            tooltip: 'Fila de reprodução',
+            icon: const Icon(Icons.queue_music),
+            onPressed: () => _showQueueSheet(context, provider),
+          ),
+          IconButton(
+            tooltip: 'Timer de sono',
+            icon: Icon(
+              provider.sleepTimerActive
+                  ? Icons.bedtime
+                  : Icons.bedtime_outlined,
+            ),
+            color: provider.sleepTimerActive ? colors.primary : null,
+            onPressed: () => _showSleepMenu(context, provider),
+          ),
+          PopupMenuButton<double>(
+            tooltip: 'Velocidade ${provider.playbackSpeed}x',
+            icon: Text(
+              '${provider.playbackSpeed}x',
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                fontSize: 14,
+                color:
+                    provider.playbackSpeed != 1.0 ? colors.primary : null,
+              ),
+            ),
+            onSelected: provider.setPlaybackSpeed,
+            itemBuilder: (BuildContext menuContext) =>
+                SettingsProvider.playbackSpeedOptions
+                    .map(
+                      (double s) => PopupMenuItem<double>(
+                        value: s,
+                        child: Text('${s}x'),
+                      ),
+                    )
+                    .toList(),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final PlayerProvider provider = context.watch<PlayerProvider>();
-    final ColorScheme colors = Theme.of(context).colorScheme;
+    final ColorScheme themeColors = Theme.of(context).colorScheme;
     final Song? song = provider.currentSong;
 
     final bool canControl = provider.hasCurrentSong;
@@ -378,274 +723,121 @@ class _PlayerScreenState extends State<PlayerScreen> {
         .clamp(1, 1 << 62)
         .toDouble();
 
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Agora tocando'),
-        actions: [
-          // Item 3.5: fila de reprodução — a ordem REAL que o player
-          // segue (gapless), não a lista da biblioteca.
-          if (song != null)
-            IconButton(
-              tooltip: 'Fila de reprodução',
-              icon: const Icon(Icons.queue_music),
-              onPressed: () => _showQueueSheet(context, provider),
-            ),
-          // Item 3.6: letras offline (.lrc ao lado do áudio ou ID3
-          // USLT do MP3) — folha com destaque da linha sincronizado.
-          if (song != null)
-            IconButton(
-              tooltip: 'Letras',
-              icon: const Icon(Icons.lyrics),
-              onPressed: () => _showLyricsSheet(context, provider),
-            ),
-          // Item 3.1: timer de sono — ícone aceso quando agendado; o
-          // tempo restante aparece no chip acima do slider. Sem faixa
-          // corrente não há o que dormir, então some junto com as ações.
-          if (song != null)
-            IconButton(
-              tooltip: 'Timer de sono',
-              icon: Icon(
-                provider.sleepTimerActive
-                    ? Icons.bedtime
-                    : Icons.bedtime_outlined,
-              ),
-              color: provider.sleepTimerActive ? colors.primary : null,
-              onPressed: () => _showSleepMenu(context, provider),
-            ),
-          // Item 3.2: velocidade — mesma grade e mesmo rótulo do player
-          // de vídeo (video_player_screen): ícone de texto "1.5x".
-          if (song != null)
-            PopupMenuButton<double>(
-              tooltip: 'Velocidade ${provider.playbackSpeed}x',
-              icon: Text(
-                '${provider.playbackSpeed}x',
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 14,
-                  color: provider.playbackSpeed != 1.0
-                      ? colors.primary
-                      : null,
-                ),
-              ),
-              onSelected: provider.setPlaybackSpeed,
-              itemBuilder: (BuildContext menuContext) =>
-                  SettingsProvider.playbackSpeedOptions
-                      .map(
-                        (double s) => PopupMenuItem<double>(
-                          value: s,
-                          child: Text('${s}x'),
-                        ),
-                      )
-                      .toList(),
-            ),
-          if (song != null)
-            // Menu de 3 pontinhos: as ações da faixa que TOCA ficam aqui, que
-            // é onde o usuário já está. A lixeira isolada foi substituída por
-            // este menu — mesmo padrão do visualizador de fotos.
-            IconButton(
-              tooltip: 'Ações da faixa',
-              icon: const Icon(Icons.more_vert),
-              onPressed: () => _showSongActions(context, provider, song),
-            ),
-        ],
-      ),
-      body: SafeArea(
-        child: Column(
-          children: [
-            // ---- Capa grande (expande no espaço restante) ----
-            Expanded(
-              child: Center(
-                child: song == null
-                    ? Icon(
-                        Icons.music_note,
-                        size: 120,
-                        color: colors.outlineVariant,
-                      )
-                    : AlbumArtwork(
-                        song: song,
-                        size: 320,
-                        fallbackColor: colors.surfaceContainerHighest,
-                      ),
-              ),
-            ),
+    // Item 3.7: cores derivadas da capa (assíncrono, guardado) e
+    // requisição de nova derivação quando a faixa — e a capa — mudam.
+    final ColorScheme colors = _colorsFor(themeColors, song);
+    _requestCapaScheme(song, themeColors.brightness);
 
-            // ---- Título / artista ----
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 24),
-              child: Column(
-                children: [
-                  Text(
-                    song?.title ?? 'Nenhuma faixa selecionada',
-                    textAlign: TextAlign.center,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    song?.displayArtist ?? '',
-                    textAlign: TextAlign.center,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                      color: colors.onSurfaceVariant,
-                    ),
-                  ),
-                ],
+    return Theme(
+      data: Theme.of(context).copyWith(colorScheme: colors),
+      child: Scaffold(
+        appBar: AppBar(
+          title: const Text('Agora tocando'),
+          actions: [
+            // Item 3.6: letras offline (.lrc ao lado do áudio ou ID3
+            // USLT do MP3) — folha com destaque da linha sincronizado.
+            if (song != null)
+              IconButton(
+                tooltip: 'Letras',
+                icon: const Icon(Icons.lyrics),
+                onPressed: () => _showLyricsSheet(context, provider),
               ),
-            ),
-            const SizedBox(height: 16),
+            // Item 3.7: fila (3.5), timer (3.1) e velocidade (3.2)
+            // saíram daqui — viraram botões visíveis na tela
+            // (_quickActions); o AppBar fica com o que é pontual
+            // (letras + ações da faixa).
+            if (song != null)
+              // Menu de 3 pontinhos: as ações da faixa que TOCA ficam aqui, que
+              // é onde o usuário já está. A lixeira isolada foi substituída por
+              // este menu — mesmo padrão do visualizador de fotos.
+              IconButton(
+                tooltip: 'Ações da faixa',
+                icon: const Icon(Icons.more_vert),
+                onPressed: () => _showSongActions(context, provider, song),
+              ),
+          ],
+        ),
+        body: SafeArea(
+          child: LayoutBuilder(
+            builder: (BuildContext context, BoxConstraints constraints) {
+              final bool landscape =
+                  constraints.maxWidth > constraints.maxHeight;
 
-            // ---- Slider de progresso (seek arrastável) ----
-            // Item 2.1: slider e tempos reagem SÓ ao notifier de posição
-            // (ValueListenableBuilder) — o resto desta tela reconstrói em
-            // mudança de faixa/status/modo, não a cada tick de 200ms.
-            ValueListenableBuilder<Duration>(
-              valueListenable: provider.positionListenable,
-              builder: (context, position, _) {
-                final double sliderValue =
-                    (_dragValueMs ?? position.inMilliseconds.toDouble()).clamp(
-                      0,
-                      maxMs,
-                    );
-                return Column(
-                  mainAxisSize: MainAxisSize.min,
+              // Item 3.7 — duas colunas em paisagem: capa à esquerda
+              // (lado min(320, espaço)), conteúdo à direita rolando se
+              // não couber — a altura de paisagem é curta.
+              if (landscape) {
+                return Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Item 3.1: chip do timer de sono — vive dentro do
-                    // builder de posição, então a contagem regressiva
-                    // atualiza a cada tick enquanto toca (e a cada rebuild
-                    // da tela, ex.: faixa pausada, ao iniciar/cancelar).
-                    if (song != null && provider.sleepTimerActive)
-                      Padding(
-                        padding: const EdgeInsets.only(bottom: 8),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: <Widget>[
-                            Icon(
-                              Icons.timer_outlined,
-                              size: 16,
-                              color: colors.primary,
-                            ),
-                            const SizedBox(width: 6),
-                            Text(
-                              provider.sleepMode == SleepTimerMode.trackEnd
-                                  ? 'Dormir ao fim da faixa'
-                                  : 'Dormir em '
-                                        '${formatDuration(provider.sleepRemaining)}',
-                              style: Theme.of(context)
-                                  .textTheme
-                                  .labelMedium
-                                  ?.copyWith(color: colors.primary),
-                            ),
-                            IconButton(
-                              tooltip: 'Desligar timer',
-                              icon: const Icon(Icons.close, size: 16),
-                              onPressed: provider.cancelSleepTimer,
-                            ),
-                          ],
+                    Expanded(
+                      flex: 3,
+                      child: LayoutBuilder(
+                        builder: (BuildContext _, BoxConstraints c) => Center(
+                          child: _artwork(c, song: song, colors: colors),
                         ),
                       ),
-                    Slider(
-                      value: sliderValue,
-                      max: maxMs,
-                      onChanged: sliderEnabled
-                          ? (double value) {
-                              setState(() => _dragValueMs = value);
-                            }
-                          : null,
-                      onChangeStart: sliderEnabled
-                          ? (_) => setState(() => _dragValueMs = sliderValue)
-                          : null,
-                      onChangeEnd: sliderEnabled
-                          ? (double value) {
-                              provider.seek(
-                                Duration(milliseconds: value.round()),
-                              );
-                              setState(() => _dragValueMs = null);
-                            }
-                          : null,
                     ),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 24),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Text(
-                            formatDuration(
-                              Duration(milliseconds: sliderValue.round()),
-                            ),
-                            style: Theme.of(context).textTheme.labelMedium,
+                    Expanded(
+                      flex: 4,
+                      child: SingleChildScrollView(
+                        child: Padding(
+                          padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              _titleBlock(context, song, colors),
+                              const SizedBox(height: 8),
+                              _seekBlock(
+                                context,
+                                provider,
+                                song,
+                                colors,
+                                sliderEnabled,
+                                maxMs,
+                              ),
+                              const SizedBox(height: 4),
+                              _transportRow(provider, colors, canControl),
+                              if (song != null)
+                                _quickActions(context, provider, colors),
+                            ],
                           ),
-                          Text(
-                            formatDuration(provider.duration),
-                            style: Theme.of(context).textTheme.labelMedium,
-                          ),
-                        ],
+                        ),
                       ),
                     ),
                   ],
                 );
-              },
-            ),
-            const SizedBox(height: 8),
+              }
 
-            // ---- Controles: shuffle / prev / play / next / repeat ----
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              // Retrato: capa em cima (expande até 320 e ENCOLHE se o
+              // bloco for menor — o antigo 320 fixo esmagava em tela
+              // baixa), título/seek/controles/ações embaixo.
+              return Column(
                 children: [
-                  IconButton(
-                    tooltip: 'Embaralhar',
-                    iconSize: 26,
-                    color: provider.shuffle ? colors.primary : null,
-                    icon: const Icon(Icons.shuffle),
-                    onPressed: provider.toggleShuffle,
-                  ),
-                  IconButton(
-                    tooltip: 'Anterior',
-                    iconSize: 40,
-                    icon: const Icon(Icons.skip_previous),
-                    onPressed: canControl ? provider.previous : null,
-                  ),
-                  IconButton.filled(
-                    tooltip: provider.isPlaying ? 'Pausar' : 'Tocar',
-                    iconSize: 52,
-                    icon: Icon(
-                      provider.isPlaying
-                          ? Icons.pause
-                          : (provider.status == PlayerStatus.completed
-                                ? Icons.replay
-                                : Icons.play_arrow),
+                  Expanded(
+                    child: LayoutBuilder(
+                      builder: (BuildContext _, BoxConstraints c) => Center(
+                        child: _artwork(c, song: song, colors: colors),
+                      ),
                     ),
-                    onPressed: canControl ? provider.togglePlayPause : null,
                   ),
-                  IconButton(
-                    tooltip: 'Próxima',
-                    iconSize: 40,
-                    icon: const Icon(Icons.skip_next),
-                    onPressed: canControl ? provider.next : null,
+                  _titleBlock(context, song, colors),
+                  const SizedBox(height: 16),
+                  _seekBlock(
+                    context,
+                    provider,
+                    song,
+                    colors,
+                    sliderEnabled,
+                    maxMs,
                   ),
-                  IconButton(
-                    tooltip: 'Repetir',
-                    iconSize: 26,
-                    color: provider.repeat != RepeatMode.off
-                        ? colors.primary
-                        : null,
-                    icon: Icon(
-                      provider.repeat == RepeatMode.one
-                          ? Icons.repeat_one
-                          : Icons.repeat,
-                    ),
-                    onPressed: provider.cycleRepeat,
-                  ),
+                  const SizedBox(height: 8),
+                  _transportRow(provider, colors, canControl),
+                  if (song != null) _quickActions(context, provider, colors),
                 ],
-              ),
-            ),
-            const SizedBox(height: 24),
-          ],
+              );
+            },
+          ),
         ),
       ),
     );

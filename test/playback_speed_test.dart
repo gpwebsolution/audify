@@ -2,7 +2,8 @@
 //
 // Cobre: clamp na camada de serviço, publicação no PlaybackState.speed,
 // persistência no SharedPreferences (novo e restaurado no boot), o
-// delegador do PlayerProvider e o seletor no AppBar do PlayerScreen.
+// delegador do PlayerProvider e o seletor no PlayerScreen (item 3.7:
+// botão visível na tela, não mais no AppBar).
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -176,7 +177,7 @@ void main() {
   });
 
   group('seletor no PlayerScreen (3.2)', () {
-    testWidgets('menu do AppBar aplica 1.5x no serviço', (tester) async {
+    testWidgets('menu aplica 1.5x no serviço', (tester) async {
       final PlayableAudioService audio = PlayableAudioService();
       final PlayerProvider provider = _provider(audio, null);
       addTearDown(provider.dispose);
