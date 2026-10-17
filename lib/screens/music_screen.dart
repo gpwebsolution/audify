@@ -10,6 +10,7 @@ import '../providers/playlist_provider.dart';
 import '../services/permission_service.dart';
 import '../widgets/media_actions.dart';
 import '../widgets/media_details_sheet.dart';
+import '../widgets/playlist_picker_sheet.dart';
 import '../widgets/selection_bar.dart';
 import '../widgets/song_list_tile.dart';
 
@@ -741,54 +742,28 @@ class _MusicScreenState extends State<MusicScreen> with MediaSelection<String> {
   }
 
   /// Escolhe uma playlist para receber a faixa.
+  /// Item 4.4 — seletor com "Nova playlist" embutida: cria no lugar e
+  /// a recém-criada já recebe a faixa.
   void _pickPlaylist(BuildContext context, Song song) {
     final PlaylistProvider playlistProvider = context.read<PlaylistProvider>();
-    showModalBottomSheet<void>(
-      context: context,
-      showDragHandle: true,
-      builder: (sheetContext) {
-        if (playlistProvider.playlists.isEmpty) {
-          return const SafeArea(
-            child: Padding(
-              padding: EdgeInsets.all(24),
-              child: Text(
-                'Nenhuma playlist ainda.\n'
-                'Crie uma na aba Playlists.',
-                textAlign: TextAlign.center,
-              ),
-            ),
+    showPlaylistPickerSheet(
+      context,
+      onPick: (Playlist playlist) async {
+        await playlistProvider.addSong(playlist.id, song);
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Adicionada a "${playlist.name}"')),
           );
         }
-        return SafeArea(
-          child: ListView.builder(
-            shrinkWrap: true,
-            itemCount: playlistProvider.playlists.length,
-            itemBuilder: (context, index) {
-              final playlist = playlistProvider.playlists[index];
-              return ListTile(
-                leading: const Icon(Icons.queue_music),
-                title: Text(playlist.name),
-                subtitle: Text('${playlist.songCount} faixas'),
-                onTap: () async {
-                  await playlistProvider.addSong(playlist.id, song);
-                  if (sheetContext.mounted) Navigator.pop(sheetContext);
-                  if (context.mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text('Adicionada a "${playlist.name}"'),
-                      ),
-                    );
-                  }
-                },
-              );
-            },
-          ),
-        );
       },
+      subtitleOf: (Playlist playlist) => '${playlist.songCount} faixas',
     );
   }
 
   /// Escolhe uma playlist para várias músicas de uma vez (modo seleção).
+  ///
+  /// Item 4.4: a folha vem com "Nova playlist" — mesmo sem nenhuma
+  /// criada o lote não esbarra em aviso de "crie na aba Playlists".
   ///
   /// Um único add por música no banco. Se alguma falhar, o contador de erro
   /// diz quantas entraram de fato em vez de mentir "N adicionadas".
@@ -797,55 +772,30 @@ class _MusicScreenState extends State<MusicScreen> with MediaSelection<String> {
     PlaylistProvider playlistProvider,
     List<Song> songs,
   ) async {
-    if (playlistProvider.playlists.isEmpty) {
-      clearSelection();
-      if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Nenhuma playlist ainda. Crie uma na aba Playlists.'),
-        ),
-      );
-      return;
-    }
-
     final ScaffoldMessengerState messenger = ScaffoldMessenger.of(context);
-    await showModalBottomSheet<void>(
-      context: context,
-      showDragHandle: true,
-      builder: (sheetContext) => SafeArea(
-        child: ListView.builder(
-          shrinkWrap: true,
-          itemCount: playlistProvider.playlists.length,
-          itemBuilder: (BuildContext _, int index) {
-            final playlist = playlistProvider.playlists[index];
-            return ListTile(
-              leading: const Icon(Icons.queue_music),
-              title: Text(playlist.name),
-              subtitle: Text('${playlist.songCount} faixas'),
-              onTap: () async {
-                // Uma transação + um reload (antes: um insert e uma query de
-                // posição por faixa, e a contagem da playlist ficava errada).
-                final int added = await playlistProvider.addSongsToPlaylist(
-                  playlist.id,
-                  songs,
-                );
-                if (sheetContext.mounted) Navigator.pop(sheetContext);
-                clearSelection();
-                messenger.showSnackBar(
-                  SnackBar(
-                    content: Text(
-                      added == songs.length
-                          ? '${songs.length} adicionadas a "${playlist.name}"'
-                          : '$added de ${songs.length} adicionadas a '
-                                '"${playlist.name}"',
-                    ),
-                  ),
-                );
-              },
-            );
-          },
-        ),
-      ),
+    await showPlaylistPickerSheet(
+      context,
+      onPick: (Playlist playlist) async {
+        // Uma transação + um reload (antes: um insert e uma query de
+        // posição por faixa, e a contagem da playlist ficava errada).
+        final int added = await playlistProvider.addSongsToPlaylist(
+          playlist.id,
+          songs,
+        );
+        if (mounted) clearSelection();
+        if (!messenger.mounted) return;
+        messenger.showSnackBar(
+          SnackBar(
+            content: Text(
+              added == songs.length
+                  ? '${songs.length} adicionadas a "${playlist.name}"'
+                  : '$added de ${songs.length} adicionadas a '
+                        '"${playlist.name}"',
+            ),
+          ),
+        );
+      },
+      subtitleOf: (Playlist playlist) => '${playlist.songCount} faixas',
     );
   }
 

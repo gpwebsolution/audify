@@ -13,6 +13,7 @@ import '../utils/format.dart';
 import '../utils/motion.dart';
 import '../widgets/media_actions.dart';
 import '../widgets/grid_zoom.dart';
+import '../widgets/playlist_picker_sheet.dart';
 import '../widgets/selection_bar.dart';
 import 'video_player_screen.dart';
 
@@ -313,6 +314,9 @@ class _VideosScreenState extends State<VideosScreen> with MediaSelection<int> {
   }
 
   /// Adiciona os vídeos marcados a uma playlist escolhida pelo usuário.
+  ///
+  /// Item 4.4: a folha vem com "Nova playlist" — mesmo sem nenhuma
+  /// criada o lote não esbarra em aviso de "crie na aba Playlists".
   Future<void> _addSelectedToPlaylist(
     BuildContext context,
     VideoProvider provider,
@@ -323,55 +327,31 @@ class _VideosScreenState extends State<VideosScreen> with MediaSelection<int> {
       return;
     }
     final PlaylistProvider playlists = context.read<PlaylistProvider>();
-    if (playlists.playlists.isEmpty) {
-      clearSelection();
-      if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Nenhuma playlist ainda. Crie uma na aba Playlists.'),
-        ),
-      );
-      return;
-    }
 
     final ScaffoldMessengerState messenger = ScaffoldMessenger.of(context);
-    await showModalBottomSheet<void>(
-      context: context,
-      showDragHandle: true,
-      builder: (sheetContext) => SafeArea(
-        child: ListView.builder(
-          shrinkWrap: true,
-          itemCount: playlists.playlists.length,
-          itemBuilder: (BuildContext _, int index) {
-            final playlist = playlists.playlists[index];
-            return ListTile(
-              leading: const Icon(Icons.playlist_play),
-              title: Text(playlist.name),
-              subtitle: Text('${playlist.videoCount} vídeos'),
-              onTap: () async {
-                // Uma transação + um reload (antes: um insert e uma query de
-                // posição por vídeo, e a contagem ficava errada).
-                final int added = await playlists.addVideosToPlaylist(
-                  playlist.id,
-                  videos,
-                );
-                if (sheetContext.mounted) Navigator.pop(sheetContext);
-                clearSelection();
-                messenger.showSnackBar(
-                  SnackBar(
-                    content: Text(
-                      added == videos.length
-                          ? '${videos.length} adicionados a "${playlist.name}"'
-                          : '$added de ${videos.length} adicionados a '
-                                '"${playlist.name}"',
-                    ),
-                  ),
-                );
-              },
-            );
-          },
-        ),
-      ),
+    await showPlaylistPickerSheet(
+      context,
+      onPick: (Playlist playlist) async {
+        // Uma transação + um reload (antes: um insert e uma query de
+        // posição por vídeo, e a contagem da playlist ficava errada).
+        final int added = await playlists.addVideosToPlaylist(
+          playlist.id,
+          videos,
+        );
+        if (mounted) clearSelection();
+        if (!messenger.mounted) return;
+        messenger.showSnackBar(
+          SnackBar(
+            content: Text(
+              added == videos.length
+                  ? '${videos.length} adicionados a "${playlist.name}"'
+                  : '$added de ${videos.length} adicionados a '
+                        '"${playlist.name}"',
+            ),
+          ),
+        );
+      },
+      subtitleOf: (Playlist playlist) => '${playlist.videoCount} vídeos',
     );
   }
 }

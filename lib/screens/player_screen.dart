@@ -18,6 +18,7 @@ import '../widgets/album_artwork.dart';
 import '../widgets/lyrics_sheet.dart';
 import '../widgets/media_actions.dart';
 import '../widgets/media_details_sheet.dart';
+import '../widgets/playlist_picker_sheet.dart';
 import 'equalizer_screen.dart';
 import 'music_screen.dart';
 
@@ -72,7 +73,6 @@ class _PlayerScreenState extends State<PlayerScreen> {
     final PlaylistProvider playlists = context.read<PlaylistProvider>();
     final ScaffoldMessengerState messenger = ScaffoldMessenger.of(context);
     final ColorScheme colors = Theme.of(context).colorScheme;
-    final bool hasPlaylists = playlists.playlists.isNotEmpty;
 
     await showModalBottomSheet<void>(
       context: context,
@@ -90,10 +90,6 @@ class _PlayerScreenState extends State<PlayerScreen> {
               ListTile(
                 leading: const Icon(Icons.playlist_add),
                 title: const Text('Adicionar à playlist'),
-                subtitle: hasPlaylists
-                    ? null
-                    : const Text('Crie uma playlist na aba Playlists'),
-                enabled: hasPlaylists,
                 onTap: () =>
                     go(() => _addCurrentToPlaylist(context, playlists, song)),
               ),
@@ -321,36 +317,24 @@ class _PlayerScreenState extends State<PlayerScreen> {
   }
 
   /// Adiciona a faixa em reprodução a uma playlist escolhida.
+  /// Item 4.4 — escolhe a playlist no seletor (com "Nova playlist"
+  /// embutida) e adiciona a faixa corrente.
   Future<void> _addCurrentToPlaylist(
     BuildContext context,
     PlaylistProvider playlists,
     Song song,
   ) async {
-    final ScaffoldMessengerState messenger = ScaffoldMessenger.of(context);
-    await showModalBottomSheet<void>(
-      context: context,
-      showDragHandle: true,
-      builder: (BuildContext sheetContext) => SafeArea(
-        child: ListView.builder(
-          shrinkWrap: true,
-          itemCount: playlists.playlists.length,
-          itemBuilder: (BuildContext _, int index) {
-            final playlist = playlists.playlists[index];
-            return ListTile(
-              leading: const Icon(Icons.queue_music),
-              title: Text(playlist.name),
-              subtitle: Text('${playlist.songCount} faixas'),
-              onTap: () async {
-                await playlists.addSong(playlist.id, song);
-                if (sheetContext.mounted) Navigator.pop(sheetContext);
-                messenger.showSnackBar(
-                  SnackBar(content: Text('Adicionada a "${playlist.name}"')),
-                );
-              },
-            );
-          },
-        ),
-      ),
+    await showPlaylistPickerSheet(
+      context,
+      onPick: (Playlist playlist) async {
+        await playlists.addSong(playlist.id, song);
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Adicionada a "${playlist.name}"')),
+          );
+        }
+      },
+      subtitleOf: (Playlist playlist) => '${playlist.songCount} faixas',
     );
   }
 

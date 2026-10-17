@@ -139,3 +139,23 @@ Cada linha: ID do item, o que falta e o motivo.
 - **Não validado em aparelho:** menu "Ordenar" (abrir/itens/tap),
   persistência entre reinícios, agrupamento por álbum com faixas reais
   (track do MediaStore) — checklist no relatório final.
+
+---
+
+## 4.4 — Criar playlist sem sair do fluxo
+
+- **Vídeo em reprodução: um toque virou dois.** O item "Adicionar à
+  playlist" do video_player ANTES ia direto para a PRIMEIRA playlist
+  (ou ficava desabilitado quando não havia nenhuma); agora abre o
+  seletor como nas demais telas — é o comportamento pedido pelo item,
+  mas muda o atalho de quem já tinha playlist.
+- **Seletor único lista todas as playlists**, inclusive mistas ou de
+  outro tipo (comportamento do código antigo mantido): quem adiciona
+  música vê playlists só de vídeo e vice-versa; o subtítulo mostra a
+  contagem do tipo pedido ('N faixas' / 'N vídeos').
+- **Nome da playlist só passa por trim** (igual ao FAB da aba
+  Playlists): vazio cancela, duplicado mostra o aviso vermelho — sem
+  outra validação (emoji/espaços internos passam, como no FAB).
+- **Não validado em aparelho:** criação em cada uma das 5 telas
+  (player, música single, música em lote, vídeo, vídeos em lote) —
+  checklist no relatório final.

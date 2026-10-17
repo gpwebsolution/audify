@@ -16,6 +16,7 @@ import '../utils/format.dart';
 import '../utils/motion.dart';
 import '../widgets/media_actions.dart';
 import '../widgets/media_details_sheet.dart';
+import '../widgets/playlist_picker_sheet.dart';
 import 'videos_screen.dart';
 
 /// Player de vídeo em tela cheia, no padrão do player de música.
@@ -354,6 +355,27 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     });
   }
 
+  /// Item 4.4 — escolhe a playlist no seletor (com "Nova playlist"
+  /// embutida) e adiciona o vídeo em reprodução.
+  Future<void> _addToPlaylist(
+    BuildContext context,
+    PlaylistProvider playlists,
+    Video video,
+  ) async {
+    await showPlaylistPickerSheet(
+      context,
+      onPick: (Playlist playlist) async {
+        await playlists.addVideo(playlist.id, video);
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Adicionado a "${playlist.name}"')),
+          );
+        }
+      },
+      subtitleOf: (Playlist playlist) => '${playlist.videoCount} vídeos',
+    );
+  }
+
   /// Menu de ações do vídeo em reprodução.
   ///
   /// Reúne compartilhar, detalhes, adicionar à playlist e excluir num só
@@ -363,8 +385,6 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     final Video video = _current;
     final PlaylistProvider playlists = context.read<PlaylistProvider>();
     final NavigatorState navigator = Navigator.of(context);
-    final ScaffoldMessengerState messenger = ScaffoldMessenger.of(context);
-    final bool hasPlaylists = playlists.playlists.isNotEmpty;
 
     await showModalBottomSheet<void>(
       context: context,
@@ -382,20 +402,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
               ListTile(
                 leading: const Icon(Icons.playlist_add),
                 title: const Text('Adicionar à playlist'),
-                subtitle: hasPlaylists
-                    ? null
-                    : const Text('Crie uma playlist na aba Playlists'),
-                enabled: hasPlaylists,
-                onTap: () => go(() async {
-                  await playlists.addVideo(playlists.playlists.first.id, video);
-                  messenger.showSnackBar(
-                    SnackBar(
-                      content: Text(
-                        'Adicionado a "${playlists.playlists.first.name}"',
-                      ),
-                    ),
-                  );
-                }),
+                onTap: () => go(() => _addToPlaylist(context, playlists, video)),
               ),
               ListTile(
                 leading: const Icon(Icons.share_outlined),
