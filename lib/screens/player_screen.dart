@@ -336,7 +336,11 @@ class _PlayerScreenState extends State<PlayerScreen> {
             ),
       ),
     );
-    controller.dispose();
+    // Idem o diálogo da marca d'água (photo_viewer_screen): descartar o
+    // controller logo no pop, com a subárvore ainda na animação de saída,
+    // derrubava o build e cascateava no assert `_dependents.isEmpty`.
+    // Controller local da função: o TextField remove os listeners no unmount
+    // e o GC leva o resto.
     if (minutes != null) {
       provider.startSleepTimer(Duration(minutes: minutes));
     }

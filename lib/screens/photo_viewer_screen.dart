@@ -231,7 +231,13 @@ class _PhotoViewerScreenState extends State<PhotoViewerScreen> {
         ],
       ),
     );
-    controller.dispose();
+    // O controller NÃO é descartado aqui: `showDialog` resolve no MOMENTO do
+    // pop, mas a subárvore do diálogo ainda está na animação de saída e o
+    // TextField segue vivo. Um dispose nesse instante derrubava o build
+    // ("controller used after being disposed") e cascateava no assert
+    // `_dependents.isEmpty` do framework. O TextField remove os próprios
+    // listeners no unmount e o controller (local da função) vai junto com o
+    // GC.
     if (text == null || text.trim().isEmpty || !context.mounted) return;
 
     final ScaffoldMessengerState messenger = ScaffoldMessenger.of(context);
