@@ -23,9 +23,11 @@ import '../models/video_model.dart';
 ///    added_at INTEGER) — item 4.1 (favoritos de música)
 ///  - song_stats(song_id TEXT PK, play_count INTEGER, last_played
 ///    INTEGER) — item 4.2 (histórico e mais tocadas)
+///  - playlist_songs/favorite_songs ganham date_added INTEGER e
+///    track_number INTEGER no item 4.3 (ordenação escolhível)
 class PlaylistDatabase {
   static const String _dbName = 'audify.db';
-  static const int _dbVersion = 5;
+  static const int _dbVersion = 6;
 
   static Database? _db;
 
@@ -51,6 +53,9 @@ class PlaylistDatabase {
         version: _dbVersion,
         onCreate: (db, version) async {
           await _createSchema(db);
+          // Item 4.3: o create nasce já com as colunas de ordenação —
+          // mesmo código da migração 5→6, sem caminho paralelo.
+          await _addSortColumns(db);
         },
         onUpgrade: (db, oldVersion, newVersion) async {
           if (oldVersion < 2) {
@@ -85,6 +90,11 @@ class PlaylistDatabase {
           if (oldVersion < 5) {
             // Item 4.2 — histórico de reprodução (contagem por faixa).
             await _createSongStats(db);
+          }
+          if (oldVersion < 6) {
+            // Item 4.3 — colunas de ordenação escolhível nas duas
+            // tabelas que guardam Song (playlist e favoritos).
+            await _addSortColumns(db);
           }
         },
       );
@@ -181,6 +191,17 @@ class PlaylistDatabase {
         last_played INTEGER NOT NULL
       )
     ''');
+  }
+
+  /// Item 4.3 — colunas de ordenação (`date_added`, `track_number`)
+  /// adicionadas às duas tabelas de faixa. Chamada no onCreate (esquema
+  /// nasce completo) e na migração 5→6; roda UMA vez por banco, então
+  /// não há duplicidade de coluna.
+  static Future<void> _addSortColumns(Database db) async {
+    for (final String table in <String>['playlist_songs', 'favorite_songs']) {
+      await db.execute('ALTER TABLE $table ADD COLUMN date_added INTEGER');
+      await db.execute('ALTER TABLE $table ADD COLUMN track_number INTEGER');
+    }
   }
 
   /// Playlist com seu conjunto de faixas.

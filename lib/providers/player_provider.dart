@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 
 import '../models/repeat_mode.dart';
 import '../models/song_model.dart';
+import '../models/song_sort_key.dart';
 import '../repositories/session_repository.dart';
 import '../repositories/song_repository.dart';
 import '../services/audio_service.dart';
@@ -12,6 +13,7 @@ import '../services/error_log_service.dart';
 import '../services/permission_service.dart';
 import '../services/playback_history_service.dart';
 import '../utils/playback_queue.dart';
+import '../utils/song_sort.dart';
 import '../utils/text_normalize.dart';
 import 'history_provider.dart';
 import 'settings_provider.dart';
@@ -58,6 +60,11 @@ class PlayerProvider extends ChangeNotifier {
 
   /// Item 4.2 — regra do histórico (contagem por posição).
   final PlaybackHistoryService _history;
+
+  /// Item 4.3 — ordenação escolhível (vinda das preferências no boot;
+  /// trocas passam por [setSort], que persiste de volta).
+  SongSortKey _sortKey;
+  bool _sortAscending;
 
   List<Song> _songs = const [];
   List<Song> _visibleSongs = const [];
@@ -230,6 +237,8 @@ class PlayerProvider extends ChangeNotifier {
            PermissionService.requestNotificationAccess,
        _history = history ??
            PlaybackHistoryService(onRecorded: HistoryProvider.instance.refresh),
+       _sortKey = settings?.sortKey ?? SongSortKey.title,
+       _sortAscending = settings?.sortAscending ?? true,
        _clock = clock ?? DateTime.now {
     // Botões da notificação/tela de bloqueio (audio_service) delegam a
     // navegação da fila para este provider.
@@ -513,11 +522,43 @@ class PlayerProvider extends ChangeNotifier {
     _notify();
   }
 
+  /// Critério/sentido atuais da ordenação (item 4.3) — a tela do menu
+  /// "Ordenar" lê daqui para marcar o item vigente.
+  SongSortKey get sortKey => _sortKey;
+  bool get sortAscending => _sortAscending;
+
+  /// Item 4.3 — ordenação escolhível: reordena a lista visível e
+  /// persiste nas preferências. A fila de reprodução ativa NÃO muda
+  /// (mesmo raciocínio da busca: só tocar monta a fila), e
+  /// [playVisibleAt] resolve o índice por id — trocar de ordem no meio
+  /// da escuta é seguro.
+  Future<void> setSort({
+    required SongSortKey key,
+    required bool ascending,
+  }) async {
+    if (_sortKey == key && _sortAscending == ascending) return;
+    _sortKey = key;
+    _sortAscending = ascending;
+    _applySearchFilter();
+    _notify();
+    await settings?.setSort(key: key, ascending: ascending);
+  }
+
+  /// Contagem de plays por faixa para a ordenação "Mais tocadas"
+  /// (fonte: histórico do item 4.2; sem histórico, tudo vale 0).
+  Map<String, int> _playCounts() {
+    final Map<String, int> counts = <String, int>{};
+    for (final SongStat stat in HistoryProvider.instance.stats) {
+      counts[stat.songId] = stat.playCount;
+    }
+    return counts;
+  }
+
   void _applySearchFilter() {
     // Item 2.3: busca sem acento — 'acao' acha 'Ação' (a chave
     // normalizada também reduz comparações por faixa a uma passada).
     final String q = normalizeKey(_searchQuery);
-    _visibleSongs = q.isEmpty
+    final List<Song> filtered = q.isEmpty
         ? List.of(_songs)
         : _songs.where((s) {
             final inTitle = normalizeKey(s.title).contains(q);
@@ -525,6 +566,22 @@ class PlayerProvider extends ChangeNotifier {
             final inAlbum = normalizeKey(s.album ?? '').contains(q);
             return inTitle || inArtist || inAlbum;
           }).toList();
+    // Item 4.3: ordenação escolhida — mesmo com busca filtrando,
+    // o que sobrou sai na ordem pedida.
+    if (_sortKey != SongSortKey.title || !_sortAscending) {
+      final Map<String, int> counts =
+          _sortKey == SongSortKey.mostPlayed ? _playCounts() : const {};
+      filtered.sort(
+        (Song a, Song b) => compareSongs(
+          a,
+          b,
+          key: _sortKey,
+          ascending: _sortAscending,
+          playCounts: counts,
+        ),
+      );
+    }
+    _visibleSongs = filtered;
   }
 
   /// Grupos do modo agrupado — MEMOIZADO (item 2.2): recalcula apenas
@@ -544,6 +601,8 @@ class PlayerProvider extends ChangeNotifier {
   /// Agrupa por chave e ordena as chaves com [naturalCompare] (item 2.3:
   /// sem acento e com ordem natural — 'Álbum 2' antes de 'Álbum 10').
   /// As chaves de EXIBIÇÃO continuam com o texto original do MediaStore.
+  /// Dentro de ÁLBUM as faixas vão por número da faixa (item 4.3),
+  /// independente do sentido global escolhido.
   static List<SongGroup> _groupSongs(List<Song> songs, MusicGroupMode mode) {
     final Map<String, List<Song>> byKey = <String, List<Song>>{};
     for (final Song song in songs) {
@@ -553,7 +612,12 @@ class PlayerProvider extends ChangeNotifier {
       ..sort(naturalCompare);
     return <SongGroup>[
       for (final String key in sortedKeys)
-        SongGroup(key: key, songs: byKey[key]!),
+        SongGroup(
+          key: key,
+          songs: mode == MusicGroupMode.album
+              ? (byKey[key]!..sort(compareByTrack))
+              : byKey[key]!,
+        ),
     ];
   }
 

@@ -109,3 +109,33 @@ Cada linha: ID do item, o que falta e o motivo.
 - **Não validado em aparelho:** contagem durante ouvida real, tiles na
   aba Playlists, play-all e "Limpar histórico" — checklist no relatório
   final.
+
+---
+
+## 4.3 — Ordenação escolhível
+
+- **Ano (`year`) não exposto pela versão usada do plugin.** O
+  on_audio_query 2.9.0 (e o side Android dele) não tem `year` — só
+  `dateAdded` (epoch s) e `track` (número da faixa), que entraram na
+  [CONFIRMAR resolvido]: ordenar por ANO DE LANÇAMENTO fica sem
+  fonte de dados; a data usada é a de ADIÇÃO à biblioteca.
+- **"Mais tocadas" não reordena ao vivo.** Os pesos são lidos
+  (`HistoryProvider.stats`) só quando algo reaplica o filtro (mudar
+  busca/ordenar); plays da sessão corrente entram na próxima dessas
+  mudanças, não no próximo notify do tick.
+- **Vale só para a aba Música** (lista visível e grupos). Favoritas,
+  detalhe de playlist, histórico e "Recentes" seguem as ordens próprias
+  deles; a fila de reprodução ativa nunca acompanha a troca.
+- **Nulos sempre por último** em ambos os sentidos (data/duração/track
+  ausentes), e o desempate por título é INVERTIDO junto com o sentido —
+  decisão explícita, coberta por teste.
+- **Faixa (`track`) ausente em muito conteúdo** (streams/m4a): dentro
+  do álbum essas faixas caem no fim, em ordem natural de título.
+- **Migração 5 → 6 coberta só por sqflite_common_ffi em desktop.** As
+  suítes novas deste item (`song_sort_test`, `music_sort_test`) usam
+  diretório de banco temporário exclusivo para não correr com as
+  demais suítes em paralelo (a corrida no `audify.db` compartilhado do
+  cwd é pré-existente entre os testes de banco antigos).
+- **Não validado em aparelho:** menu "Ordenar" (abrir/itens/tap),
+  persistência entre reinícios, agrupamento por álbum com faixas reais
+  (track do MediaStore) — checklist no relatório final.

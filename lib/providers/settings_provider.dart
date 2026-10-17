@@ -5,6 +5,7 @@ import 'package:flutter/material.dart' hide RepeatMode;
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/repeat_mode.dart';
+import '../models/song_sort_key.dart';
 
 /// Preferências do app persistidas em disco (shared_preferences).
 ///
@@ -28,6 +29,10 @@ class SettingsProvider extends ChangeNotifier {
   static const String _eqPresetKey = 'equalizer_preset';
   static const String _eqBassEnabledKey = 'equalizer_bass_enabled';
   static const String _eqBassStrengthKey = 'equalizer_bass_strength';
+
+  // Item 4.3 — ordenação escolhível da biblioteca.
+  static const String _librarySortKeyKey = 'library_sort_key';
+  static const String _librarySortAscendingKey = 'library_sort_ascending';
 
   /// Opções de prazo da lixeira, em dias. `0` = manter para sempre.
   static const List<int> trashRetentionOptions = <int>[
@@ -185,6 +190,15 @@ class SettingsProvider extends ChangeNotifier {
   /// Pastas ignoradas (caminhos normalizados, sem barra final).
   List<String> _ignoredFolders = const <String>[];
 
+  // ---- Ordenação da biblioteca (item 4.3) ----
+
+  /// Critério de ordenação — padrão: título (a ordem natural de
+  /// sempre, para nenhum usuário acordar com a lista "mexida").
+  SongSortKey _sortKey = SongSortKey.title;
+
+  /// Sentido crescente (padrão). False = decrescente.
+  bool _sortAscending = true;
+
   bool _isDisposed = false;
 
   ThemeMode get themeMode => _themeMode;
@@ -257,6 +271,12 @@ class SettingsProvider extends ChangeNotifier {
   List<String> get ignoredFolders => List<String>.unmodifiable(
         _ignoredFolders,
       );
+
+  /// Ordenação escolhida da biblioteca (item 4.3).
+  SongSortKey get sortKey => _sortKey;
+
+  /// Sentido da ordenação (true = crescente).
+  bool get sortAscending => _sortAscending;
 
   /// Define a duração mínima (apenas valores de [minDurationOptions]).
   Future<void> setLibraryMinDuration(int seconds) async {
@@ -437,6 +457,10 @@ class SettingsProvider extends ChangeNotifier {
               .where((String f) => _normalizeFolderPath(f) != null)
               .map((String f) => _normalizeFolderPath(f)!)
               .toList(growable: false);
+      // Item 4.3: chave desconhecida (valor gravado por versão futura/
+      // corrompido) volta para título; sentido cai em crescente.
+      _sortKey = SongSortKey.fromName(prefs.getString(_librarySortKeyKey));
+      _sortAscending = prefs.getBool(_librarySortAscendingKey) ?? true;
       _notify();
     } catch (e) {
       // Sem persistência disponível: mantém o padrão (system).
@@ -576,6 +600,25 @@ class SettingsProvider extends ChangeNotifier {
       await prefs.setString(_eqPresetKey, safePreset);
       await prefs.setBool(_eqBassEnabledKey, bassEnabled);
       await prefs.setInt(_eqBassStrengthKey, safeStrength);
+    } catch (e) {
+      // Falha de escrita não quebra a sessão atual.
+    }
+  }
+
+  /// Persiste a ordenação escolhida da biblioteca (item 4.3).
+  /// O PlayerProvider é quem chama, junto com a reordenação da lista.
+  Future<void> setSort({
+    required SongSortKey key,
+    required bool ascending,
+  }) async {
+    if (_sortKey == key && _sortAscending == ascending) return;
+    _sortKey = key;
+    _sortAscending = ascending;
+    _notify();
+    try {
+      final SharedPreferences prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_librarySortKeyKey, key.name);
+      await prefs.setBool(_librarySortAscendingKey, ascending);
     } catch (e) {
       // Falha de escrita não quebra a sessão atual.
     }

@@ -41,6 +41,14 @@ class Song {
   /// runtime quando o player carrega a faixa).
   final Duration? duration;
 
+  /// Data de adição no MediaStore (epoch em SEGUNDOS; item 4.3 —
+  /// ordenação por "Data de adição"). Null para assets e bancos antigos.
+  final int? dateAdded;
+
+  /// Número da faixa dentro do álbum (`track` do SongModel, item 4.3 —
+  /// dentro de álbum, ordenar por número da faixa). Pode vir nulo.
+  final int? trackNumber;
+
   /// True quando a faixa vem do bundle de assets do app.
   final bool isAsset;
 
@@ -55,6 +63,8 @@ class Song {
     this.albumId,
     this.filePath,
     this.duration,
+    this.dateAdded,
+    this.trackNumber,
     required this.isAsset,
   });
 
@@ -86,6 +96,8 @@ class Song {
       duration: model.duration != null && model.duration! > 0
           ? Duration(milliseconds: model.duration!)
           : null,
+      dateAdded: model.dateAdded,
+      trackNumber: model.track,
       isAsset: false,
     );
   }
@@ -112,6 +124,8 @@ class Song {
         'asset_key': assetKey,
         'is_asset': isAsset ? 1 : 0,
         'duration_ms': duration?.inMilliseconds,
+        'date_added': dateAdded,
+        'track_number': trackNumber,
       };
 
   /// Reconstrói uma [Song] a partir do mapa do banco (colunas snake_case).
@@ -134,6 +148,10 @@ class Song {
       duration: map['duration_ms'] != null
           ? Duration(milliseconds: map['duration_ms'] as int)
           : null,
+      // Colunas do item 4.3: ausentes em mapas antigos (banco antes da
+      // migração 5→6 ou snapshot antigo) viram null — nunca crash.
+      dateAdded: map['date_added'] as int?,
+      trackNumber: map['track_number'] as int?,
       isAsset: isAsset == 1,
     );
   }

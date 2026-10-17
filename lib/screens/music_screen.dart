@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../models/media_ref.dart';
 import '../models/song_model.dart';
+import '../models/song_sort_key.dart';
 import '../providers/player_provider.dart';
 import '../providers/favorites_provider.dart';
 import '../providers/playlist_provider.dart';
@@ -105,6 +106,8 @@ typedef _MusicView = ({
   String searchQuery,
   AudioPermissionState permission,
   String? errorMessage,
+  SongSortKey sortKey,
+  bool sortAscending,
 });
 
 class _MusicScreenState extends State<MusicScreen> with MediaSelection<String> {
@@ -255,6 +258,8 @@ class _MusicScreenState extends State<MusicScreen> with MediaSelection<String> {
         searchQuery: p.searchQuery,
         permission: p.permission,
         errorMessage: p.errorMessage,
+        sortKey: p.sortKey,
+        sortAscending: p.sortAscending,
       ),
     );
 
@@ -373,6 +378,48 @@ class _MusicScreenState extends State<MusicScreen> with MediaSelection<String> {
                       }),
                     ),
                   ),
+                // Item 4.3 — ordenação escolhível: critério (item
+                // marcado) + sentido, junto com os chips de agrupamento.
+                Padding(
+                  padding: const EdgeInsets.only(right: 8),
+                  child: PopupMenuButton<({SongSortKey? key, bool? toggleDirection})>(
+                    tooltip: 'Ordenar',
+                    icon: const Icon(Icons.sort),
+                    itemBuilder: (BuildContext menuContext) => <PopupMenuEntry<
+                        ({SongSortKey? key, bool? toggleDirection})>>[
+                      for (final SongSortKey key in SongSortKey.values)
+                        CheckedPopupMenuItem(
+                          value: (key: key, toggleDirection: null),
+                          checked: view.sortKey == key,
+                          child: Text(key.label),
+                        ),
+                      const PopupMenuDivider(),
+                      PopupMenuItem(
+                        value: (key: null, toggleDirection: true),
+                        child: Text(
+                          view.sortAscending
+                              ? 'Ordem decrescente'
+                              : 'Ordem crescente',
+                        ),
+                      ),
+                    ],
+                    onSelected: (
+                      ({SongSortKey? key, bool? toggleDirection}) value,
+                    ) {
+                      if (value.toggleDirection == true) {
+                        provider.setSort(
+                          key: view.sortKey,
+                          ascending: !view.sortAscending,
+                        );
+                      } else if (value.key != null) {
+                        provider.setSort(
+                          key: value.key!,
+                          ascending: view.sortAscending,
+                        );
+                      }
+                    },
+                  ),
+                ),
               ],
             ),
           ),
