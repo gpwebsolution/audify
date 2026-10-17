@@ -27,7 +27,9 @@ class FileQueryHandler(
         // Canal do GERENCIADOR DE ARQUIVOS: apenas o que dart:io não alcança
         // (espaço dos volumes via StatFs, miniatura de vídeo/PDF por CAMINHO
         // — não por id de MediaStore — e parse do binário AndroidManifest de
-        // APKs soltos no disco). Toda a I/O comum é Dart puro.
+        // APKs soltos no disco). Toda a I/O comum é Dart puro. Entram aqui
+        // também as ações de IMAGEM (papel de parede/editor): o Dart chama
+        // por este canal desde a primeira versão do ImageActionsService.
         MethodChannel(
             flutterEngine.dartExecutor.binaryMessenger,
             "audify/file_query"
@@ -51,6 +53,35 @@ class FileQueryHandler(
                         return@setMethodCallHandler
                     }
                     result.success(queryApkInfo(path))
+                }
+                "getContentUri" -> {
+                    // Converte um caminho em content:// via FileProvider —
+                    // o único tipo de URI aceito por apps de fora desde o
+                    // Android 7 (FileUriExposedException).
+                    val path = call.argument<String>("path")
+                    if (path.isNullOrEmpty()) {
+                        result.error("bad_args", "path obrigatório", null)
+                        return@setMethodCallHandler
+                    }
+                    result.success(queryContentUri(path))
+                }
+                "setAsWallpaper" -> {
+                    val path = call.argument<String>("path")
+                    if (path.isNullOrEmpty()) {
+                        result.error("bad_args", "path obrigatório", null)
+                        return@setMethodCallHandler
+                    }
+                    setAsWallpaper(path)
+                    result.success(null)
+                }
+                "editImage" -> {
+                    val path = call.argument<String>("path")
+                    if (path.isNullOrEmpty()) {
+                        result.error("bad_args", "path obrigatório", null)
+                        return@setMethodCallHandler
+                    }
+                    editImage(path)
+                    result.success(null)
                 }
                 else -> result.notImplemented()
             }
@@ -288,6 +319,98 @@ class FileQueryHandler(
             )
         } catch (e: Exception) {
             null
+        }
+    }
+
+    // =====================================================================
+    // AÇÕES DE IMAGEM (papel de parede, editor) — canal audify/file_query
+    // =====================================================================
+
+    /// `content://` de um arquivo, via FileProvider.
+    ///
+    /// Desde o Android 7 nenhum app pode passar `file://` para fora
+    /// (FileUriExposedException). Devolve null quando o caminho não existe ou
+    /// está fora das raízes declaradas em `res/xml/file_paths.xml`.
+    private fun queryContentUri(path: String): String? {
+        return try {
+            val file = java.io.File(path)
+            if (!file.exists()) return null
+            androidx.core.content.FileProvider.getUriForFile(
+                activity,
+                "${activity.packageName}.fileprovider",
+                file
+            ).toString()
+        } catch (e: Exception) {
+            android.util.Log.w("AudifyNative", "contentUri($path): $e")
+            null
+        }
+    }
+
+    /**
+     * Abre o seletor de papel de parede do sistema com a imagem.
+     *
+     * Usa ACTION_SET_WALLPAPER (e não `WallpaperManager.setStream`) de
+     * propósito: o SO mostra a pré-visualização e deixa o usuário cortar e
+     * posicionar, em vez de esticar a imagem e estragá-la.
+     */
+    private fun setAsWallpaper(path: String) {
+        val uri = queryContentUri(path)
+        if (uri == null) {
+            activity.runOnUiThread {
+                Toast.makeText(activity, "Não foi possível abrir esta imagem.", Toast.LENGTH_SHORT).show()
+            }
+            return
+        }
+        val intent = Intent(Intent.ACTION_SET_WALLPAPER).apply {
+            data = Uri.parse(uri)
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+        activity.runOnUiThread {
+            startActivitySafely(intent, "Nenhum app de papel de parede encontrado")
+        }
+    }
+
+    /**
+     * Abre a imagem em um EDITOR externo (ACTION_EDIT).
+     *
+     * ACTION_EDIT e não ACTION_VIEW: ACTION_VIEW abriria o visualizador, só de
+     * leitura, que não resolve "editar".
+     */
+    private fun editImage(path: String) {
+        val uri = queryContentUri(path)
+        if (uri == null) {
+            activity.runOnUiThread {
+                Toast.makeText(activity, "Não foi possível abrir esta imagem.", Toast.LENGTH_SHORT).show()
+            }
+            return
+        }
+        val intent = Intent(Intent.ACTION_EDIT).apply {
+            data = Uri.parse(uri)
+            type = "image/*"
+            addFlags(
+                Intent.FLAG_GRANT_READ_URI_PERMISSION or
+                    Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+            )
+        }
+        activity.runOnUiThread {
+            startActivitySafely(intent, "Nenhum editor de imagem instalado")
+        }
+    }
+
+    /**
+     * Inicia uma intent informando quando NENHUM app pode atender.
+     *
+     * `ActivityNotFoundException` é o sintoma de "não há app instalado" e sem
+     * este tratamento a tela ficaria em silêncio — o usuário tocaria em
+     * "Editar" e nada aconteceria, igual ao bug das ListTile inertes.
+     */
+    private fun startActivitySafely(intent: Intent, emptyMessage: String) {
+        try {
+            activity.startActivity(intent)
+        } catch (e: android.content.ActivityNotFoundException) {
+            Toast.makeText(activity, emptyMessage, Toast.LENGTH_LONG).show()
+        } catch (e: SecurityException) {
+            Toast.makeText(activity, "O Android bloqueou esta ação.", Toast.LENGTH_SHORT).show()
         }
     }
 }
