@@ -19,3 +19,28 @@ Cada linha: ID do item, o que falta e o motivo.
   só por testes de unidade/serviço (fila carregada, seek sem recarga,
   transição por evento, fatores de volume). Checklist manual no relatório
   final.
+
+---
+
+## 3.6 — Letras (offline)
+
+- **ID3 parcial: só v2.3 e v2.4.** V2.2 (frames de 3 letras) não é
+  lido; tags com unsync, extended header/footer ignorados (frame
+  "unsincronizado" é picotado e não é recuperado); frame SYLT (letra
+  sincronizada de fato) não é interpretado — só USLT. Format flags do
+  frame ≠ 0 fazem o frame ser pulado.
+- **Tag grande não alcançada:** a leitura embutida varre no máximo
+  256KB do arquivo (o USLT costuma estar no começo, mas uma playlist
+  gigante antes dele não é coberta).
+- **USLT com descritor sem byte terminador é descartado** (retorna
+  null em vez de arriscar texto torto).
+- **`.lrc` só via arquivo ao lado do MP3 ou asset empacotado** — o app
+  não busca letras na rede (offline por regra) e nenhum `.lrc` de
+  demonstração foi adicionado aos assets (só existem os dois MP3).
+- **Sem highlight em texto corrido:** letra embutida que não tem
+  marcações LRC vira "texto corrido" (lista inteira, sem linha corrente
+  destacada) — é o esperado, mas não há transformação automática.
+- **Offset `[offset]`** segue a convenção da Wikipédia (+ adianta a
+  letra); players que interpretam ao contrário terão letra 2×off.
+- **Não validado em aparelho:** folha com letra real, rolagem automática
+  e legibilidade em telas pequenas — checklist no relatório final.

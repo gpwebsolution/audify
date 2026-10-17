@@ -9,6 +9,7 @@ import '../providers/settings_provider.dart';
 import '../services/audio_service.dart';
 import '../utils/format.dart';
 import '../widgets/album_artwork.dart';
+import '../widgets/lyrics_sheet.dart';
 import '../widgets/media_actions.dart';
 import '../widgets/media_details_sheet.dart';
 import 'equalizer_screen.dart';
@@ -345,6 +346,26 @@ class _PlayerScreenState extends State<PlayerScreen> {
     );
   }
 
+  /// Item 3.6 — folha de letras OFFLINE sincronizada com a posição.
+  Future<void> _showLyricsSheet(
+    BuildContext context,
+    PlayerProvider provider,
+  ) async {
+    final Song? song = provider.currentSong;
+    if (song == null) return;
+    await showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      // Rota nova: o provider declarado no escopo desta tela não
+      // alcança o sheet — reanexa a MESMA instância (folio da fila).
+      builder: (BuildContext sheetContext) =>
+          ChangeNotifierProvider<PlayerProvider>.value(
+        value: provider,
+        child: LyricsSheet(song: song),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final PlayerProvider provider = context.watch<PlayerProvider>();
@@ -368,6 +389,14 @@ class _PlayerScreenState extends State<PlayerScreen> {
               tooltip: 'Fila de reprodução',
               icon: const Icon(Icons.queue_music),
               onPressed: () => _showQueueSheet(context, provider),
+            ),
+          // Item 3.6: letras offline (.lrc ao lado do áudio ou ID3
+          // USLT do MP3) — folha com destaque da linha sincronizado.
+          if (song != null)
+            IconButton(
+              tooltip: 'Letras',
+              icon: const Icon(Icons.lyrics),
+              onPressed: () => _showLyricsSheet(context, provider),
             ),
           // Item 3.1: timer de sono — ícone aceso quando agendado; o
           // tempo restante aparece no chip acima do slider. Sem faixa
