@@ -184,3 +184,44 @@ Cada linha: ID do item, o que falta e o motivo.
   ida-e-volta, casamento, relatório e duplicação tem 13 testes puros,
   mas os canais nativos (file_picker, share sheet) ficam de fora —
   ficam no checklist "não validado em aparelho" do relatório final.
+
+---
+
+## 4.6 — Editar tags/capa (OPCIONAL) — PROPSTIVA E DECISÃO
+
+**Não codado: custo alto, conforme a própria spec autoriza.**
+
+### Proposta curta (antes de codar, como pedido)
+
+- **Biblioteca candidata:** `phonic` (pure Dart, ID3v2 + capa/APIC,
+  formato unificado MP3/FLAC/OGG/MP4 — cobre o que o MediaStore traz;
+  alternativa mais enxuta e só-MP3: `id3_codec`; evitado
+  `haudiotagger` por puxar binário Rust por plataforma e
+  `audiotagger`/`flutter_audio_tagger` por gravação nativa por path,
+  negada no Android 11+). Dependência NOVA — a regra-padrão do
+  prompt é "sem dependências novas"; só este item a permitiria.
+- **Tamanho estimado:** ~700–1000 linhas no total — serviço Dart de
+  edição com backup/escrita (~200–300), MÉTODO/SERVICE NATIVO NOVO
+  (canal próprio, ex.: `audify/media_edit`, com
+  `MediaStore.createWriteRequest` na API 29+ e fallback com
+  `WRITE_EXTERNAL_STORAGE` na API 24–28, ~100–150 linhas Kotlin),
+  folha de edição de campos + capa por file_picker (~250–350) e
+  testes (~150–250). Os 5 MethodChannels existentes não mudam, mas
+  nasce um sexto.
+- **Fluxo inevitável:** diálogo de escrita do SO (análogo ao
+  `createDeleteRequest` da exclusão) → ContentResolver abre o URI →
+  lê os bytes inteiros → tag aplicada em Dart → reescreve o URI.
+- **Riscos:** (1) reescrita integral do arquivo — falha no meio
+  corrompe ou mata a música (mitigação: gravar tmp e só depois
+  substituir, mesmo assim sem atomicidade real via ContentResolver);
+  (2) reindexação do MediaStore muda o id/caminho → faixas viram
+  FANTASMAS nas playlists/favoritos (que casam por song_id/file_path);
+  (3) ID3v2.4 com capa não abre em players antigos; (4) capa grande
+  em memória em aparelho fraco; (5) três caminhos de permissão por
+  faixa de API; (6) formatos além de .mp3 (m4a/flac) exigem a
+  biblioteca cobrindo todos ou regra por extensão.
+- **Veredito:** opcional pelo prompt + dependência nova + canal novo
+  + risco de perder a mídia do usuário ⇒ **custo alto, não implementar
+  agora.** Se a fase visual/idiomas fechar sem pendência melhor,
+  retomar com a bancada de testes de arquivo (mp3 de exemplo +
+  roundtrip de capa) antes de qualquer UI.
