@@ -374,3 +374,35 @@ Cada linha: ID do item, o que falta e o motivo.
   MaterialApp) e não há overflow. **Não testados a 2.0x**: as outras
   telas, e sheets/dialogs abertos a partir das principais (o conteúdo
   deles não é renderizado no pump inicial).
+
+---
+
+## 6.1 — Dividir MainActivity.kt
+
+- **Divisão por canal, um arquivo por handler**: `MainActivity.kt` foi de
+  1.734 para **28 linhas** — só `configureFlutterEngine` registrando os
+  handlers e `onActivityResult` repassando para `MediaDeleteHandler`.
+  Novos arquivos: `VideoQueryHandler` (172), `GalleryQueryHandler` (213),
+  `PdfQueryHandler` (159), `MediaDeleteHandler` (1.005),
+  `FileQueryHandler` (293). Nomes de canal, métodos e payloads
+  **idênticos** — nenhum arquivo `.dart` foi tocado.
+- **Estado pendente da exclusão** continua em `companion object`
+  (escopo de processo) — agora no companion de `MediaDeleteHandler`,
+  junto do doc que explica por que sobrevive à rotação da Activity;
+  `MainActivity` só chama `super.onActivityResult` e delega.
+- **Referências implícitas à Activity** reparadas nos handlers
+  (`contentResolver`, `runOnUiThread`, `startIntentSenderForResult`,
+  `Toast`, `startActivity`, `packageManager`, `this@MainActivity` →
+  `activity.…`).
+- **Aceite cumprido**: `media_delete_channel_test.dart` e
+  `media_delete_service_test.dart` passaram **sem nenhuma alteração**;
+  `flutter build apk --debug` compila; suíte completa 512/512 e
+  `flutter analyze` limpo. Nenhum teste novo foi adicionado neste item
+  (a proteção é a suíte Dart intacta + build).
+- **Por que `MediaDeleteHandler` continua com ~1.000 linhas**: o bloco
+  de exclusão é coeso (companion + ciclo reservar→dialogo→finishDelete);
+  partir mais exigiria dividir o estado compartilhado entre arquivos,
+  ganhando acoplamento sem ganho de clareza — decisão deliberada.
+- **Não reescrevemos o histórico**: `CORRECOES.md §6` ainda cita
+  `MainActivity.deleteWithSystemDialog` — é documentação do que foi
+  feito na época; o método hoje vive em `MediaDeleteHandler`.
