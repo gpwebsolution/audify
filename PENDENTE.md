@@ -49,11 +49,9 @@ Cada linha: ID do item, o que falta e o motivo.
 
 ## 3.7 — Mini player e PlayerScreen
 
-- **Botão de favorito (coração) NÃO entrou na tela.** O 3.7 pede
-  fila/timer/velocidade/favorito, mas favoritos de música só existem a
-  partir do item 4.1 (tabela favorite_songs); um coração morto hoje
-  enganaria o usuário. Entra no 4.1 junto com a tabela — fila, timer e
-  velocidade já são botões visíveis na tela (_quickActions).
+- ~~**Botão de favorito (coração) NÃO entrou na tela.**~~ **Resolvido no
+  4.1:** `_quickActions` ganhou o coração (e o menu de ações da faixa,
+  também).
 - **Cor derivada da capa só para faixa de aparelho.** Faixas asset (os
   dois MP3 do bundle) não têm MediaStore/capa → o player usa o tema da
   casa; se a extração de cor falhar, também (log 'player/capaColors'),
@@ -61,3 +59,27 @@ Cada linha: ID do item, o que falta e o motivo.
 - **Não validado em aparelho:** rotação real retrato↔paisagem, capa
   com cor dominante de álbum de verdade e legibilidade da coluna
   direita em telas baixas — checklist no relatório final.
+
+---
+
+## 4.1 — Favoritos de música
+
+- **`song_id` órfão após reindex do MediaStore.** A tabela guarda
+  `file_path` como reserva (o id do MediaStore muda quando o sistema
+  reindexa), mas NÃO existe rotina de reconciliação: um favorito com id
+  antigo some da busca e fica invisível (a linha não é reaproveitada).
+  Seria um passo futuro: achar por `file_path` e regravar o id novo.
+- **Coração oculto no modo de seleção em lote.** Na seleção multipla o
+  trailing vira checkbox + ações do lote; favoritar uma a uma ali não
+  faz sentido com o lote aberto (deliberado, não uma lacuna técnica).
+- **"Favoritas" é automática, sem CRUD.** Não renomeia, não exclui,
+  não reordena — é a entrada fixa da aba Playlists que abre o
+  FavoritesDetailScreen (é o que a spec pede).
+- **Ordem fixa por título (NOCASE).** Sem critério escolhível — a
+  ordenação por data/duração/ano é o item 4.3.
+- **Migração 3 → 4 coberta só por sqflite_common_ffi em desktop.**
+  Teste cria um banco v3 na mão e reabre; não foi verificada a
+  migração com dados reais de aparelho.
+- **Não validado em aparelho:** coração persistindo entre reinícios,
+  contagem no tile da lista, entrada "Favoritas" e play-all do detalhe
+  — checklist no relatório final.

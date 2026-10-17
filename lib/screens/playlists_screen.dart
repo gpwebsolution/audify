@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../providers/favorites_provider.dart';
 import '../providers/playlist_provider.dart';
+import 'favorites_detail_screen.dart';
 import 'playlist_detail_screen.dart';
 
 /// Aba de Playlists: lista as playlists do usuário com CRUD.
@@ -34,6 +36,10 @@ class PlaylistsScreen extends StatelessWidget {
 
     return Column(
       children: [
+        // Item 4.1 — playlist automática "Favoritas" PINADA no topo,
+        // antes do carregamento e mesmo sem playlist alguma (a fonte é
+        // a tabela favorite_songs, não a tabela playlists).
+        const _FavoritesTile(),
         Expanded(
           child: provider.isLoading
               ? const Center(child: CircularProgressIndicator())
@@ -130,6 +136,54 @@ class PlaylistsScreen extends StatelessWidget {
             child: const Text('Excluir'),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// Item 4.1 — entrada fixa "Favoritas" no topo da aba.
+///
+/// Playlist automática: sem CRUD de playlist (não renomeia/exclui/
+/// reordena) — o detalhe é o [FavoritesDetailScreen] e a fonte é a
+/// tabela `favorite_songs`.
+class _FavoritesTile extends StatelessWidget {
+  const _FavoritesTile();
+
+  @override
+  Widget build(BuildContext context) {
+    final ColorScheme colors = Theme.of(context).colorScheme;
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+      child: ListenableBuilder(
+        listenable: FavoritesProvider.instance,
+        builder: (BuildContext context, _) {
+          final int count = FavoritesProvider.instance.count;
+          return ListTile(
+            leading: CircleAvatar(
+              backgroundColor: colors.errorContainer,
+              child: Icon(Icons.favorite, color: colors.onErrorContainer),
+            ),
+            title: const Text(
+              'Favoritas',
+              style: TextStyle(fontWeight: FontWeight.w600),
+            ),
+            subtitle: Text(
+              count == 0
+                  ? 'Toque no coração de uma faixa para começar'
+                  : '$count ${count == 1 ? 'faixa' : 'faixas'}',
+            ),
+            trailing: const Icon(Icons.chevron_right),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) => const FavoritesDetailScreen(),
+              ),
+            ),
+          );
+        },
       ),
     );
   }

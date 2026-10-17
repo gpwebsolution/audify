@@ -7,6 +7,7 @@ import 'package:provider/provider.dart';
 import '../models/media_ref.dart';
 import '../models/song_model.dart';
 import '../providers/player_provider.dart';
+import '../providers/favorites_provider.dart';
 import '../providers/playlist_provider.dart';
 import '../providers/settings_provider.dart';
 import '../services/album_artwork_cache.dart';
@@ -95,6 +96,28 @@ class _PlayerScreenState extends State<PlayerScreen> {
                 enabled: hasPlaylists,
                 onTap: () =>
                     go(() => _addCurrentToPlaylist(context, playlists, song)),
+              ),
+              // Item 4.1 — favoritar pelo menu (mesmo efeito do coração
+              // das ações rápidas; estado lido na abertura, o menu fecha).
+              Builder(
+                builder: (BuildContext tileContext) {
+                  final bool fav =
+                      FavoritesProvider.instance.isFavorite(song.id);
+                  return ListTile(
+                    leading: Icon(
+                      fav ? Icons.favorite : Icons.favorite_border,
+                      color: fav ? colors.error : null,
+                    ),
+                    title: Text(fav ? 'Desfavoritar' : 'Favoritar'),
+                    subtitle: fav
+                        ? const Text('Some da playlist Favoritas')
+                        : const Text('Entra na playlist Favoritas'),
+                    onTap: () {
+                      Navigator.pop(sheetContext);
+                      FavoritesProvider.instance.toggle(song);
+                    },
+                  );
+                },
               ),
               ListTile(
                 leading: const Icon(Icons.share_outlined),
@@ -657,8 +680,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
   }
 
   /// Item 3.7 — fila, timer e velocidade como botões VISÍVEIS na tela
-  /// (antes só no AppBar, que ficava com cinco ações). O coração do
-  /// favorito entra no item 4.1, com a tabela favorite_songs — PENDENTE.
+  /// (antes só no AppBar, que ficava com cinco ações) + o coração do
+  /// favorito (item 4.1 — o 3.7 deixou a vaga, o 4.1 preencheu).
   Widget _quickActions(
     BuildContext context,
     PlayerProvider provider,
@@ -705,6 +728,26 @@ class _PlayerScreenState extends State<PlayerScreen> {
                       ),
                     )
                     .toList(),
+          ),
+          // Item 4.1 — coração do favorito da faixa corrente (estado do
+          // singleton; só este botão reconstrói quando o estado muda).
+          ListenableBuilder(
+            listenable: FavoritesProvider.instance,
+            builder: (BuildContext context, _) {
+              final Song? current = provider.currentSong;
+              final bool fav = current != null &&
+                  FavoritesProvider.instance.isFavorite(current.id);
+              return IconButton(
+                tooltip: fav ? 'Desfavoritar' : 'Favoritar',
+                icon: Icon(
+                  fav ? Icons.favorite : Icons.favorite_border,
+                  color: fav ? colors.error : colors.onSurfaceVariant,
+                ),
+                onPressed: current == null
+                    ? null
+                    : () => FavoritesProvider.instance.toggle(current),
+              );
+            },
           ),
         ],
       ),

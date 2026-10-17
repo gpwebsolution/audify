@@ -10,7 +10,8 @@ import '../utils/format.dart';
 ///
 /// Responsabilidade: apresentação de UMA faixa — capa de álbum (ou ícone
 /// fallback), título, artista e duração — com destaque visual para a faixa
-/// em reprodução. Widget puro: recebe tudo por parâmetros.
+/// em reprodução e o coração de favorito (item 4.1). Widget puro: recebe
+/// tudo por parâmetros.
 class SongListTile extends StatelessWidget {
   final Song song;
   final bool isCurrent;
@@ -28,6 +29,12 @@ class SongListTile extends StatelessWidget {
 
   final Widget? trailing;
 
+  /// Item 4.1 — coração de favorito. Sem [onFavoriteToggle] o coração não
+  /// aparece (call sites antigos seguem intactos); no modo seleção ele
+  /// some junto com o menu: o espaço do trailing é da ação em lote.
+  final bool isFavorite;
+  final VoidCallback? onFavoriteToggle;
+
   /// Estado de seleção múltipla. [selectionMode] ligado troca a capa pela
   /// checkbox e pinta o item — o mesmo desenho da aba Arquivos.
   final bool selected;
@@ -42,6 +49,8 @@ class SongListTile extends StatelessWidget {
     this.onLongPress,
     this.onMenuTap,
     this.trailing,
+    this.isFavorite = false,
+    this.onFavoriteToggle,
     this.selected = false,
     this.selectionMode = false,
   });
@@ -50,6 +59,46 @@ class SongListTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final ColorScheme colors = Theme.of(context).colorScheme;
     final bool marked = selectionMode && selected;
+
+    // O que vai depois do coração: trailing custom (ex.: alça de
+    // reordenar), o ícone da faixa tocando ou o botão de menu.
+    final Widget? tail = selectionMode
+        ? null
+        : trailing ??
+              (isCurrent
+                  ? Icon(
+                      isPlaying
+                          ? Icons.graphic_eq
+                          : Icons.pause_circle_outline,
+                      color: colors.primary,
+                    )
+                  : onMenuTap == null
+                  ? null
+                  : IconButton(
+                      tooltip: 'Ações da faixa',
+                      icon: const Icon(Icons.more_vert),
+                      onPressed: onMenuTap,
+                    ));
+    final bool showHeart = !selectionMode && onFavoriteToggle != null;
+    final Widget? trailingWidget = !showHeart
+        ? tail
+        : Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              IconButton(
+                tooltip: isFavorite ? 'Desfavoritar' : 'Favoritar',
+                icon: Icon(
+                  isFavorite ? Icons.favorite : Icons.favorite_border,
+                  color: isFavorite
+                      ? colors.error
+                      : colors.onSurfaceVariant,
+                  size: 22,
+                ),
+                onPressed: onFavoriteToggle,
+              ),
+              ?tail,
+            ],
+          );
 
     return ListTile(
       onTap: onTap,
@@ -78,25 +127,9 @@ class SongListTile extends StatelessWidget {
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
       ),
-      // No modo seleção o botão de menu some: o polegar precisa ir para a
-      // ação em lote (o item também não seria "de um item só").
-      trailing: selectionMode
-          ? null
-          : trailing ??
-                (isCurrent
-                    ? Icon(
-                        isPlaying
-                            ? Icons.graphic_eq
-                            : Icons.pause_circle_outline,
-                        color: colors.primary,
-                      )
-                    : onMenuTap == null
-                    ? null
-                    : IconButton(
-                        tooltip: 'Ações da faixa',
-                        icon: const Icon(Icons.more_vert),
-                        onPressed: onMenuTap,
-                      )),
+      // Sem trailing nenhum (modo seleção, ou tile sem coração/menu)
+      // o ListTile vira "só texto" — o espaço é da ação principal.
+      trailing: trailingWidget,
       selected: marked || isCurrent,
       selectedTileColor: marked
           ? colors.secondaryContainer.withValues(alpha: 0.5)

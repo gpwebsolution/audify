@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 
 import '../models/song_model.dart';
 import '../models/video_model.dart';
+import '../providers/favorites_provider.dart';
 import '../providers/player_provider.dart';
 import '../providers/playlist_provider.dart';
 import '../services/video_query_service.dart';
@@ -436,25 +437,33 @@ class _ReorderableSongs extends StatelessWidget {
         return ReorderableDragStartListener(
           key: ValueKey('song-${song.id}'),
           index: index,
-          child: SongListTile(
-            song: song,
-            isCurrent: isCurrent,
-            isPlaying: isCurrent && isPlaying,
-            onTap: () => onTap(song),
-            onLongPress: () => onRemove(song),
-            trailing: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(Icons.drag_indicator, color: colors.onSurfaceVariant),
-                IconButton(
-                  tooltip: 'Remover da playlist',
-                  icon: Icon(
-                    Icons.remove_circle_outline,
-                    color: colors.onSurfaceVariant,
+          child: ListenableBuilder(
+            // Item 4.1: coração assiste ao singleton — o tile continua
+            // puro, recebendo estado por parâmetro.
+            listenable: FavoritesProvider.instance,
+            builder: (BuildContext context, _) => SongListTile(
+              song: song,
+              isCurrent: isCurrent,
+              isPlaying: isCurrent && isPlaying,
+              isFavorite: FavoritesProvider.instance.isFavorite(song.id),
+              onFavoriteToggle: () =>
+                  FavoritesProvider.instance.toggle(song),
+              onTap: () => onTap(song),
+              onLongPress: () => onRemove(song),
+              trailing: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.drag_indicator, color: colors.onSurfaceVariant),
+                  IconButton(
+                    tooltip: 'Remover da playlist',
+                    icon: Icon(
+                      Icons.remove_circle_outline,
+                      color: colors.onSurfaceVariant,
+                    ),
+                    onPressed: () => onRemove(song),
                   ),
-                  onPressed: () => onRemove(song),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         );

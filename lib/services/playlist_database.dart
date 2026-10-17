@@ -18,9 +18,12 @@ import '../models/video_model.dart';
 ///    + colunas de exibição para reconstruir a Song offline)
 ///  - playlist_videos(playlist_id FK, video_id INTEGER, position INTEGER,
 ///    + colunas de exibição para reconstruir o Video offline)
+///  - favorite_songs(song_id TEXT PK, file_path TEXT como reserva se o
+///    id do MediaStore mudar ao reindexar, + colunas de exibição,
+///    added_at INTEGER) — item 4.1 (favoritos de música)
 class PlaylistDatabase {
   static const String _dbName = 'audify.db';
-  static const int _dbVersion = 3;
+  static const int _dbVersion = 4;
 
   static Database? _db;
 
@@ -70,6 +73,12 @@ class PlaylistDatabase {
             await db.execute(
               "ALTER TABLE playlist_songs ADD COLUMN album_id INTEGER",
             );
+          }
+          if (oldVersion < 4) {
+            // Item 4.1 — favoritos de música. Chave song_id; file_path
+            // como reserva (o id do MediaStore muda se o arquivo for
+            // reindexado — o caminho permite re-associar depois).
+            await _createFavoriteSongs(db);
           }
         },
       );
@@ -124,6 +133,28 @@ class PlaylistDatabase {
         date_added INTEGER,
         PRIMARY KEY (playlist_id, video_id),
         FOREIGN KEY (playlist_id) REFERENCES playlists(id) ON DELETE CASCADE
+      )
+    ''');
+    await _createFavoriteSongs(db);
+  }
+
+  /// Item 4.1 — tabela de favoritos (usada no onCreate E no onUpgrade
+  /// 3→4; mesma DDL nos dois caminhos para o esquema nunca divergir).
+  static Future<void> _createFavoriteSongs(Database db) async {
+    await db.execute('''
+      CREATE TABLE favorite_songs(
+        song_id TEXT PRIMARY KEY,
+        file_path TEXT,
+        title TEXT,
+        artist TEXT,
+        album TEXT,
+        media_id INTEGER,
+        album_id INTEGER,
+        asset_path TEXT,
+        asset_key TEXT,
+        is_asset INTEGER NOT NULL DEFAULT 0,
+        duration_ms INTEGER,
+        added_at INTEGER NOT NULL
       )
     ''');
   }
@@ -224,6 +255,43 @@ class PlaylistDatabase {
       where: 'song_id = ?',
       whereArgs: [songId],
     );
+  }
+
+  // ------------------------------------------------------------------
+  // Item 4.1 — favoritos de música (favorite_songs)
+  // ------------------------------------------------------------------
+
+  /// Favorita uma faixa (idempotente: repetir não duplica nem mexe no
+  /// `added_at` original — o INSERT é ignorado em conflito de chave).
+  static Future<void> addFavorite(Song song) async {
+    final Database db = await _database();
+    await db.insert(
+      'favorite_songs',
+      song.toStored()
+        ..['added_at'] = DateTime.now().millisecondsSinceEpoch,
+      conflictAlgorithm: ConflictAlgorithm.ignore,
+    );
+  }
+
+  /// Desfavorita (no-op silencioso se a faixa não estava favoritada).
+  static Future<void> removeFavorite(String songId) async {
+    final Database db = await _database();
+    await db.delete(
+      'favorite_songs',
+      where: 'song_id = ?',
+      whereArgs: [songId],
+    );
+  }
+
+  /// Favoritas na mesma ordem de leitura das playlists (título sem
+  /// distinção de maiúsculas) — [Song.fromStored] reconstrói offline.
+  static Future<List<Song>> getFavorites() async {
+    final Database db = await _database();
+    final List<Map<String, Object?>> rows = await db.query(
+      'favorite_songs',
+      orderBy: 'title COLLATE NOCASE',
+    );
+    return rows.map(Song.fromStored).whereType<Song>().toList();
   }
 
   /// Vídeos de uma playlist, na ordem salva.

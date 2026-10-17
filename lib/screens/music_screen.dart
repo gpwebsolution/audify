@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../models/media_ref.dart';
 import '../models/song_model.dart';
 import '../providers/player_provider.dart';
+import '../providers/favorites_provider.dart';
 import '../providers/playlist_provider.dart';
 import '../services/permission_service.dart';
 import '../widgets/media_actions.dart';
@@ -462,15 +463,23 @@ class _MusicScreenState extends State<MusicScreen> with MediaSelection<String> {
           final Song song = view.visibleSongs[index];
           final bool isCurrent = view.currentSong?.id == song.id;
           final bool marked = isSelected(song.id);
-          return SongListTile(
-            song: song,
-            isCurrent: isCurrent,
-            isPlaying: isCurrent && view.isPlaying,
-            selected: marked,
-            selectionMode: isSelectionMode,
-            onTap: () => _onSongTap(provider, index, song),
-            onLongPress: () => _onSongLongPress(song),
-            onMenuTap: () => _showSongMenu(context, provider, song),
+          // Item 4.1: o coração assiste ao singleton (sem provider no
+          // grafo) e só reconstrói o tile alterado, não a lista inteira.
+          return ListenableBuilder(
+            listenable: FavoritesProvider.instance,
+            builder: (context, _) => SongListTile(
+              song: song,
+              isCurrent: isCurrent,
+              isPlaying: isCurrent && view.isPlaying,
+              selected: marked,
+              selectionMode: isSelectionMode,
+              isFavorite: FavoritesProvider.instance.isFavorite(song.id),
+              onFavoriteToggle: () =>
+                  FavoritesProvider.instance.toggle(song),
+              onTap: () => _onSongTap(provider, index, song),
+              onLongPress: () => _onSongLongPress(song),
+              onMenuTap: () => _showSongMenu(context, provider, song),
+            ),
           );
         },
       );
@@ -518,18 +527,24 @@ class _MusicScreenState extends State<MusicScreen> with MediaSelection<String> {
         }
         final Song song = row.group.songs[row.indexInGroup];
         final bool isCurrent = view.currentSong?.id == song.id;
-        return SongListTile(
-          song: song,
-          isCurrent: isCurrent,
-          isPlaying: isCurrent && view.isPlaying,
-          selected: isSelected(song.id),
-          selectionMode: isSelectionMode,
-          // O grupo vira a fila: próxima/anterior navega dentro dele.
-          onTap: () => isSelectionMode
-              ? toggleSelect(song.id)
-              : provider.playQueue(row.group.songs, row.indexInGroup),
-          onLongPress: () => _onSongLongPress(song),
-          onMenuTap: () => _showSongMenu(context, provider, song),
+        return ListenableBuilder(
+          listenable: FavoritesProvider.instance,
+          builder: (context, _) => SongListTile(
+            song: song,
+            isCurrent: isCurrent,
+            isPlaying: isCurrent && view.isPlaying,
+            selected: isSelected(song.id),
+            selectionMode: isSelectionMode,
+            isFavorite: FavoritesProvider.instance.isFavorite(song.id),
+            onFavoriteToggle: () =>
+                FavoritesProvider.instance.toggle(song),
+            // O grupo vira a fila: próxima/anterior navega dentro dele.
+            onTap: () => isSelectionMode
+                ? toggleSelect(song.id)
+                : provider.playQueue(row.group.songs, row.indexInGroup),
+            onLongPress: () => _onSongLongPress(song),
+            onMenuTap: () => _showSongMenu(context, provider, song),
+          ),
         );
       },
     );
@@ -540,6 +555,10 @@ class _MusicScreenState extends State<MusicScreen> with MediaSelection<String> {
     // Mesma regra do modelo: o que não vira MediaRef não é excluível (faixa
     // embutida no APK, ou faixa sem id/caminho para localizar no aparelho).
     final bool isAsset = MediaRef.fromSong(song) == null;
+    // Item 4.1 — estado do coração LIDO na abertura do menu (o menu
+    // fecha no toggle; o coração do tile já mostra o resultado).
+    final FavoritesProvider favorites = FavoritesProvider.instance;
+    final bool isFav = favorites.isFavorite(song.id);
 
     showModalBottomSheet<void>(
       context: context,
@@ -578,6 +597,24 @@ class _MusicScreenState extends State<MusicScreen> with MediaSelection<String> {
               onTap: () {
                 Navigator.pop(sheetContext);
                 _pickPlaylist(context, song);
+              },
+            ),
+            // Item 4.1 — favoritar pelo menu (mesmo efeito do coração
+            // do tile, para quem chegou por aqui).
+            ListTile(
+              leading: Icon(
+                isFav ? Icons.favorite : Icons.favorite_border,
+                color: isFav
+                    ? Theme.of(context).colorScheme.error
+                    : null,
+              ),
+              title: Text(isFav ? 'Desfavoritar' : 'Favoritar'),
+              subtitle: isFav
+                  ? const Text('Some da playlist Favoritas')
+                  : const Text('Entra na playlist Favoritas'),
+              onTap: () {
+                Navigator.pop(sheetContext);
+                favorites.toggle(song);
               },
             ),
             if (!isAsset) ...[

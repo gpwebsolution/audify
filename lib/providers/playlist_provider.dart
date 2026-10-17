@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import '../models/song_model.dart';
 import '../models/video_model.dart';
 import '../repositories/playlist_repository.dart';
+import 'favorites_provider.dart';
 import 'player_provider.dart';
 
 /// Uma playlist com suas faixas (DTO de exibição).
@@ -319,6 +320,10 @@ class PlaylistProvider extends ChangeNotifier {
     try {
       for (final Song song in songs) {
         await _repository.removeSongFromAll(song.id);
+        // Item 4.1: arquivo excluído também sai dos favoritos — um
+        // coração apontando para música que não existe mais seria
+        // item fantasma (mesma razão do cleanup de playlists aqui).
+        await FavoritesProvider.instance.remove(song.id);
       }
       await reload();
     } catch (e) {
