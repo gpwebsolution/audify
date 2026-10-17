@@ -581,3 +581,136 @@ Cada linha: ID do item, o que falta e o motivo.
 
 - `flutter analyze` limpo e suíte **546/546** após as mudanças;
   `flutter build apk --debug` ✓ (manifest e XML automotivo compilam).
+
+---
+
+## 7 — Fora de escopo / decisões do dono (perguntas — NÃO decididas)
+
+Registradas conforme a Seção 7 do prompt (só perguntar, não decidir):
+
+1. **Licença do Syncfusion** (`syncfusion_flutter_pdfviewer`): exige
+   licença (a Community tem condições). Você se enquadra? Não troquei de
+   biblioteca por conta própria.
+2. **Publicação na Play Store**: exigiria `applicationId` próprio,
+   keystore e revisar `MANAGE_EXTERNAL_STORAGE`/`REQUEST_INSTALL_PACKAGES`.
+   Hoje o app é de uso pessoal: nada foi mexido nesses campos (regra
+   inviolável do prompt).
+3. **Impeller**: continua desligado; só o dono, com teste no hardware
+   industrial, pode decidir reativar.
+4. **Motor just_audio**: a troca aconteceu no item 3.0 após o relatório do
+   portão de decisão (commits `721b55a` + `b452931`); a pergunta da spec
+   era aprovar o custo — revertê-la também é decisão do dono.
+
+---
+
+## 8 — Relatório final
+
+### Feito (por item, com commit)
+
+- **0.x (auditoria, leitura, branch + PENDENTE)**: feitos na conversa;
+  `0.3` = esta branch `melhorias-audify` com o PENDENTE (sem commit próprio).
+- **Fase 1 — correções do player**: 1.1 `3c28ca9`, 1.2 `1899ddf`,
+  1.3 `e99e231`, 1.4 `3a3608f`, 1.5 `b02d628`, 1.6 `9948f8f`,
+  1.7 `d5c6f83`, 1.8 `c78bfd4`, 1.9 `7130042`, 1.10 `9c4a318`,
+  1.11 `3b66a37`.
+- **Fase 2 — biblioteca e desempenho**: 2.1 `c768316`, 2.2 `9121d25`,
+  2.3 `df6868c`, 2.4 `94011f0`, 2.5 `bed04f9`, 2.6 `f2a413f`.
+- **Fase 3 — reprodução**: 3.0 `721b55a` (relatório do portão) +
+  `b452931` (troca por just_audio), 3.1 `b8a83cd`, 3.2 `265f480`,
+  3.3 `920b4ee`, 3.4 `409214e` (+ `46136a0` limitações), 3.5 `cae6841`,
+  3.6 `7a88fe0`, 3.7 `9f99465`.
+- **Fase 4 — biblioteca social**: 4.1 `f1d2514`, 4.2 `479a399`,
+  4.3 `cd0d80c`, 4.4 `de15bc8`, 4.5 `3df73d3`,
+  4.6 `e4bc777` (proposta + decisão, não codado).
+- **Fase 5 — idiomas/config/acessibilidade**: 5.1 `a36f744`,
+  5.2 `58c34da`, 5.3 `543397a`.
+- **Fase 6 — refatoração/CI/docs**: 6.1 `76c9d8f`, 6.2 `b1f58e0`,
+  6.3 `2d2856e`, 6.4 `12a03e1`, 6.5a `d78ad8b`.
+
+### Pulado / adiado
+
+- **4.6 — Editar tags/capa**: não codado (custo alto: dependência nova +
+  canal nativo novo + risco de corromper a mídia do usuário — a spec
+  autoriza pular). Proposta e veredito em PENDENTE §4.6.
+- **6.5b — Widget de tela inicial**: adiado por decisão do dono
+  (PENDENTE §6.5). Limitações parciais de itens feitos (crossfade 3.4,
+  ID3 3.6 etc.) continuam em PENDENTE §3.4/§3.6.
+
+### Verificado de fato
+
+- `flutter analyze`: **No issues found**.
+- `flutter test`: **208 antes** (commit `5d08a3d`, pré-item 1.1 — medido
+  agora no worktree daquele commit) → **546 depois** (+338).
+- `flutter build apk --debug`: **✓** `build/app/outputs/flutter-apk/app-debug.apk`
+  (versão `1.1.0+2`, após 6.5a — manifesto e XML automotivo compilam).
+- CI (6.3): workflow com Flutter fixado em **3.47.2** + JDK 17; **nunca
+  rodou em runner real** (sem push, por regra do prompt).
+
+### Não verificado em aparelho
+
+Tudo o que depende de hardware real está no checklist manual abaixo.
+Além dele, específico: **toque/browse do Android Auto num veículo real**,
+gapless/crossfade auditivo, capa/cores em MediaStore de verdade,
+equalizador em dispositivo físico e aparelho industrial (Impeller off).
+
+### Riscos e migrações
+
+- **Banco** `playlist_database`: **3 → 6** (a spec previa 3 → 4; o
+  trabalho real somou4.1 favoritos →4, 4.2 histórico →5, 4.3 colunas de
+  ordenação →6). Cada migração tem teste (3→4 `favorites_songs_test`,
+  4→5 `playback_history_test`, 5→6 `song_sort_test`).
+- **Permissões**: **nenhuma nova no manifesto** (12 antes = 12 depois).
+  Mudou o fluxo de pedido (por aba + notificação no 1º play, item1.11);
+  entraram o receiver `MEDIA_BUTTON` (1.1) e a meta-data automotiva (6.5a).
+- **Motor**: `audioplayers` → **just_audio** `^0.10.6` (3.0) — saiu do
+  pubspec; única troca de motor. `audio_service ^0.18.19`.
+- **Versão**: `1.0.0+1` → `1.1.0+2` (6.4).
+- **Intocados por regra**: `applicationId`, assinatura release,
+  `androidNotificationChannelId`, `androidStopForegroundOnPause: false`,
+  Impeller off, os 5 MethodChannel (nomes e payloads idênticos),
+  `third_party/on_audio_query_android`.
+
+### [CONFIRMAR] — desfecho das 6 noções da spec
+
+1. **Global** ("itens marcados são suposições mais fracas") — nenhuma
+   suposição errada obrigou a pular um item; ajustes foram registrados.
+2. **1.1** (trecho do README do audio_service): **confirmado** —
+   receiver documentado, trecho citado no comentário do manifest.
+3. **1.8** (artUri legado falha no Android 10+): solução implementada
+   (JPEG em cache + `Uri.file`, logo nos assets); confirmação em
+   aparelho = checklist.
+4. **2.5** (áudios de WhatsApp/toques misturados): filtros novos
+   (duração mínima + pastas ignoradas) implementados; evidência visual
+   em aparelho = checklist.
+5. **3.7** (capa 320 deforma): implementado (LayoutBuilder + duas
+   colunas); rotação em aparelho = checklist.
+6. **4.3** (campos reais do SongModel): **suposição INCORRETO** —
+   `on_audio_query 2.9.0` não expõe `year`; o item NÃO foi pulado, foi
+   adaptado: ordenação por ano usa `dateAdded` (PENDENTE §4.3).
+
+### Checklist de teste manual (em aparelho real, para o dono)
+
+- [ ] Play/pause/próxima pelo fone com fio e Bluetooth, com a tela
+      apagada e app em segundo plano.
+- [ ] Desconectar o fone durante a música: pausa.
+- [ ] Ligação recebida: pausa e retoma; outro app de áudio assume:
+      não retoma sozinho.
+- [ ] Timer de sono com a tela apagada (dispara, faz fade, para o serviço).
+- [ ] Capa na notificação e na tela de bloqueio (faixa do aparelho e
+      faixa embutida).
+- [ ] Shuffle: não repete a mesma faixa em sequência; "anterior" volta
+      na ordem tocada.
+- [ ] Digitar na busca durante a reprodução: a fila que toca não muda.
+- [ ] Biblioteca grande (milhares de músicas): rolagem fluida, abertura
+      rápida, modo Álbum/Artista/Pasta.
+- [ ] Rotação do player (retrato/paisagem) sem capa deformada ou overflow.
+- [ ] Instalação limpa: permissões pedidas só quando a aba é aberta.
+- [ ] Trocar idioma (Sistema/Português/English) e conferir telas principais.
+- [ ] Exportar e importar uma playlist; abrir playlist com arquivo
+      apagado fora do app.
+- [ ] Excluir música/vídeo/foto/PDF continua funcionando em Android 10,
+      11+ (nada regrediu).
+- [ ] Aparelho fraco/industrial: sem travadas novas; Impeller continua
+      desligado.
+- [ ] Android Auto: browse (Todas/Favoritas/Recentes) e toque pelo head
+      unit/Bluetooth (6.5a).
