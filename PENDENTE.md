@@ -159,3 +159,28 @@ Cada linha: ID do item, o que falta e o motivo.
 - **Não validado em aparelho:** criação em cada uma das 5 telas
   (player, música single, música em lote, vídeo, vídeos em lote) —
   checklist no relatório final.
+
+---
+
+## 4.5 — Exportar e importar playlists
+
+- **Import usa o catálogo EM MEMÓRIA** do PlayerProvider (a lista que a
+  tela já carregou): faixa que existe no aparelho mas ainda não entrou
+  na varredura não casa — o relatório conta como "não encontrada" até
+  um re-scan colocá-la no catálogo.
+- **.m3u8 é o formato pobre**: só título/artista/caminho/duração em
+  segundos (álbum sai fora) e faixa SEM caminho nenhum é pulada no
+  export — o JSON, com todos os cinco campos do item, é o formato
+  completo. No casamento do m3u8, artista que contiver " - " perde a
+  parte depois do primeiro separador (convenção "Artista - Título").
+- **Caminho de asset exporta como `assets/songs/...`**: em outro
+  aparelho esse path não existe e o casamento cai no título+artista
+  normalizados (testado), mas playlists 100% de assets importadas fora
+  do aparelho original casam só quando os nomes baterem.
+- **Duplicar preserva o snapshot fiel, inclusive fantasmas** (faixas
+  cujo arquivo sumiu do aparelho); duplica faixas E vídeos. Não há
+  duplicação a partir da lista de Playlists — só pelo menu do detalhe.
+- **Export/import/duplicar não têm teste de widget**: a lógica de
+  ida-e-volta, casamento, relatório e duplicação tem 13 testes puros,
+  mas os canais nativos (file_picker, share sheet) ficam de fora —
+  ficam no checklist "não validado em aparelho" do relatório final.

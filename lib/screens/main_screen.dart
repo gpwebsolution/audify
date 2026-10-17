@@ -1,3 +1,6 @@
+import 'dart:convert';
+
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -9,6 +12,7 @@ import '../providers/player_provider.dart';
 import '../utils/back_action.dart';
 import '../providers/playlist_provider.dart';
 import '../providers/video_provider.dart';
+import '../services/playlist_transfer_service.dart';
 import 'files_screen.dart';
 import 'gallery_screen.dart';
 import 'music_screen.dart';
@@ -177,6 +181,98 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
     }
   }
 
+  /// Item 4.5 — importa JSON/.m3u8 escolhido pelo usuário: casa as
+  /// entradas com o catálogo atual e mostra o relatório honesto
+  /// "X importadas, Y não encontradas".
+  Future<void> _importPlaylist(BuildContext context) async {
+    // Tudo que precisa de context ANTES das esperas: o canal do
+    // seletor de arquivos demora e o lint proíbe atravessar o gap.
+    final ScaffoldMessengerState messenger = ScaffoldMessenger.of(context);
+    final ColorScheme colors = Theme.of(context).colorScheme;
+    final PlaylistProvider playlists = context.read<PlaylistProvider>();
+    final catalog = context.read<PlayerProvider>().songs;
+
+    final List<PlatformFile> files = await FilePicker.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: const <String>['json', 'm3u8'],
+    );
+    final PlatformFile? picked = files.firstOrNull;
+    if (picked == null) return;
+
+    final List<int> bytes;
+    try {
+      bytes = await picked.readAsBytes();
+    } catch (e) {
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text('Não foi possível ler o arquivo: $e'),
+          backgroundColor: colors.error,
+        ),
+      );
+      return;
+    }
+
+    final String content;
+    try {
+      content = utf8.decode(bytes);
+    } on FormatException {
+      messenger.showSnackBar(
+        SnackBar(
+          content: const Text('Arquivo não é texto UTF-8 válido.'),
+          backgroundColor: colors.error,
+        ),
+      );
+      return;
+    }
+
+    final String lower = picked.name.toLowerCase();
+    final String baseName = lower.endsWith('.m3u8')
+        ? picked.name.substring(0, picked.name.length - '.m3u8'.length)
+        : picked.name;
+    final PlaylistTransferFile file;
+    try {
+      file = lower.endsWith('.m3u8')
+          ? decodePlaylistM3u8(content, name: baseName)
+          : decodePlaylistJson(content);
+    } on FormatException catch (e) {
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text('Arquivo inválido: ${e.message}'),
+          backgroundColor: colors.error,
+        ),
+      );
+      return;
+    }
+
+    final PlaylistImportReport report = await playlists.importPlaylist(
+      file,
+      catalog,
+    );
+    if (!messenger.mounted) return;
+    final bool emptyMatch = report.imported == 0 && report.notFound > 0;
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text(_reportText(report)),
+        backgroundColor: emptyMatch ? colors.error : null,
+      ),
+    );
+  }
+
+  /// Relatório do item 4.5, com plural correto.
+  static String _reportText(PlaylistImportReport report) {
+    if (report.imported == 0 && report.notFound == 0) {
+      return 'Arquivo sem faixas.';
+    }
+    final String first =
+        '${report.imported} '
+        '${report.imported == 1 ? 'importada' : 'importadas'}';
+    if (report.notFound == 0) return '$first.';
+    final String second =
+        '${report.notFound} '
+        '${report.notFound == 1 ? 'não encontrada' : 'não encontradas'}';
+    return '$first, $second.';
+  }
+
   /// FAB de criar playlist, adaptado à largura disponível.
   ///
   /// Em tela estreita (celular) fica circular, com o Tooltip explicando. Em
@@ -256,7 +352,19 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
         _handleRootBack();
       },
       child: Scaffold(
-        appBar: AppBar(title: Text(_titles[_currentIndex])),
+        appBar: AppBar(
+          title: Text(_titles[_currentIndex]),
+          actions: [
+            // Item 4.5 — importar arquivo de playlist (só na aba
+            // Playlists; o export fica no menu do detalhe).
+            if (_currentIndex == MainTab.playlists.index)
+              IconButton(
+                tooltip: 'Importar playlist',
+                icon: const Icon(Icons.file_open_outlined),
+                onPressed: () => _importPlaylist(context),
+              ),
+          ],
+        ),
         // O mini player fica em `bottomNavigationBar`, e NÃO dentro do `body`.
         // Com ele no `body`, o Scaffold acreditava que o corpo terminava no
         // rodapé da tela e pousava o FAB em cima da faixa — o botão "criar

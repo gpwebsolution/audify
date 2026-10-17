@@ -1,6 +1,8 @@
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
 
 import '../models/song_model.dart';
@@ -8,6 +10,8 @@ import '../models/video_model.dart';
 import '../providers/favorites_provider.dart';
 import '../providers/player_provider.dart';
 import '../providers/playlist_provider.dart';
+import '../services/media_share_service.dart';
+import '../services/playlist_transfer_service.dart';
 import '../services/video_query_service.dart';
 import '../utils/format.dart';
 import '../widgets/song_list_tile.dart';
@@ -83,6 +87,31 @@ class _PlaylistDetailScreenState extends State<PlaylistDetailScreen> {
             tooltip: 'Renomear',
             icon: const Icon(Icons.edit_outlined),
             onPressed: () => _rename(context, provider),
+          ),
+          // Item 4.5 — duplicar e exportar (JSON/.m3u8).
+          PopupMenuButton<_DetailAction>(
+            tooltip: 'Mais ações',
+            icon: const Icon(Icons.more_vert),
+            onSelected: (_DetailAction action) => switch (action) {
+              _DetailAction.duplicate => _duplicate(context, provider),
+              _DetailAction.exportJson => _export(context, json: true),
+              _DetailAction.exportM3u8 => _export(context, json: false),
+            },
+            itemBuilder: (BuildContext _) =>
+                const <PopupMenuEntry<_DetailAction>>[
+                  PopupMenuItem<_DetailAction>(
+                    value: _DetailAction.duplicate,
+                    child: Text('Duplicar playlist'),
+                  ),
+                  PopupMenuItem<_DetailAction>(
+                    value: _DetailAction.exportJson,
+                    child: Text('Exportar JSON'),
+                  ),
+                  PopupMenuItem<_DetailAction>(
+                    value: _DetailAction.exportM3u8,
+                    child: Text('Exportar .m3u8'),
+                  ),
+                ],
           ),
         ],
       ),
@@ -314,7 +343,58 @@ class _PlaylistDetailScreenState extends State<PlaylistDetailScreen> {
       ),
     );
   }
+
+  /// Item 4.5 — "Duplicar playlist": cópia fiel com nome "(cópia)".
+  Future<void> _duplicate(
+    BuildContext context,
+    PlaylistProvider provider,
+  ) async {
+    final String? name = await provider.duplicate(widget.playlistId);
+    if (name == null || !context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Playlist duplicada como "$name"')),
+    );
+  }
+
+  /// Item 4.5 — exporta em JSON ou .m3u8 e abre a folha de
+  /// compartilhar do sistema (mesmo caminho dos arquivos de mídia).
+  Future<void> _export(BuildContext context, {required bool json}) async {
+    final PlaylistProvider provider = context.read<PlaylistProvider>();
+    final ScaffoldMessengerState messenger = ScaffoldMessenger.of(context);
+    final ColorScheme colors = Theme.of(context).colorScheme;
+    final List<PlaylistTransferEntry>? entries = await provider
+        .exportEntries(widget.playlistId);
+    if (entries == null || !context.mounted) return;
+    try {
+      final String content = json
+          ? encodePlaylistJson(widget.playlistName, entries)
+          : encodePlaylistM3u8(entries);
+      final String safe = widget.playlistName.replaceAll(
+        RegExp(r'[\\/:*?"<>|]'),
+        '_',
+      );
+      final String fileName = '$safe.${json ? 'json' : 'm3u8'}';
+      final Directory dir = await getTemporaryDirectory();
+      final File file = File('${dir.path}/$fileName');
+      await file.writeAsString(content);
+      await MediaShareService.shareFile(
+        path: file.path,
+        fileName: fileName,
+        mimeType: json ? 'application/json' : 'audio/x-mpegurl',
+      );
+    } catch (e) {
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text('Não foi possível exportar: $e'),
+          backgroundColor: colors.error,
+        ),
+      );
+    }
+  }
 }
+
+/// Itens do menu "Mais ações" do detalhe (item 4.5).
+enum _DetailAction { duplicate, exportJson, exportM3u8 }
 
 /// Cabeçalho de seção com botão de reproduzir tudo (opcional).
 class _SectionHeader extends StatelessWidget {

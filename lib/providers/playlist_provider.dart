@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import '../models/song_model.dart';
 import '../models/video_model.dart';
 import '../repositories/playlist_repository.dart';
+import '../services/playlist_transfer_service.dart';
 import 'favorites_provider.dart';
 import 'player_provider.dart';
 
@@ -98,6 +99,105 @@ class PlaylistProvider extends ChangeNotifier {
       _notify();
       return false;
     }
+  }
+
+  // ------------------------------------------------------------------
+  // Item 4.5 — exportar/importar/duplicar
+  // ------------------------------------------------------------------
+
+  /// Snapshot das faixas para o export (JSON/.m3u8).
+  Future<List<PlaylistTransferEntry>?> exportEntries(int playlistId) async {
+    try {
+      final List<Song> songs = await _repository.getSongs(playlistId);
+      return <PlaylistTransferEntry>[
+        for (final Song song in songs) PlaylistTransferEntry.fromSong(song),
+      ];
+    } catch (e) {
+      _errorMessage = 'Não foi possível exportar a playlist: $e';
+      _notify();
+      return null;
+    }
+  }
+
+  /// Importa um arquivo: casa as entradas com o catálogo, cria a
+  /// playlist com nome LIVRE (colisão ganha " (2)") e adiciona as
+  /// casadas numa transação só. O relatório é honesto: [imported]
+  /// conta o que entrou de verdade, [notFound] o que não achou nenhuma
+  /// faixa ("X importadas, Y não encontradas").
+  Future<PlaylistImportReport> importPlaylist(
+    PlaylistTransferFile file,
+    List<Song> catalog,
+  ) async {
+    final ({List<Song> songs, int notFound}) match = matchPlaylistEntries(
+      file.entries,
+      catalog,
+    );
+    if (match.songs.isEmpty) {
+      return PlaylistImportReport(imported: 0, notFound: match.notFound);
+    }
+    final String base = file.name.trim().isEmpty
+        ? 'Playlist importada'
+        : file.name.trim();
+    final String name = await _uniqueName(base);
+    if (!await create(name)) {
+      return PlaylistImportReport(imported: 0, notFound: file.entries.length);
+    }
+    final int? id = _idByName(name);
+    if (id == null) {
+      return PlaylistImportReport(imported: 0, notFound: file.entries.length);
+    }
+    final int added = await addSongsToPlaylist(id, match.songs);
+    return PlaylistImportReport(
+      imported: added,
+      notFound: file.entries.length - added,
+    );
+  }
+
+  /// Duplica fielmente (faixas E vídeos, na mesma ordem) com nome
+  /// "(cópia)" — colisão ganha número. Devolve o nome novo, ou null.
+  Future<String?> duplicate(int playlistId) async {
+    try {
+      Playlist? source;
+      for (final Playlist playlist in _playlists) {
+        if (playlist.id == playlistId) source = playlist;
+      }
+      if (source == null) return null;
+
+      final String name = await _uniqueName('${source.name} (cópia)');
+      final List<Song> songs = await _repository.getSongs(playlistId);
+      final List<Video> videos = await _repository.getVideos(playlistId);
+      await _repository.createPlaylist(name);
+      await reload();
+      final int? newId = _idByName(name);
+      if (newId == null) return null;
+      await _repository.addSongs(newId, songs);
+      if (videos.isNotEmpty) {
+        await _repository.addVideos(newId, videos);
+      }
+      await reload();
+      return name;
+    } catch (e) {
+      _errorMessage = 'Não foi possível duplicar a playlist: $e';
+      _notify();
+      return null;
+    }
+  }
+
+  /// Nome livre perto de [base]: 'base', 'base (2)', 'base (3)'...
+  Future<String> _uniqueName(String base) async {
+    final Set<String> taken = <String>{for (final p in _playlists) p.name};
+    if (!taken.contains(base)) return base;
+    for (int n = 2; ; n++) {
+      final String candidate = '$base ($n)';
+      if (!taken.contains(candidate)) return candidate;
+    }
+  }
+
+  int? _idByName(String name) {
+    for (final Playlist playlist in _playlists) {
+      if (playlist.name == name) return playlist.id;
+    }
+    return null;
   }
 
   Future<void> rename(int id, String name) async {
