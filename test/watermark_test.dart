@@ -191,5 +191,85 @@ void main() {
       expect(a.path, b.path);
       expect(File(b.path).existsSync(), isTrue);
     });
+
+    test('o texto principal ocupa ~80% da largura (design 80%/30%)', () async {
+      // Regressão do defeito reportado: fontScale default era 0.035 — texto
+      // com 3,5% da largura, ilegível. O design original (commit 4445829)
+      // manda 80% na largura do texto principal e ~30% na assinatura.
+      final File source = writeImage('escala.png', 800, 600);
+      final WatermarkResult result = await WatermarkService.applyText(
+        sourcePath: source.path,
+        text: 'texto bem comprido para testar',
+      );
+
+      final img.Image out = img.decodeJpg(
+        File(result.path).readAsBytesSync(),
+      )!;
+      int minX = out.width, maxX = 0;
+      for (int y = (out.height * 0.7).round(); y < out.height; y++) {
+        for (int x = 0; x < out.width; x++) {
+          final p = out.getPixel(x, y);
+          // Texto branco (alpha 235 sobre o degradê, suavizado pelo JPEG):
+          // os três canais altos. A sombra é escura e o fundo nunca passa
+          // de b=128, então fica separado com folga.
+          if (p.r > 190 && p.g > 190 && p.b > 160) {
+            if (x < minX) minX = x;
+            if (x > maxX) maxX = x;
+          }
+        }
+      }
+      expect(maxX, greaterThan(0), reason: 'o texto não apareceu na cópia');
+      final double fraction = (maxX - minX + 1) / out.width;
+      expect(
+        fraction,
+        greaterThan(0.65),
+        reason: 'texto ficou estreito demais (fraction=$fraction)',
+      );
+      expect(
+        fraction,
+        lessThan(0.95),
+        reason: 'texto estourou a imagem (fraction=$fraction)',
+      );
+    });
+
+    test('EXIF: foto gravada de lado sai orientada na cópia', () async {
+      // Celulares gravam com Orientation=6 (sensor de lado); o encoder de
+      // saída não herda EXIF, então sem bakeOrientation a cópia sairia
+      // girada 90°.
+      final img.Image raw = img.Image(width: 400, height: 300);
+      img.fill(raw, color: img.ColorRgb8(70, 110, 170));
+      raw.exif.imageIfd['Orientation'] = 6;
+      final File source = File('${dir.path}/girada.jpg');
+      source.writeAsBytesSync(img.encodeJpg(raw));
+
+      final WatermarkResult result = await WatermarkService.applyText(
+        sourcePath: source.path,
+        text: 'lado',
+      );
+
+      final img.Image out = img.decodeJpg(
+        File(result.path).readAsBytesSync(),
+      )!;
+      expect(out.width, 300, reason: 'largura deve girar junto com a foto');
+      expect(out.height, 400, reason: 'altura deve girar junto com a foto');
+    });
+  });
+
+  group('WatermarkService.asciiFold', () {
+    test('© vira (c) e acentos viram ASCII', () {
+      expect(WatermarkService.asciiFold('© Meu estúdio'), '(c) Meu estudio');
+      expect(WatermarkService.asciiFold('Ação'), 'Acao');
+      expect(WatermarkService.asciiFold('¼'), '?');
+    });
+
+    test('combining marks (NFD) só são removidas', () {
+      expect(WatermarkService.asciiFold('e\u0301'), 'e');
+      expect(WatermarkService.asciiFold('a\u0303\u0301'), 'a');
+    });
+
+    test('ASCII puro passa sem mudança', () {
+      expect(WatermarkService.asciiFold('abc XYZ 123'), 'abc XYZ 123');
+      expect(WatermarkService.asciiFold('“aspas” – ok…'), '"aspas" - ok...');
+    });
   });
 }

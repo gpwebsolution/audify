@@ -86,8 +86,11 @@ class WatermarkService {
     required String sourcePath,
     required String text,
 
-    /// Tamanio da fonte como fração da largura da imagem (0.02 = 2%).
-    double fontScale = 0.035,
+    /// Fração da LARGURA da imagem que o texto principal ocupa (0.8 = 80%,
+    /// o design "80% / 30%" do commit original — a assinatura usa
+    /// `fontScale * 0.36` ≈ 29%). Antes valia 0.035, o que deixava o texto
+    /// com 3,5% da largura: ilegível em foto de celular.
+    double fontScale = 0.8,
 
     /// Margem inferior como fração da altura (0.05 = 5%).
     double marginScale = 0.05,
@@ -100,6 +103,11 @@ class WatermarkService {
       throw ArgumentError('texto vazio');
     }
 
+    // A fonte bitmap do pacote `image` só tem glifos ASCII: "©", "é", "ç"...
+    // seriam pulados em silêncio no desenho ("Meu estdio" com buraco).
+    // Dobra para ASCII ANTES de mandar para o isolate.
+    final String safe = asciiFold(trimmed);
+
     // O diretório é resolvido AQUI, na isolate principal, e viaja no job.
     // `compute` roda em isolate nova, onde estado estático (o override dos
     // testes) não existe — e o path_provider precisa de canal nativo, que
@@ -108,11 +116,69 @@ class WatermarkService {
 
     return compute(_applyTextJob, <String, Object?>{
       'source': sourcePath,
-      'text': trimmed,
+      'text': safe,
       'fontScale': fontScale,
       'marginScale': marginScale,
       'outputDir': outDir.path,
     });
+  }
+
+  /// Glifos ausentes na fonte bitmap viram ASCII legível (PT/EN/símbolos).
+  ///
+  /// A fonte `arial48` do pacote `image` só desenha 32–126; qualquer code
+  /// point fora é ignorado pelo `drawString` SEM erro — o texto sairia com
+  /// buracos ("© Meu estúdio" → " Meu estdio"). Combining marks (acentos
+  /// em decomposição) caem fora também e são descartados; o que não tiver
+  /// mapa vira `?` (visível, em vez de sumir).
+  @visibleForTesting
+  static String asciiFold(String text) {
+    const Map<int, String> fold = <int, String>{
+      0x00A9: '(c)', // ©
+      0x00AE: '(r)', // ®
+      0x2122: 'tm', // ™
+      0x20AC: 'EUR', // €
+      0x00B0: 'o', // °
+      0x00C0: 'A', 0x00C1: 'A', 0x00C2: 'A', 0x00C3: 'A', 0x00C4: 'A',
+      0x00C5: 'A', 0x00C7: 'C',
+      0x00C8: 'E', 0x00C9: 'E', 0x00CA: 'E', 0x00CB: 'E',
+      0x00CC: 'I', 0x00CD: 'I', 0x00CE: 'I', 0x00CF: 'I',
+      0x00D1: 'N',
+      0x00D2: 'O', 0x00D3: 'O', 0x00D4: 'O', 0x00D5: 'O', 0x00D6: 'O',
+      0x00D8: 'O',
+      0x00D9: 'U', 0x00DA: 'U', 0x00DB: 'U', 0x00DC: 'U',
+      0x00DD: 'Y', 0x00DF: 'ss',
+      0x00E0: 'a', 0x00E1: 'a', 0x00E2: 'a', 0x00E3: 'a', 0x00E4: 'a',
+      0x00E5: 'a', 0x00E7: 'c',
+      0x00E8: 'e', 0x00E9: 'e', 0x00EA: 'e', 0x00EB: 'e',
+      0x00EC: 'i', 0x00ED: 'i', 0x00EE: 'i', 0x00EF: 'i',
+      0x00F1: 'n',
+      0x00F2: 'o', 0x00F3: 'o', 0x00F4: 'o', 0x00F5: 'o', 0x00F6: 'o',
+      0x00F8: 'o',
+      0x00F9: 'u', 0x00FA: 'u', 0x00FB: 'u', 0x00FC: 'u',
+      0x00FD: 'y', 0x00FF: 'y',
+      0x0152: 'OE', 0x0153: 'oe', // Œ œ
+      0x2018: "'", 0x2019: "'", // ‘ ’
+      0x201C: '"', 0x201D: '"', // “ ”
+      0x2013: '-', 0x2014: '-', // – —
+      0x2026: '...', // …
+      0x2022: '*', // •
+    };
+    final StringBuffer out = StringBuffer();
+    for (final int rune in text.runes) {
+      if (rune < 0x80) {
+        out.writeCharCode(rune);
+        continue;
+      }
+      final String? mapped = fold[rune];
+      if (mapped != null) {
+        out.write(mapped);
+        continue;
+      }
+      // Marca combinante (acentos em decomposição NFD): só remove.
+      if (rune >= 0x0300 && rune <= 0x036F) continue;
+      out.write('?');
+    }
+    return out.toString();
   }
 
   /// Job do isolate: precisa ser top-level para o `compute`.
@@ -133,8 +199,15 @@ class WatermarkService {
     final Uint8List originalBytes = await sourceFile.readAsBytes();
     if (originalBytes.isEmpty) throw StateError('Arquivo vazio.');
 
-    final img.Image? decoded = img.decodeImage(originalBytes);
-    if (decoded == null) throw StateError('Formato de imagem não reconhecido.');
+    final img.Image? decodedRaw = img.decodeImage(originalBytes);
+    if (decodedRaw == null) {
+      throw StateError('Formato de imagem não reconhecido.');
+    }
+    // EXIF: foto de celular é gravada "de lado" com Orientation; o encoder
+    // de saída não herda EXIF, então sem assar a orientação a cópia sairia
+    // girada em relação ao original. `bakeOrientation` gira o buffer de
+    // verdade e limpa a tag.
+    final img.Image decoded = img.bakeOrientation(decodedRaw);
 
     final DateTime now = DateTime.now();
     String two(int n) => n.toString().padLeft(2, '0');
