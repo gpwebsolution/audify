@@ -1,0 +1,276 @@
+{
+  "@@locale": "pt",
+  "appTitle": "Audify",
+  "@appTitle": {
+    "description": "Nome do app"
+  },
+  "aboutSubtitle": "Player de mídia local — músicas, vídeos, fotos e PDFs.\nFeito por GpWebSolution",
+  "aboutVersion": "Versão {version}",
+  "@aboutVersion": {
+    "placeholders": {
+      "version": {
+        "type": "String"
+      }
+    }
+  },
+  "addButton": "Adicionar",
+  "addedManyToPlaylist": "{count, plural, one{{count} adicionada a \"{name}\"} other{{count} adicionadas a \"{name}\"}}",
+  "addedPartialToPlaylist": "{added} de {total} adicionadas a \"{name}\"",
+  "@addedPartialToPlaylist": {
+    "placeholders": {
+      "added": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      },
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "addedToPlaylist": "Adicionada a \"{name}\"",
+  "@addedToPlaylist": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "addToPlaylist": "Adicionar à playlist",
+  "allowBtn": "Permitir",
+  "appearanceTitle": "Aparência",
+  "atTrackEnd": "Ao fim da faixa",
+  "atTrackEndSub": "Para no fim desta faixa, sem pular para a próxima",
+  "batterySub": "Recomendado: sem isso, Xiaomi/Samsung/Motorola podem parar a música em segundo plano.",
+  "batteryTitle": "Ignorar otimização de bateria",
+  "cancel": "Cancelar",
+  "clearButton": "Limpar",
+  "clearSearchTooltip": "Limpar busca",
+  "closeButton": "Fechar",
+  "collapseTooltip": "Recolher",
+  "crossfadeDirect": "Troca de faixa direta (padrão).",
+  "crossfadeOverlap": "Nos últimos {n}s da faixa e nos primeiros {n}s da próxima, o volume faz a transição.",
+  "@crossfadeOverlap": {
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "crossfadeSubtitle": "Transição suave entre faixas — o fim da atual cai e a próxima sobe em volume (sem intervalo).",
+  "crossfadeTitle": "Crossfade",
+  "customSleep": "Personalizado",
+  "customSleepSub": "De 1 a 720 minutos",
+  "customTimerTitle": "Timer personalizado",
+  "deleteFromDevice": "Excluir do aparelho",
+  "deleteSubtitle": "{title} • o Android pedirá confirmação",
+  "@deleteSubtitle": {
+    "placeholders": {
+      "title": {
+        "type": "String"
+      }
+    }
+  },
+  "deleteTrackGoneSub": "Some da lista, da fila e das playlists",
+  "details": "Detalhes",
+  "detailsSub": "Álbum, artista, tamanho e caminho",
+  "emptyNoMusic": "Nenhuma música encontrada.\nAdicione arquivos .mp3 em assets/songs/ ou no aparelho.",
+  "emptyNoResults": "Nenhum resultado para \"{query}\".",
+  "@emptyNoResults": {
+    "placeholders": {
+      "query": {
+        "type": "String"
+      }
+    }
+  },
+  "emptyPermissionDenied": "Permissão de acesso às músicas negada.\nPermita acima para ver as músicas do aparelho.",
+  "equalizerSettingsSubtitle": "Bandas, presets e reforço de graves.",
+  "equalizerSheetSubtitle": "Bandas, presets e reforço de graves",
+  "equalizerTitle": "Equalizador",
+  "errorLogSub": "Diagnóstico local (fica só no aparelho).",
+  "errorLogTitle": "Log de erros",
+  "expandTooltip": "Expandir",
+  "favorite": "Favoritar",
+  "favoriteOffSub": "Some da playlist Favoritas",
+  "favoriteOnSub": "Entra na playlist Favoritas",
+  "foreverOption": "Para sempre",
+  "groupAlbum": "Álbum",
+  "groupArtist": "Artista",
+  "groupFolder": "Pasta",
+  "groupTracks": "Faixas",
+  "ignoredFoldersCount": "{count, plural, one{{count} pasta fora da biblioteca.} other{{count} pastas fora da biblioteca.}}",
+  "ignoredFoldersEmptySub": "Nenhuma. Áudios de WhatsApp/toques ficam misturados se o MediaStore marcar como música.",
+  "ignoredFoldersSheetSub": "Faixas DENTRO da pasta somem da biblioteca. Cole o caminho da pasta (subpastas também contam).",
+  "ignoredFoldersTitle": "Pastas ignoradas",
+  "invertSelection": "Inverter seleção",
+  "languageEnglish": "English",
+  "languagePortuguese": "Português",
+  "languageSection": "Idioma",
+  "licensesSub": "Bibliotecas usadas no app.",
+  "licensesTitle": "Licenças de código aberto",
+  "minDurationAll": "Todas as faixas aparecem (padrão).",
+  "minDurationHide": "Esconde faixas com menos de {label} — toques e notificações somem.",
+  "@minDurationHide": {
+    "placeholders": {
+      "label": {
+        "type": "String"
+      }
+    }
+  },
+  "minDurationHideShort": "Esconde do catálogo o que tiver menos de {label} — some com toques e notificações curtas.",
+  "@minDurationHideShort": {
+    "placeholders": {
+      "label": {
+        "type": "String"
+      }
+    }
+  },
+  "minDurationShowAll": "Mostra todas as faixas (padrão).",
+  "minDurationTitle": "Duração mínima",
+  "minutesCount": "{count, plural, one{{count} minuto} other{{count} minutos}}",
+  "minutesHint": "Ex.: 20",
+  "minutesLabel": "Minutos",
+  "minutesShort": "{count} min",
+  "@minutesShort": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "musicSearchHint": "Buscar música, artista ou álbum",
+  "noErrorsRecorded": "Nenhum erro registrado.",
+  "noIgnoredFolders": "Nenhuma pasta ignorada",
+  "noTrackSelected": "Nenhuma faixa selecionada",
+  "nowPlaying": "Agora tocando",
+  "offOption": "Desligado",
+  "openSettingsBtn": "Abrir ajustes",
+  "pause": "Pausar",
+  "pauseOnNoisySubtitle": "Ao tirar o fone (com fio ou Bluetooth), a música pausa — sem retomada automática.",
+  "pauseOnNoisyTitle": "Pausar ao desconectar fones",
+  "permissionAllow": "Permita o acesso às músicas para ver sua biblioteca.",
+  "permissionBlocked": "Permissão bloqueada. Libere nas Configurações do sistema para ver suas músicas.",
+  "permAllFiles": "Todos os arquivos",
+  "permAllFilesSub": "Listar PDFs no Android 13+ (acesso especial do sistema).",
+  "permMusic": "Músicas",
+  "permNotifications": "Notificações",
+  "permNotificationsSub": "Notificação de música na tela de bloqueio (Android 13+).",
+  "permPhotos": "Fotos",
+  "permVideos": "Vídeos",
+  "play": "Tocar",
+  "playGroupTooltip": "Tocar grupo",
+  "playingNow": "Tocando agora",
+  "previous": "Anterior",
+  "queueAppend": "Adicionar à fila",
+  "queueEmpty": "Fila vazia — use \"Tocar a seguir\" ou \"Adicionar à fila\" no menu de uma música.",
+  "queueHeader": "{count, plural, one{{count} faixa • toque para tocar, segure o alça para reordenar} other{{count} faixas • toque para tocar, segure o alça para reordenar}}",
+  "queuePlayNext": "Tocar a seguir",
+  "queueTooltip": "Fila de reprodução",
+  "recheckTooltip": "Verificar novamente",
+  "removeFromListTooltip": "Remover da lista",
+  "removeFromQueue": "Remover da fila",
+  "repeat": "Repetir",
+  "resumePlaybackSubtitle": "Ao abrir o app, retoma a última música e posição.",
+  "resumePlaybackTitle": "Continuar de onde parou",
+  "schedule": "Agendar",
+  "secondsShort": "{count} s",
+  "@secondsShort": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "selectedCount": "{count, plural, one{{count} selecionada} other{{count} selecionadas}}",
+  "settingsAbout": "Sobre",
+  "settingsBackground": "Segundo plano",
+  "settingsLibrary": "Biblioteca",
+  "settingsPermissions": "Permissões",
+  "settingsPlayback": "Reprodução",
+  "settingsTrash": "Lixeira",
+  "share": "Compartilhar",
+  "shareApps": "WhatsApp, Messenger e outros",
+  "shareSelected": "Compartilhar selecionadas",
+  "shuffleTooltip": "Embaralhar",
+  "skippedKept": "{count, plural, one{{count} faixa embutida no app foi mantida.} other{{count} faixas embutidas no app foram mantidas.}}",
+  "sleepActiveUntilEnd": "Dormindo ao fim da faixa",
+  "sleepActiveIn": "Dormindo em {time}",
+  "@sleepActiveIn": {
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "sleepChipUntilEnd": "Dormir ao fim da faixa",
+  "sleepChipIn": "Dormir em {time}",
+  "@sleepChipIn": {
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "sleepFadeNote": "O áudio dá fade e para sozinho.",
+  "sleepTimerTooltip": "Timer de sono",
+  "speedTooltip": "Velocidade {speed}x",
+  "@speedTooltip": {
+    "placeholders": {
+      "speed": {
+        "type": "String"
+      }
+    }
+  },
+  "sortAscendingOption": "Ordem crescente",
+  "sortDescendingOption": "Ordem decrescente",
+  "sortKeyAlbum": "Álbum",
+  "sortKeyArtist": "Artista",
+  "sortKeyDateAdded": "Data de adição",
+  "sortKeyDuration": "Duração",
+  "sortKeyMostPlayed": "Mais tocadas",
+  "sortKeyTitle": "Título",
+  "sortTooltip": "Ordenar",
+  "themeDark": "Escuro",
+  "themeLight": "Claro",
+  "trackActionsTooltip": "Ações da faixa",
+  "trashExpiresIn": "{days, plural, one{O que for excluído hoje será apagado em {days} dia.} other{O que for excluído hoje será apagado em {days} dias.}}",
+  "trashForeverSub": "Nada é apagado sozinho; você esvazia manualmente.",
+  "trashRetentionSubtitle": "Itens excluídos ficam na lixeira por {label}.\nDepois disso são apagados sozinhos, sem aviso — o resto fica disponível em Arquivos → Mais opções → Lixeira.",
+  "@trashRetentionSubtitle": {
+    "placeholders": {
+      "label": {
+        "type": "String"
+      }
+    }
+  },
+  "trashRetentionTitle": "Prazo de exclusão",
+  "tracksCount": "{count, plural, one{{count} faixa} other{{count} faixas}}",
+  "unfavorite": "Desfavoritar",
+  "viewTrashSubtitle": "Restaurar ou apagar definitivamente",
+  "viewTrashTitle": "Ver lixeira",
+  "daysCount": "{count, plural, one{{count} dia} other{{count} dias}}",
+  "assetLockedMessage": "Faixa embutida no app, não pode ser excluída.",
+  "optionSystem": "Sistema",
+  "addedUpNext": "A seguir: {title}",
+  "@addedUpNext": {
+    "placeholders": {
+      "title": {
+        "type": "String"
+      }
+    }
+  },
+  "addedInQueue": "Na fila: {title}",
+  "@addedInQueue": {
+    "placeholders": {
+      "title": {
+        "type": "String"
+      }
+    }
+  },
+  "shareAssetSub": "Faixa embutida no app: não é um arquivo",
+  "timerRangeError": "Informe um número de 1 a 720.",
+  "cancelTimer": "Desligar timer",
+  "next": "Próxima",
+  "lyricsTooltip": "Letras"
+}

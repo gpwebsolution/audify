@@ -3,9 +3,9 @@ import 'dart:async';
 import 'package:audio_service/audio_service.dart' as audio_service;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:provider/provider.dart';
 
+import 'l10n/app_localizations.dart';
 import 'providers/file_provider.dart';
 import 'providers/gallery_provider.dart';
 import 'services/catalog_snapshot_service.dart';
@@ -166,6 +166,17 @@ Future<void> _bootstrap() async {
   );
 }
 
+/// Resolução de locale do app (item 5.1): inglês vira `en`; qualquer
+/// outro idioma do sistema (ou lista vazia) cai no fallback pt-BR.
+Locale resolveAppLocale(List<Locale>? locales) {
+  if (locales != null &&
+      locales.isNotEmpty &&
+      locales.first.languageCode == 'en') {
+    return const Locale('en');
+  }
+  return const Locale('pt', 'BR');
+}
+
 /// Raiz do app: MaterialApp com tema dinâmico conforme as preferências.
 class MusicApp extends StatelessWidget {
   const MusicApp({super.key});
@@ -177,15 +188,17 @@ class MusicApp extends StatelessWidget {
     return MaterialApp(
       title: 'Audify',
       debugShowCheckedModeBanner: false,
-      // UI do app em pt-BR; componentes do sistema (licenças, seleção de
-      // texto, dialogs de plugins) também localizados.
-      locale: const Locale('pt', 'BR'),
+      // Item 5.1 — idioma: null = seguir o sistema; escolha explícita
+      // (Configurações > Aparência) fixa o locale. O callback resolve
+      // o locale do aparelho: inglês vira en, qualquer outro idioma
+      // cai no fallback pt-BR declarado em supportedLocales.
+      locale: settings.localeOverride,
       supportedLocales: const [Locale('pt', 'BR'), Locale('en')],
-      localizationsDelegates: const [
-        GlobalMaterialLocalizations.delegate,
-        GlobalWidgetsLocalizations.delegate,
-        GlobalCupertinoLocalizations.delegate,
-      ],
+      localeListResolutionCallback: (List<Locale>? locales, _) =>
+          resolveAppLocale(locales),
+      // delegate das traduções + os globals (Material/Widgets/Cupertino)
+      // do próprio gen-l10n.
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
       theme: AppTheme.light,
       darkTheme: AppTheme.dark,
       themeMode: settings.themeMode,

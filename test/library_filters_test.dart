@@ -220,7 +220,6 @@ void main() {
       final SettingsProvider restored = SettingsProvider();
       await restored.load();
       expect(restored.libraryMinDurationSeconds, 30);
-      expect(restored.libraryMinDurationLabel, '30 s');
       expect(restored.ignoredFolders, <String>[
         '/storage/emulated/0/WhatsApp/Audio',
       ]);

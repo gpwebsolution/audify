@@ -564,10 +564,9 @@ void main() {
       final SettingsProvider settings = SettingsProvider();
       await settings.load();
       expect(settings.crossfadeSeconds, 0);
-      expect(settings.crossfadeLabel, 'Desligado');
 
       await settings.setCrossfadeSeconds(8);
-      expect(settings.crossfadeLabel, '8 s');
+      expect(settings.crossfadeSeconds, 8);
 
       final SettingsProvider reloaded = SettingsProvider();
       await reloaded.load();

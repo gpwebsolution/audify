@@ -113,9 +113,12 @@ flutter_launcher_icons:
 flutter:
 
   # The following line ensures that the Material Icons font is
-  # included with your application, so that you can use the icons in
-  # the material Icons class.
+  # included in your application. You can use the Icons class
+  # to have material icons with no runtime cost.
   uses-material-design: true
+
+  # Item 5.1 — geração das localizações (l10n.yaml + lib/l10n/*.arb).
+  generate: true
 
   # Registro da pasta de músicas. Basta soltar arquivos .mp3 dentro de
   # assets/songs/ que eles são empacotados no APK e listados dinamicamente

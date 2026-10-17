@@ -4,6 +4,8 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart' hide RepeatMode;
 import 'package:provider/provider.dart';
 
+import '../l10n/app_localizations.dart';
+import '../l10n/l10n.dart';
 import '../models/media_ref.dart';
 import '../models/song_model.dart';
 import '../providers/player_provider.dart';
@@ -50,7 +52,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
   ) async {
     if (MediaRef.fromSong(song) == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text(MusicScreen.assetLockedMessage)),
+        SnackBar(content: Text(l10nOf(context).assetLockedMessage)),
       );
       return;
     }
@@ -78,6 +80,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
       context: context,
       showDragHandle: true,
       builder: (BuildContext sheetContext) {
+        final AppLocalizations l10n = l10nOf(sheetContext);
         void go(Future<void> Function() action) {
           Navigator.pop(sheetContext);
           action();
@@ -89,7 +92,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
             children: <Widget>[
               ListTile(
                 leading: const Icon(Icons.playlist_add),
-                title: const Text('Adicionar à playlist'),
+                title: Text(l10n.addToPlaylist),
                 onTap: () =>
                     go(() => _addCurrentToPlaylist(context, playlists, song)),
               ),
@@ -104,10 +107,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
                       fav ? Icons.favorite : Icons.favorite_border,
                       color: fav ? colors.error : null,
                     ),
-                    title: Text(fav ? 'Desfavoritar' : 'Favoritar'),
+                    title: Text(fav ? l10n.unfavorite : l10n.favorite),
                     subtitle: fav
-                        ? const Text('Some da playlist Favoritas')
-                        : const Text('Entra na playlist Favoritas'),
+                        ? Text(l10n.favoriteOffSub)
+                        : Text(l10n.favoriteOnSub),
                     onTap: () {
                       Navigator.pop(sheetContext);
                       FavoritesProvider.instance.toggle(song);
@@ -117,11 +120,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
               ),
               ListTile(
                 leading: const Icon(Icons.share_outlined),
-                title: const Text('Compartilhar'),
+                title: Text(l10n.share),
                 subtitle: Text(
-                  isAsset
-                      ? 'Faixa embutida no app: não é um arquivo'
-                      : 'WhatsApp, Messenger e outros',
+                  isAsset ? l10n.shareAssetSub : l10n.shareApps,
                 ),
                 enabled: !isAsset,
                 onTap: () => go(
@@ -135,8 +136,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
               ),
               ListTile(
                 leading: const Icon(Icons.info_outline),
-                title: const Text('Detalhes'),
-                subtitle: const Text('Álbum, artista, tamanho e caminho'),
+                title: Text(l10n.details),
+                subtitle: Text(l10n.detailsSub),
                 onTap: () =>
                     go(() => MediaDetailsSheet.showSong(context, song)),
               ),
@@ -144,8 +145,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
               // a entrada fica aqui por alcance: é onde o ouvinte está).
               ListTile(
                 leading: const Icon(Icons.equalizer),
-                title: const Text('Equalizador'),
-                subtitle: const Text('Bandas, presets e reforço de graves'),
+                title: Text(l10n.equalizerTitle),
+                subtitle: Text(l10n.equalizerSheetSubtitle),
                 onTap: () => go(
                   () => Navigator.of(context).push(
                     MaterialPageRoute<void>(
@@ -161,18 +162,18 @@ class _PlayerScreenState extends State<PlayerScreen> {
                   color: isAsset ? null : colors.error,
                 ),
                 title: Text(
-                  isAsset ? 'Excluir do aparelho' : 'Excluir do aparelho',
+                  l10n.deleteFromDevice,
                   style: isAsset ? null : TextStyle(color: colors.error),
                 ),
                 subtitle: isAsset
-                    ? const Text(MusicScreen.assetLockedMessage)
-                    : const Text('Some da lista, da fila e das playlists'),
+                    ? Text(l10n.assetLockedMessage)
+                    : Text(l10n.deleteTrackGoneSub),
                 onTap: isAsset
                     ? () {
                         Navigator.pop(sheetContext);
                         messenger.showSnackBar(
-                          const SnackBar(
-                            content: Text(MusicScreen.assetLockedMessage),
+                          SnackBar(
+                            content: Text(l10n.assetLockedMessage),
                           ),
                         );
                       }
@@ -195,64 +196,66 @@ class _PlayerScreenState extends State<PlayerScreen> {
     await showModalBottomSheet<void>(
       context: context,
       showDragHandle: true,
-      builder: (BuildContext sheetContext) => SafeArea(
-        child: ListView(
-          shrinkWrap: true,
-          children: <Widget>[
-            if (provider.sleepTimerActive)
-              ListTile(
-                leading: const Icon(Icons.timer_outlined),
-                title: Text(
-                  provider.sleepMode == SleepTimerMode.trackEnd
-                      ? 'Dormindo ao fim da faixa'
-                      : 'Dormindo em '
-                            '${formatDuration(provider.sleepRemaining)}',
+      builder: (BuildContext sheetContext) {
+        final AppLocalizations l10n = l10nOf(sheetContext);
+        return SafeArea(
+          child: ListView(
+            shrinkWrap: true,
+            children: <Widget>[
+              if (provider.sleepTimerActive)
+                ListTile(
+                  leading: const Icon(Icons.timer_outlined),
+                  title: Text(
+                    provider.sleepMode == SleepTimerMode.trackEnd
+                        ? l10n.sleepActiveUntilEnd
+                        : l10n.sleepActiveIn(
+                            formatDuration(provider.sleepRemaining),
+                          ),
+                  ),
+                  subtitle: Text(l10n.sleepFadeNote),
                 ),
-                subtitle: const Text('O áudio dá fade e para sozinho.'),
-              ),
-            for (final int minutes in const <int>[15, 30, 45, 60])
+              for (final int minutes in const <int>[15, 30, 45, 60])
+                ListTile(
+                  leading: const Icon(Icons.timer),
+                  title: Text(l10n.minutesCount(minutes)),
+                  onTap: () {
+                    Navigator.pop(sheetContext);
+                    provider.startSleepTimer(Duration(minutes: minutes));
+                  },
+                ),
               ListTile(
-                leading: const Icon(Icons.timer),
-                title: Text('$minutes minutos'),
+                leading: const Icon(Icons.edit_outlined),
+                title: Text(l10n.customSleep),
+                subtitle: Text(l10n.customSleepSub),
                 onTap: () {
                   Navigator.pop(sheetContext);
-                  provider.startSleepTimer(Duration(minutes: minutes));
+                  _pickCustomSleep(context, provider);
                 },
               ),
-            ListTile(
-              leading: const Icon(Icons.edit_outlined),
-              title: const Text('Personalizado'),
-              subtitle: const Text('De 1 a 720 minutos'),
-              onTap: () {
-                Navigator.pop(sheetContext);
-                _pickCustomSleep(context, provider);
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.queue_music_outlined),
-              title: const Text('Ao fim da faixa'),
-              subtitle: const Text(
-                'Para no fim desta faixa, sem pular para a próxima',
-              ),
-              onTap: () {
-                Navigator.pop(sheetContext);
-                provider.startSleepAtTrackEnd();
-              },
-            ),
-            if (provider.sleepTimerActive) ...<Widget>[
-              const Divider(height: 1),
               ListTile(
-                leading: const Icon(Icons.timer_off_outlined),
-                title: const Text('Desligar timer'),
+                leading: const Icon(Icons.queue_music_outlined),
+                title: Text(l10n.atTrackEnd),
+                subtitle: Text(l10n.atTrackEndSub),
                 onTap: () {
                   Navigator.pop(sheetContext);
-                  provider.cancelSleepTimer();
+                  provider.startSleepAtTrackEnd();
                 },
               ),
+              if (provider.sleepTimerActive) ...<Widget>[
+                const Divider(height: 1),
+                ListTile(
+                  leading: const Icon(Icons.timer_off_outlined),
+                  title: Text(l10n.cancelTimer),
+                  onTap: () {
+                    Navigator.pop(sheetContext);
+                    provider.cancelSleepTimer();
+                  },
+                ),
+              ],
             ],
-          ],
-        ),
-      ),
+          ),
+        );
+      },
     );
   }
 
@@ -271,43 +274,47 @@ class _PlayerScreenState extends State<PlayerScreen> {
           void Function(void Function()) setState,
         ) =>
             AlertDialog(
-          title: const Text('Timer personalizado'),
-          content: TextField(
-            controller: controller,
-            autofocus: true,
-            keyboardType: TextInputType.number,
-            decoration: InputDecoration(
-              labelText: 'Minutos',
-              hintText: 'Ex.: 20',
-              errorText: error,
+              title: Text(l10nOf(innerContext).customTimerTitle),
+              content: TextField(
+                controller: controller,
+                autofocus: true,
+                keyboardType: TextInputType.number,
+                decoration: InputDecoration(
+                  labelText: l10nOf(innerContext).minutesLabel,
+                  hintText: l10nOf(innerContext).minutesHint,
+                  errorText: error,
+                ),
+                onSubmitted: (_) {
+                  final int? value = int.tryParse(controller.text.trim());
+                  if (value != null && value >= 1 && value <= 720) {
+                    Navigator.pop(dialogContext, value);
+                  } else {
+                    setState(
+                      () => error = l10nOf(innerContext).timerRangeError,
+                    );
+                  }
+                },
+              ),
+              actions: <Widget>[
+                TextButton(
+                  onPressed: () => Navigator.pop(dialogContext),
+                  child: Text(l10nOf(innerContext).cancel),
+                ),
+                FilledButton(
+                  onPressed: () {
+                    final int? value = int.tryParse(controller.text.trim());
+                    if (value != null && value >= 1 && value <= 720) {
+                      Navigator.pop(dialogContext, value);
+                    } else {
+                      setState(
+                        () => error = l10nOf(innerContext).timerRangeError,
+                      );
+                    }
+                  },
+                  child: Text(l10nOf(innerContext).schedule),
+                ),
+              ],
             ),
-            onSubmitted: (_) {
-              final int? value = int.tryParse(controller.text.trim());
-              if (value != null && value >= 1 && value <= 720) {
-                Navigator.pop(dialogContext, value);
-              } else {
-                setState(() => error = 'Informe um número de 1 a 720.');
-              }
-            },
-          ),
-          actions: <Widget>[
-            TextButton(
-              onPressed: () => Navigator.pop(dialogContext),
-              child: const Text('Cancelar'),
-            ),
-            FilledButton(
-              onPressed: () {
-                final int? value = int.tryParse(controller.text.trim());
-                if (value != null && value >= 1 && value <= 720) {
-                  Navigator.pop(dialogContext, value);
-                } else {
-                  setState(() => error = 'Informe um número de 1 a 720.');
-                }
-              },
-              child: const Text('Agendar'),
-            ),
-          ],
-        ),
       ),
     );
     controller.dispose();
@@ -330,11 +337,14 @@ class _PlayerScreenState extends State<PlayerScreen> {
         await playlists.addSong(playlist.id, song);
         if (context.mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Adicionada a "${playlist.name}"')),
+            SnackBar(
+              content: Text(l10nOf(context).addedToPlaylist(playlist.name)),
+            ),
           );
         }
       },
-      subtitleOf: (Playlist playlist) => '${playlist.songCount} faixas',
+      subtitleOf: (Playlist playlist) =>
+          l10nOf(context).tracksCount(playlist.songCount),
     );
   }
 
@@ -480,7 +490,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
       child: Column(
         children: [
           Text(
-            song?.title ?? 'Nenhuma faixa selecionada',
+            song?.title ?? l10nOf(context).noTrackSelected,
             textAlign: TextAlign.center,
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
@@ -519,6 +529,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     return ValueListenableBuilder<Duration>(
       valueListenable: provider.positionListenable,
       builder: (context, position, _) {
+        final AppLocalizations l10n = l10nOf(context);
         final double sliderValue =
             (_dragValueMs ?? position.inMilliseconds.toDouble()).clamp(
               0,
@@ -545,16 +556,17 @@ class _PlayerScreenState extends State<PlayerScreen> {
                     const SizedBox(width: 6),
                     Text(
                       provider.sleepMode == SleepTimerMode.trackEnd
-                          ? 'Dormir ao fim da faixa'
-                          : 'Dormir em '
-                                '${formatDuration(provider.sleepRemaining)}',
+                          ? l10n.sleepChipUntilEnd
+                          : l10n.sleepChipIn(
+                              formatDuration(provider.sleepRemaining),
+                            ),
                       style: Theme.of(context)
                           .textTheme
                           .labelMedium
                           ?.copyWith(color: colors.primary),
                     ),
                     IconButton(
-                      tooltip: 'Desligar timer',
+                      tooltip: l10n.cancelTimer,
                       icon: const Icon(Icons.close, size: 16),
                       onPressed: provider.cancelSleepTimer,
                     ),
@@ -607,6 +619,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
   /// Controles: shuffle / anterior / play / próxima / repetir.
   Widget _transportRow(
+    AppLocalizations l10n,
     PlayerProvider provider,
     ColorScheme colors,
     bool canControl,
@@ -617,20 +630,20 @@ class _PlayerScreenState extends State<PlayerScreen> {
         mainAxisAlignment: MainAxisAlignment.spaceEvenly,
         children: [
           IconButton(
-            tooltip: 'Embaralhar',
+            tooltip: l10n.shuffleTooltip,
             iconSize: 26,
             color: provider.shuffle ? colors.primary : null,
             icon: const Icon(Icons.shuffle),
             onPressed: provider.toggleShuffle,
           ),
           IconButton(
-            tooltip: 'Anterior',
+            tooltip: l10n.previous,
             iconSize: 40,
             icon: const Icon(Icons.skip_previous),
             onPressed: canControl ? provider.previous : null,
           ),
           IconButton.filled(
-            tooltip: provider.isPlaying ? 'Pausar' : 'Tocar',
+            tooltip: provider.isPlaying ? l10n.pause : l10n.play,
             iconSize: 52,
             icon: Icon(
               provider.isPlaying
@@ -642,13 +655,13 @@ class _PlayerScreenState extends State<PlayerScreen> {
             onPressed: canControl ? provider.togglePlayPause : null,
           ),
           IconButton(
-            tooltip: 'Próxima',
+            tooltip: l10n.next,
             iconSize: 40,
             icon: const Icon(Icons.skip_next),
             onPressed: canControl ? provider.next : null,
           ),
           IconButton(
-            tooltip: 'Repetir',
+            tooltip: l10n.repeat,
             iconSize: 26,
             color: provider.repeat != RepeatMode.off ? colors.primary : null,
             icon: Icon(
@@ -668,6 +681,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
   /// favorito (item 4.1 — o 3.7 deixou a vaga, o 4.1 preencheu).
   Widget _quickActions(
     BuildContext context,
+    AppLocalizations l10n,
     PlayerProvider provider,
     ColorScheme colors,
   ) {
@@ -677,12 +691,12 @@ class _PlayerScreenState extends State<PlayerScreen> {
         mainAxisAlignment: MainAxisAlignment.spaceEvenly,
         children: [
           IconButton(
-            tooltip: 'Fila de reprodução',
+            tooltip: l10n.queueTooltip,
             icon: const Icon(Icons.queue_music),
             onPressed: () => _showQueueSheet(context, provider),
           ),
           IconButton(
-            tooltip: 'Timer de sono',
+            tooltip: l10n.sleepTimerTooltip,
             icon: Icon(
               provider.sleepTimerActive
                   ? Icons.bedtime
@@ -692,7 +706,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
             onPressed: () => _showSleepMenu(context, provider),
           ),
           PopupMenuButton<double>(
-            tooltip: 'Velocidade ${provider.playbackSpeed}x',
+            tooltip: l10n.speedTooltip('${provider.playbackSpeed}'),
             icon: Text(
               '${provider.playbackSpeed}x',
               style: TextStyle(
@@ -722,7 +736,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
               final bool fav = current != null &&
                   FavoritesProvider.instance.isFavorite(current.id);
               return IconButton(
-                tooltip: fav ? 'Desfavoritar' : 'Favoritar',
+                tooltip: fav ? l10n.unfavorite : l10n.favorite,
                 icon: Icon(
                   fav ? Icons.favorite : Icons.favorite_border,
                   color: fav ? colors.error : colors.onSurfaceVariant,
@@ -740,6 +754,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final AppLocalizations l10n = l10nOf(context);
     final PlayerProvider provider = context.watch<PlayerProvider>();
     final ColorScheme themeColors = Theme.of(context).colorScheme;
     final Song? song = provider.currentSong;
@@ -759,13 +774,13 @@ class _PlayerScreenState extends State<PlayerScreen> {
       data: Theme.of(context).copyWith(colorScheme: colors),
       child: Scaffold(
         appBar: AppBar(
-          title: const Text('Agora tocando'),
+          title: Text(l10n.nowPlaying),
           actions: [
             // Item 3.6: letras offline (.lrc ao lado do áudio ou ID3
             // USLT do MP3) — folha com destaque da linha sincronizado.
             if (song != null)
               IconButton(
-                tooltip: 'Letras',
+                tooltip: l10n.lyricsTooltip,
                 icon: const Icon(Icons.lyrics),
                 onPressed: () => _showLyricsSheet(context, provider),
               ),
@@ -778,7 +793,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
               // é onde o usuário já está. A lixeira isolada foi substituída por
               // este menu — mesmo padrão do visualizador de fotos.
               IconButton(
-                tooltip: 'Ações da faixa',
+                tooltip: l10n.trackActionsTooltip,
                 icon: const Icon(Icons.more_vert),
                 onPressed: () => _showSongActions(context, provider, song),
               ),
@@ -824,9 +839,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
                                 maxMs,
                               ),
                               const SizedBox(height: 4),
-                              _transportRow(provider, colors, canControl),
+                              _transportRow(l10n, provider, colors, canControl),
                               if (song != null)
-                                _quickActions(context, provider, colors),
+                                _quickActions(context, l10n, provider, colors),
                             ],
                           ),
                         ),
@@ -859,8 +874,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
                     maxMs,
                   ),
                   const SizedBox(height: 8),
-                  _transportRow(provider, colors, canControl),
-                  if (song != null) _quickActions(context, provider, colors),
+                  _transportRow(l10n, provider, colors, canControl),
+                  if (song != null) _quickActions(context, l10n, provider, colors),
                 ],
               );
             },
@@ -880,13 +895,13 @@ class _QueueSheet extends StatelessWidget {
     final PlayerProvider provider = context.watch<PlayerProvider>();
     final ColorScheme colors = Theme.of(context).colorScheme;
     final List<Song> queue = provider.queue;
+    final AppLocalizations l10n = l10nOf(context);
 
     if (queue.isEmpty) {
-      return const Padding(
-        padding: EdgeInsets.all(24),
+      return Padding(
+        padding: const EdgeInsets.all(24),
         child: Text(
-          'Fila vazia — use "Tocar a seguir" ou "Adicionar à fila" '
-          'no menu de uma música.',
+          l10n.queueEmpty,
           textAlign: TextAlign.center,
         ),
       );
@@ -898,8 +913,7 @@ class _QueueSheet extends StatelessWidget {
         Padding(
           padding: const EdgeInsets.fromLTRB(24, 0, 24, 8),
           child: Text(
-            '${queue.length} faixa(s) • toque para tocar, segure o '
-            'alça para reordenar',
+            l10n.queueHeader(queue.length),
             style: Theme.of(context).textTheme.bodySmall,
             textAlign: TextAlign.center,
           ),
@@ -934,7 +948,7 @@ class _QueueSheet extends StatelessWidget {
                   overflow: TextOverflow.ellipsis,
                 ),
                 subtitle: Text(
-                  isCurrent ? 'Tocando agora' : song.displayArtist,
+                  isCurrent ? l10n.playingNow : song.displayArtist,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
@@ -942,7 +956,7 @@ class _QueueSheet extends StatelessWidget {
                   mainAxisSize: MainAxisSize.min,
                   children: <Widget>[
                     IconButton(
-                      tooltip: 'Remover da fila',
+                      tooltip: l10n.removeFromQueue,
                       icon: const Icon(Icons.close),
                       onPressed: () => provider.queueRemoveAt(index),
                     ),

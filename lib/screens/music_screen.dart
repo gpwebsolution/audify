@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../l10n/app_localizations.dart';
+import '../l10n/l10n.dart';
 import '../models/media_ref.dart';
 import '../models/song_model.dart';
 import '../models/song_sort_key.dart';
@@ -37,13 +39,15 @@ class MusicScreen extends StatefulWidget {
     PlayerProvider provider,
     Song song,
   ) async {
+    // Item 5.1: localizações capturadas antes de qualquer await.
+    final AppLocalizations l10n = l10nOf(context);
     // O modelo decide: faixa de asset (ou sem id/caminho) não vira MediaRef
     // e nunca chega ao canal nativo.
     final MediaRef? ref = MediaRef.fromSong(song);
     if (ref == null) {
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(const SnackBar(content: Text(assetLockedMessage)));
+      ).showSnackBar(SnackBar(content: Text(l10n.assetLockedMessage)));
       return;
     }
 
@@ -88,10 +92,6 @@ class MusicScreen extends StatefulWidget {
       if (target >= 0) await provider.playVisibleAt(target);
     }
   }
-
-  /// Motivo exibido quando a faixa não está no aparelho (é do próprio APK).
-  static const String assetLockedMessage =
-      'Faixa embutida no app, não pode ser excluída.';
 }
 
 /// Fatia do [PlayerProvider] exibida pela aba (item 2.1): um ÚNICO select
@@ -165,8 +165,9 @@ class _MusicScreenState extends State<MusicScreen> with MediaSelection<String> {
 
     if (deletable.isEmpty) {
       clearSelection();
+      final AppLocalizations l10n = l10nOf(context);
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text(MusicScreen.assetLockedMessage)),
+        SnackBar(content: Text(l10n.assetLockedMessage)),
       );
       return;
     }
@@ -193,13 +194,9 @@ class _MusicScreenState extends State<MusicScreen> with MediaSelection<String> {
         await provider.handleSongsDeleted(gone);
         if (!context.mounted) return;
         if (skipped > 0) {
+          final AppLocalizations l10n = l10nOf(context);
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(
-                '$skipped ${skipped == 1 ? 'faixa embutida' : 'faixas embutidas'} '
-                'no app ${skipped == 1 ? 'foi mantida' : 'foram mantidas'}.',
-              ),
-            ),
+            SnackBar(content: Text(l10n.skippedKept(skipped))),
           );
         }
       },
@@ -245,6 +242,7 @@ class _MusicScreenState extends State<MusicScreen> with MediaSelection<String> {
 
   @override
   Widget build(BuildContext context) {
+    final AppLocalizations l10n = l10nOf(context);
     // Item 2.1: select explícito (não watch) — a lista reconstrói só
     // quando um destes valores muda. Tick de posição não está aqui e não
     // passa pelo notifyListeners do provider.
@@ -281,12 +279,12 @@ class _MusicScreenState extends State<MusicScreen> with MediaSelection<String> {
               if (isSelectionMode) clearSelection();
             },
             decoration: InputDecoration(
-              hintText: 'Buscar música, artista ou álbum',
+              hintText: l10n.musicSearchHint,
               prefixIcon: const Icon(Icons.search),
               suffixIcon: view.searchQuery.isEmpty
                   ? null
                   : IconButton(
-                      tooltip: 'Limpar busca',
+                      tooltip: l10n.clearSearchTooltip,
                       icon: const Icon(Icons.clear),
                       onPressed: () {
                         _searchController.clear();
@@ -309,7 +307,7 @@ class _MusicScreenState extends State<MusicScreen> with MediaSelection<String> {
         AnimatedToolbarSwap(
           value: isSelectionMode,
           selectionBar: SelectionBar(
-            label: '$selectionCount selecionada(s)',
+            label: l10n.selectedCount(selectionCount),
             onSelectAll: () =>
                 toggleSelectAll(provider.visibleSongs.map((Song s) => s.id)),
             onClear: clearSelection,
@@ -319,7 +317,7 @@ class _MusicScreenState extends State<MusicScreen> with MediaSelection<String> {
               // uma vez (ordem da seleção); seleção limpa ao concluir.
               SelectionAction(
                 icon: Icons.playlist_play,
-                label: 'Tocar a seguir',
+                label: l10n.queuePlayNext,
                 onPressed: () {
                   provider.queuePlayNext(
                     selectedFrom(provider.visibleSongs, (Song s) => s.id),
@@ -329,7 +327,7 @@ class _MusicScreenState extends State<MusicScreen> with MediaSelection<String> {
               ),
               SelectionAction(
                 icon: Icons.queue_music,
-                label: 'Adicionar à fila',
+                label: l10n.queueAppend,
                 onPressed: () {
                   provider.queueAppend(
                     selectedFrom(provider.visibleSongs, (Song s) => s.id),
@@ -339,12 +337,12 @@ class _MusicScreenState extends State<MusicScreen> with MediaSelection<String> {
               ),
               SelectionAction(
                 icon: Icons.share_outlined,
-                label: 'Compartilhar selecionadas',
+                label: l10n.shareSelected,
                 onPressed: () => _shareSelected(context, provider),
               ),
               SelectionAction(
                 icon: Icons.playlist_add,
-                label: 'Adicionar à playlist',
+                label: l10n.addToPlaylist,
                 onPressed: () => _addSelectedToPlaylist(
                   context,
                   provider,
@@ -353,7 +351,7 @@ class _MusicScreenState extends State<MusicScreen> with MediaSelection<String> {
               ),
               SelectionAction(
                 icon: Icons.swap_horiz,
-                label: 'Inverter seleção',
+                label: l10n.invertSelection,
                 onPressed: () => invertSelection(
                   provider.visibleSongs.map((Song s) => s.id),
                 ),
@@ -370,7 +368,7 @@ class _MusicScreenState extends State<MusicScreen> with MediaSelection<String> {
                   Padding(
                     padding: const EdgeInsets.only(right: 8),
                     child: ChoiceChip(
-                      label: Text(_modeLabel(mode)),
+                      label: Text(_modeLabel(l10n, mode)),
                       selected: _groupMode == mode,
                       avatar: Icon(_modeIcon(mode), size: 18),
                       onSelected: (_) => setState(() {
@@ -384,7 +382,7 @@ class _MusicScreenState extends State<MusicScreen> with MediaSelection<String> {
                 Padding(
                   padding: const EdgeInsets.only(right: 8),
                   child: PopupMenuButton<({SongSortKey? key, bool? toggleDirection})>(
-                    tooltip: 'Ordenar',
+                    tooltip: l10n.sortTooltip,
                     icon: const Icon(Icons.sort),
                     itemBuilder: (BuildContext menuContext) => <PopupMenuEntry<
                         ({SongSortKey? key, bool? toggleDirection})>>[
@@ -392,15 +390,15 @@ class _MusicScreenState extends State<MusicScreen> with MediaSelection<String> {
                         CheckedPopupMenuItem(
                           value: (key: key, toggleDirection: null),
                           checked: view.sortKey == key,
-                          child: Text(key.label),
+                          child: Text(_sortKeyLabel(l10n, key)),
                         ),
                       const PopupMenuDivider(),
                       PopupMenuItem(
                         value: (key: null, toggleDirection: true),
                         child: Text(
                           view.sortAscending
-                              ? 'Ordem decrescente'
-                              : 'Ordem crescente',
+                              ? l10n.sortDescendingOption
+                              : l10n.sortAscendingOption,
                         ),
                       ),
                     ],
@@ -442,16 +440,35 @@ class _MusicScreenState extends State<MusicScreen> with MediaSelection<String> {
     );
   }
 
-  static String _modeLabel(MusicGroupMode mode) {
+  static String _modeLabel(AppLocalizations l10n, MusicGroupMode mode) {
     switch (mode) {
       case MusicGroupMode.tracks:
-        return 'Faixas';
+        return l10n.groupTracks;
       case MusicGroupMode.album:
-        return 'Álbum';
+        return l10n.groupAlbum;
       case MusicGroupMode.artist:
-        return 'Artista';
+        return l10n.groupArtist;
       case MusicGroupMode.folder:
-        return 'Pasta';
+        return l10n.groupFolder;
+    }
+  }
+
+  /// Rótulo do critério de ordenação no menu (item 5.1: as chaves
+  /// `sortKey*` substituem o antigo label pronto no enum).
+  static String _sortKeyLabel(AppLocalizations l10n, SongSortKey key) {
+    switch (key) {
+      case SongSortKey.title:
+        return l10n.sortKeyTitle;
+      case SongSortKey.artist:
+        return l10n.sortKeyArtist;
+      case SongSortKey.album:
+        return l10n.sortKeyAlbum;
+      case SongSortKey.dateAdded:
+        return l10n.sortKeyDateAdded;
+      case SongSortKey.duration:
+        return l10n.sortKeyDuration;
+      case SongSortKey.mostPlayed:
+        return l10n.sortKeyMostPlayed;
     }
   }
 
@@ -611,133 +628,136 @@ class _MusicScreenState extends State<MusicScreen> with MediaSelection<String> {
     showModalBottomSheet<void>(
       context: context,
       showDragHandle: true,
-      builder: (sheetContext) => SafeArea(
-        child: ListView(
-          shrinkWrap: true,
-          children: [
-            // Item 3.5 — fila de reprodução: entram na fila ATIVA
-            // (ordem que o player segue), não na lista exibida.
-            ListTile(
-              leading: const Icon(Icons.playlist_play),
-              title: const Text('Tocar a seguir'),
-              onTap: () {
-                Navigator.pop(sheetContext);
-                provider.queuePlayNext([song]);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('A seguir: ${song.title}')),
-                );
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.queue_music),
-              title: const Text('Adicionar à fila'),
-              onTap: () {
-                Navigator.pop(sheetContext);
-                provider.queueAppend([song]);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('Na fila: ${song.title}')),
-                );
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.playlist_add),
-              title: const Text('Adicionar à playlist'),
-              onTap: () {
-                Navigator.pop(sheetContext);
-                _pickPlaylist(context, song);
-              },
-            ),
-            // Item 4.1 — favoritar pelo menu (mesmo efeito do coração
-            // do tile, para quem chegou por aqui).
-            ListTile(
-              leading: Icon(
-                isFav ? Icons.favorite : Icons.favorite_border,
-                color: isFav
-                    ? Theme.of(context).colorScheme.error
-                    : null,
-              ),
-              title: Text(isFav ? 'Desfavoritar' : 'Favoritar'),
-              subtitle: isFav
-                  ? const Text('Some da playlist Favoritas')
-                  : const Text('Entra na playlist Favoritas'),
-              onTap: () {
-                Navigator.pop(sheetContext);
-                favorites.toggle(song);
-              },
-            ),
-            if (!isAsset) ...[
+      builder: (sheetContext) {
+        final AppLocalizations l10n = l10nOf(sheetContext);
+        return SafeArea(
+          child: ListView(
+            shrinkWrap: true,
+            children: [
+              // Item 3.5 — fila de reprodução: entram na fila ATIVA
+              // (ordem que o player segue), não na lista exibida.
               ListTile(
-                leading: const Icon(Icons.share_outlined),
-                title: const Text('Compartilhar'),
-                subtitle: const Text('WhatsApp, Messenger e outros'),
+                leading: const Icon(Icons.playlist_play),
+                title: Text(l10n.queuePlayNext),
                 onTap: () {
                   Navigator.pop(sheetContext);
-                  // Compartilhamento direto: a exclusão já tem item
-                  // próprio neste menu, não precisa aninhar outro sheet.
-                  // `filePath` pode ser nulo mesmo para faixa do aparelho
-                  // (metadado ausente ao vir do banco), então o serviço
-                  // decide — não um `!` que estoura null-check em silêncio.
-                  MediaActions.share(
-                    context,
-                    path: song.filePath ?? '',
-                    name: '${song.title}.mp3',
-                    mimeType: 'audio/mpeg',
+                  provider.queuePlayNext([song]);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text(l10n.addedUpNext(song.title))),
                   );
                 },
               ),
               ListTile(
-                leading: Icon(
-                  Icons.delete_outline,
-                  color: Theme.of(context).colorScheme.error,
-                ),
-                title: Text(
-                  'Excluir do aparelho',
-                  style: TextStyle(color: Theme.of(context).colorScheme.error),
-                ),
-                subtitle: Text(
-                  '${song.title} • o Android pedirá confirmação',
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                onTap: () async {
+                leading: const Icon(Icons.queue_music),
+                title: Text(l10n.queueAppend),
+                onTap: () {
                   Navigator.pop(sheetContext);
-                  await MusicScreen.deleteSong(context, provider, song);
+                  provider.queueAppend([song]);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text(l10n.addedInQueue(song.title))),
+                  );
                 },
               ),
-            ] else
               ListTile(
-                enabled: false,
+                leading: const Icon(Icons.playlist_add),
+                title: Text(l10n.addToPlaylist),
+                onTap: () {
+                  Navigator.pop(sheetContext);
+                  _pickPlaylist(context, song);
+                },
+              ),
+              // Item 4.1 — favoritar pelo menu (mesmo efeito do coração
+              // do tile, para quem chegou por aqui).
+              ListTile(
                 leading: Icon(
-                  Icons.lock_outline,
-                  color: Theme.of(context).colorScheme.outline,
+                  isFav ? Icons.favorite : Icons.favorite_border,
+                  color: isFav
+                      ? Theme.of(context).colorScheme.error
+                      : null,
                 ),
-                title: Text(
-                  'Excluir do aparelho',
-                  style: TextStyle(
+                title: Text(isFav ? l10n.unfavorite : l10n.favorite),
+                subtitle: isFav
+                    ? Text(l10n.favoriteOffSub)
+                    : Text(l10n.favoriteOnSub),
+                onTap: () {
+                  Navigator.pop(sheetContext);
+                  favorites.toggle(song);
+                },
+              ),
+              if (!isAsset) ...[
+                ListTile(
+                  leading: const Icon(Icons.share_outlined),
+                  title: Text(l10n.share),
+                  subtitle: Text(l10n.shareApps),
+                  onTap: () {
+                    Navigator.pop(sheetContext);
+                    // Compartilhamento direto: a exclusão já tem item
+                    // próprio neste menu, não precisa aninhar outro sheet.
+                    // `filePath` pode ser nulo mesmo para faixa do aparelho
+                    // (metadado ausente ao vir do banco), então o serviço
+                    // decide — não um `!` que estoura null-check em silêncio.
+                    MediaActions.share(
+                      context,
+                      path: song.filePath ?? '',
+                      name: '${song.title}.mp3',
+                      mimeType: 'audio/mpeg',
+                    );
+                  },
+                ),
+                ListTile(
+                  leading: Icon(
+                    Icons.delete_outline,
+                    color: Theme.of(context).colorScheme.error,
+                  ),
+                  title: Text(
+                    l10n.deleteFromDevice,
+                    style: TextStyle(color: Theme.of(context).colorScheme.error),
+                  ),
+                  subtitle: Text(
+                    l10n.deleteSubtitle(song.title),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  onTap: () async {
+                    Navigator.pop(sheetContext);
+                    await MusicScreen.deleteSong(context, provider, song);
+                  },
+                ),
+              ] else
+                ListTile(
+                  enabled: false,
+                  leading: Icon(
+                    Icons.lock_outline,
                     color: Theme.of(context).colorScheme.outline,
                   ),
-                ),
-                subtitle: const Text(MusicScreen.assetLockedMessage),
-                onTap: () {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text(MusicScreen.assetLockedMessage),
+                  title: Text(
+                    l10n.deleteFromDevice,
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.outline,
                     ),
-                  );
+                  ),
+                  subtitle: Text(l10n.assetLockedMessage),
+                  onTap: () {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(l10n.assetLockedMessage),
+                      ),
+                    );
+                  },
+                ),
+              ListTile(
+                leading: const Icon(Icons.info_outline),
+                title: Text(l10n.details),
+                subtitle: Text('${song.title} • ${song.displayArtist}'),
+                onTap: () {
+                  Navigator.pop(sheetContext);
+                  MediaDetailsSheet.showSong(context, song);
                 },
               ),
-            ListTile(
-              leading: const Icon(Icons.info_outline),
-              title: const Text('Detalhes'),
-              subtitle: Text('${song.title} • ${song.displayArtist}'),
-              onTap: () {
-                Navigator.pop(sheetContext);
-                MediaDetailsSheet.showSong(context, song);
-              },
-            ),
-          ],
-        ),
-      ),
+            ],
+          ),
+        );
+      },
     );
   }
 
@@ -752,11 +772,14 @@ class _MusicScreenState extends State<MusicScreen> with MediaSelection<String> {
         await playlistProvider.addSong(playlist.id, song);
         if (context.mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Adicionada a "${playlist.name}"')),
+            SnackBar(
+              content: Text(l10nOf(context).addedToPlaylist(playlist.name)),
+            ),
           );
         }
       },
-      subtitleOf: (Playlist playlist) => '${playlist.songCount} faixas',
+      subtitleOf: (Playlist playlist) =>
+          l10nOf(context).tracksCount(playlist.songCount),
     );
   }
 
@@ -784,31 +807,35 @@ class _MusicScreenState extends State<MusicScreen> with MediaSelection<String> {
         );
         if (mounted) clearSelection();
         if (!messenger.mounted) return;
+        final AppLocalizations l10n = l10nOf(messenger.context);
         messenger.showSnackBar(
           SnackBar(
             content: Text(
               added == songs.length
-                  ? '${songs.length} adicionadas a "${playlist.name}"'
-                  : '$added de ${songs.length} adicionadas a '
-                        '"${playlist.name}"',
+                  ? l10n.addedManyToPlaylist(songs.length, playlist.name)
+                  : l10n.addedPartialToPlaylist(
+                      added,
+                      songs.length,
+                      playlist.name,
+                    ),
             ),
           ),
         );
       },
-      subtitleOf: (Playlist playlist) => '${playlist.songCount} faixas',
-    );
+        subtitleOf: (Playlist playlist) =>
+            l10nOf(context).tracksCount(playlist.songCount),
+      );
   }
 
   Widget _buildEmptyState(BuildContext context, _MusicView view) {
+    final AppLocalizations l10n = l10nOf(context);
     final bool noPermission = view.permission != AudioPermissionState.granted;
 
     final String message = noPermission
-        ? 'Permissão de acesso às músicas negada.\n'
-              'Permita acima para ver as músicas do aparelho.'
+        ? l10n.emptyPermissionDenied
         : (view.songs.isEmpty
-              ? 'Nenhuma música encontrada.\n'
-                    'Adicione arquivos .mp3 em assets/songs/ ou no aparelho.'
-              : 'Nenhum resultado para "${view.searchQuery}".');
+              ? l10n.emptyNoMusic
+              : l10n.emptyNoResults(view.searchQuery));
 
     return Center(
       child: Padding(
@@ -868,6 +895,7 @@ class _GroupHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ColorScheme colors = Theme.of(context).colorScheme;
+    final AppLocalizations l10n = l10nOf(context);
 
     return ListTile(
       leading: Icon(icon, color: colors.primary),
@@ -879,12 +907,12 @@ class _GroupHeader extends StatelessWidget {
           context,
         ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600),
       ),
-      subtitle: Text('$count ${count == 1 ? 'faixa' : 'faixas'}'),
+      subtitle: Text(l10n.tracksCount(count)),
       trailing: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
           IconButton(
-            tooltip: 'Tocar grupo',
+            tooltip: l10n.playGroupTooltip,
             icon: const Icon(Icons.play_circle_outline),
             onPressed: onPlayAll,
           ),
@@ -892,7 +920,7 @@ class _GroupHeader extends StatelessWidget {
             turns: collapsed ? -0.25 : 0,
             duration: const Duration(milliseconds: 150),
             child: IconButton(
-              tooltip: collapsed ? 'Expandir' : 'Recolher',
+              tooltip: collapsed ? l10n.expandTooltip : l10n.collapseTooltip,
               icon: const Icon(Icons.expand_more),
               onPressed: onToggle,
             ),
@@ -913,6 +941,7 @@ class _PermissionBanner extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ColorScheme colors = Theme.of(context).colorScheme;
+    final AppLocalizations l10n = l10nOf(context);
     final bool permanent =
         provider.permission == AudioPermissionState.permanentlyDenied;
 
@@ -929,10 +958,7 @@ class _PermissionBanner extends StatelessWidget {
           const SizedBox(width: 12),
           Expanded(
             child: Text(
-              permanent
-                  ? 'Permissão bloqueada. Libere nas Configurações do '
-                        'sistema para ver suas músicas.'
-                  : 'Permita o acesso às músicas para ver sua biblioteca.',
+              permanent ? l10n.permissionBlocked : l10n.permissionAllow,
               style: Theme.of(
                 context,
               ).textTheme.bodySmall?.copyWith(color: colors.onErrorContainer),
@@ -943,7 +969,7 @@ class _PermissionBanner extends StatelessWidget {
             onPressed: permanent
                 ? PermissionService.openSettings
                 : provider.requestPermissionAndReload,
-            child: Text(permanent ? 'Abrir ajustes' : 'Permitir'),
+            child: Text(permanent ? l10n.openSettingsBtn : l10n.allowBtn),
           ),
         ],
       ),

@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:provider/provider.dart';
 
+import '../l10n/app_localizations.dart';
+import '../l10n/l10n.dart';
+import '../models/app_locale_choice.dart';
 import '../providers/player_provider.dart';
 import '../providers/settings_provider.dart';
 import '../services/error_log_service.dart';
@@ -40,68 +43,94 @@ class _SettingsScreenState extends State<SettingsScreen> {
   @override
   Widget build(BuildContext context) {
     final SettingsProvider settings = context.watch<SettingsProvider>();
+    final AppLocalizations l10n = l10nOf(context);
 
     return ListView(
       padding: const EdgeInsets.symmetric(vertical: 8),
       children: [
         // ---- Aparência ----
-        const _SectionHeader(title: 'Aparência'),
+        _SectionHeader(title: l10n.appearanceTitle),
         RadioGroup<ThemeMode>(
           groupValue: settings.themeMode,
           onChanged: (mode) {
             if (mode != null) settings.setThemeMode(mode);
           },
-          child: const Column(
+          child: Column(
             children: [
               RadioListTile<ThemeMode>(
-                title: Text('Sistema'),
+                title: Text(l10n.optionSystem),
                 value: ThemeMode.system,
               ),
               RadioListTile<ThemeMode>(
-                title: Text('Claro'),
+                title: Text(l10n.themeLight),
                 value: ThemeMode.light,
               ),
               RadioListTile<ThemeMode>(
-                title: Text('Escuro'),
+                title: Text(l10n.themeDark),
                 value: ThemeMode.dark,
+              ),
+            ],
+          ),
+        ),
+        // Item 5.1 — idioma: sistema (padrão) ou fixo, persistido.
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+          child: Text(
+            l10n.languageSection,
+            style: Theme.of(context).textTheme.titleSmall?.copyWith(
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ),
+        RadioGroup<AppLocaleChoice>(
+          groupValue: settings.localeChoice,
+          onChanged: (choice) {
+            if (choice != null) settings.setLocaleChoice(choice);
+          },
+          child: Column(
+            children: [
+              RadioListTile<AppLocaleChoice>(
+                title: Text(l10n.optionSystem),
+                value: AppLocaleChoice.system,
+              ),
+              RadioListTile<AppLocaleChoice>(
+                // Nome do idioma no próprio idioma — não se traduz.
+                title: Text(l10n.languagePortuguese),
+                value: AppLocaleChoice.portuguese,
+              ),
+              RadioListTile<AppLocaleChoice>(
+                title: Text(l10n.languageEnglish),
+                value: AppLocaleChoice.english,
               ),
             ],
           ),
         ),
 
         // ---- Reprodução ----
-        const _SectionHeader(title: 'Reprodução'),
+        _SectionHeader(title: l10n.settingsPlayback),
         SwitchListTile(
           secondary: const Icon(Icons.history),
-          title: const Text('Continuar de onde parou'),
-          subtitle: const Text(
-            'Ao abrir o app, retoma a última música e posição.',
-          ),
+          title: Text(l10n.resumePlaybackTitle),
+          subtitle: Text(l10n.resumePlaybackSubtitle),
           value: settings.resumePlayback,
           onChanged: settings.setResumePlayback,
         ),
         SwitchListTile(
           secondary: const Icon(Icons.headphones_outlined),
-          title: const Text('Pausar ao desconectar fones'),
-          subtitle: const Text(
-            'Ao tirar o fone (com fio ou Bluetooth), a música '
-            'pausa — sem retomada automática.',
-          ),
+          title: Text(l10n.pauseOnNoisyTitle),
+          subtitle: Text(l10n.pauseOnNoisySubtitle),
           value: settings.pauseOnNoisy,
           onChanged: settings.setPauseOnNoisy,
         ),
         // Item 3.4 — crossfade entre faixas.
         ListTile(
           leading: const Icon(Icons.blur_on),
-          title: const Text('Crossfade'),
-          subtitle: const Text(
-            'Transição suave entre faixas — o fim da atual cai e a '
-            'próxima sobe em volume (sem intervalo).',
-          ),
+          title: Text(l10n.crossfadeTitle),
+          subtitle: Text(l10n.crossfadeSubtitle),
           trailing: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text(settings.crossfadeLabel),
+              Text(_crossfadeLabel(l10n, settings)),
               const Icon(Icons.chevron_right),
             ],
           ),
@@ -110,8 +139,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
         // Item 3.3 — tela própria do equalizador.
         ListTile(
           leading: const Icon(Icons.equalizer),
-          title: const Text('Equalizador'),
-          subtitle: const Text('Bandas, presets e reforço de graves.'),
+          title: Text(l10n.equalizerTitle),
+          subtitle: Text(l10n.equalizerSettingsSubtitle),
           trailing: const Icon(Icons.chevron_right),
           onTap: () => Navigator.of(context).push(
             MaterialPageRoute<void>(builder: (_) => const EqualizerScreen()),
@@ -119,21 +148,26 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ),
 
         // ---- Biblioteca (item 2.5) ----
-        const _SectionHeader(title: 'Biblioteca'),
+        _SectionHeader(title: l10n.settingsLibrary),
         ListTile(
           leading: const Icon(Icons.timer_outlined),
-          title: const Text('Duração mínima'),
+          title: Text(l10n.minDurationTitle),
           subtitle: Text(
             settings.libraryMinDurationSeconds == 0
-                ? 'Mostra todas as faixas (padrão).'
-                : 'Esconde faixas com menos de '
-                    '${settings.libraryMinDurationLabel} — '
-                    'toques e notificações somem.',
+                ? l10n.minDurationShowAll
+                : l10n.minDurationHide(
+                    _minDurationLabel(l10n, settings.libraryMinDurationSeconds),
+                  ),
           ),
           trailing: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text(settings.libraryMinDurationLabel),
+              Text(
+                _minDurationLabel(
+                  l10n,
+                  settings.libraryMinDurationSeconds,
+                ),
+              ),
               const Icon(Icons.chevron_right),
             ],
           ),
@@ -141,37 +175,33 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ),
         ListTile(
           leading: const Icon(Icons.folder_off),
-          title: const Text('Pastas ignoradas'),
+          title: Text(l10n.ignoredFoldersTitle),
           subtitle: Text(
             settings.ignoredFolders.isEmpty
-                ? 'Nenhuma. Áudios de WhatsApp/toques ficam misturados '
-                    'se o MediaStore marcar como música.'
-                : '${settings.ignoredFolders.length} '
-                    '${settings.ignoredFolders.length == 1 ? 'pasta' : 'pastas'} '
-                    'fora da biblioteca.',
+                ? l10n.ignoredFoldersEmptySub
+                : l10n.ignoredFoldersCount(settings.ignoredFolders.length),
           ),
           trailing: const Icon(Icons.chevron_right),
           onTap: () => _editIgnoredFolders(context, settings),
         ),
 
         // ---- Lixeira ----
-        const _SectionHeader(title: 'Lixeira'),
+        _SectionHeader(title: l10n.settingsTrash),
         ListTile(
           leading: const Icon(Icons.auto_delete_outlined),
-          title: const Text('Prazo de exclusão'),
+          title: Text(l10n.trashRetentionTitle),
           subtitle: Text(
-            'Itens excluídos ficam na lixeira por '
-            '${settings.trashRetentionLabel.toLowerCase()}.'
-            '\nDepois disso são apagados sozinhos, sem aviso —'
-            ' o resto fica disponível em Arquivos → Mais opções → Lixeira.',
+            l10n.trashRetentionSubtitle(
+              _trashLabel(l10n, settings).toLowerCase(),
+            ),
           ),
           trailing: const Icon(Icons.chevron_right),
           onTap: () => _pickTrashRetention(context, settings),
         ),
         ListTile(
           leading: const Icon(Icons.delete_outline),
-          title: const Text('Ver lixeira'),
-          subtitle: const Text('Restaurar ou apagar definitivamente'),
+          title: Text(l10n.viewTrashTitle),
+          subtitle: Text(l10n.viewTrashSubtitle),
           trailing: const Icon(Icons.chevron_right),
           onTap: () => Navigator.of(context)
               .push(
@@ -182,9 +212,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
         // ---- Permissões (status real do sistema) ----
         _SectionHeader(
-          title: 'Permissões',
+          title: l10n.settingsPermissions,
           trailing: IconButton(
-            tooltip: 'Verificar novamente',
+            tooltip: l10n.recheckTooltip,
             icon: const Icon(Icons.refresh),
             onPressed: () => setState(() => _permissionTick++),
           ),
@@ -192,46 +222,46 @@ class _SettingsScreenState extends State<SettingsScreen> {
         _PermissionTile(
           tick: _permissionTick,
           icon: Icons.music_note_outlined,
-          title: 'Músicas',
+          title: l10n.permMusic,
           check: () => PermissionService.hasAudioAccess(),
           onTap: PermissionService.openSettings,
         ),
         _PermissionTile(
           tick: _permissionTick,
           icon: Icons.videocam_outlined,
-          title: 'Vídeos',
+          title: l10n.permVideos,
           check: () => PermissionService.hasVideosAccess(),
           onTap: PermissionService.openSettings,
         ),
         _PermissionTile(
           tick: _permissionTick,
           icon: Icons.photo_library_outlined,
-          title: 'Fotos',
+          title: l10n.permPhotos,
           check: () => PermissionService.hasPhotosAccess(),
           onTap: PermissionService.openSettings,
         ),
         _PermissionTile(
           tick: _permissionTick,
           icon: Icons.notifications_outlined,
-          title: 'Notificações',
-          subtitle: 'Notificação de música na tela de bloqueio (Android 13+).',
+          title: l10n.permNotifications,
+          subtitle: l10n.permNotificationsSub,
           check: () => PermissionService.hasNotificationAccess(),
           onTap: PermissionService.openSettings,
         ),
         _PermissionTile(
           tick: _permissionTick,
           icon: Icons.folder_open_outlined,
-          title: 'Todos os arquivos',
-          subtitle: 'Listar PDFs no Android 13+ (acesso especial do sistema).',
+          title: l10n.permAllFiles,
+          subtitle: l10n.permAllFilesSub,
           check: () => PermissionService.hasAllFilesAccess(),
           onTap: () => PermissionService.requestAllFilesAccess(),
         ),
 
         // ---- Segundo plano ----
         _SectionHeader(
-          title: 'Segundo plano',
+          title: l10n.settingsBackground,
           trailing: IconButton(
-            tooltip: 'Verificar novamente',
+            tooltip: l10n.recheckTooltip,
             icon: const Icon(Icons.refresh),
             onPressed: () => setState(() => _permissionTick++),
           ),
@@ -239,10 +269,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
         _PermissionTile(
           tick: _permissionTick,
           icon: Icons.battery_saver_outlined,
-          title: 'Ignorar otimização de bateria',
-          subtitle:
-              'Recomendado: sem isso, Xiaomi/Samsung/Motorola podem parar '
-              'a música em segundo plano.',
+          title: l10n.batteryTitle,
+          subtitle: l10n.batterySub,
           check: () => PermissionService.isIgnoringBatteryOptimizations(),
           onTap: () async {
             await PermissionService.requestIgnoreBatteryOptimizations();
@@ -251,27 +279,26 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ),
         ListTile(
           leading: const Icon(Icons.bug_report_outlined),
-          title: const Text('Log de erros'),
-          subtitle: const Text('Diagnóstico local (fica só no aparelho).'),
+          title: Text(l10n.errorLogTitle),
+          subtitle: Text(l10n.errorLogSub),
           trailing: const Icon(Icons.chevron_right),
           onTap: _showErrorLog,
         ),
 
         // ---- Sobre ----
-        const _SectionHeader(title: 'Sobre'),
+        _SectionHeader(title: l10n.settingsAbout),
         ListTile(
           leading: const Icon(Icons.music_note),
           title: const Text('Audify'),
           subtitle: Text(
-            'Player de mídia local — músicas, vídeos, '
-            'fotos e PDFs.\nFeito por GpWebSolution'
-            '${_version != null ? '\nVersão $_version' : ''}',
+            '${l10n.aboutSubtitle}'
+            '${_version != null ? '\n${l10n.aboutVersion(_version!)}' : ''}',
           ),
         ),
         ListTile(
           leading: const Icon(Icons.code),
-          title: const Text('Licenças de código aberto'),
-          subtitle: const Text('Bibliotecas usadas no app.'),
+          title: Text(l10n.licensesTitle),
+          subtitle: Text(l10n.licensesSub),
           trailing: const Icon(Icons.chevron_right),
           onTap: () => showLicensePage(
             context: context,
@@ -298,39 +325,41 @@ class _SettingsScreenState extends State<SettingsScreen> {
     await showModalBottomSheet<void>(
       context: context,
       showDragHandle: true,
-      builder: (BuildContext sheetContext) => SafeArea(
-        child: ListView(
-          shrinkWrap: true,
-          children: <Widget>[
-            for (final int days in SettingsProvider.trashRetentionOptions)
-              RadioListTile<int>(
-                value: days,
-                // ignore: deprecated_member_use
-                groupValue: settings.trashRetentionDays,
-                title: Text(
-                  days == 0
-                      ? 'Para sempre'
-                      : days == 1
-                      ? '1 dia'
-                      : '$days dias',
+      builder: (BuildContext sheetContext) {
+        final AppLocalizations l10n = l10nOf(sheetContext);
+        return SafeArea(
+          child: ListView(
+            shrinkWrap: true,
+            children: <Widget>[
+              for (final int days in SettingsProvider.trashRetentionOptions)
+                RadioListTile<int>(
+                  value: days,
+                  // ignore: deprecated_member_use
+                  groupValue: settings.trashRetentionDays,
+                  title: Text(
+                    days == 0
+                        ? l10n.foreverOption
+                        : days == 1
+                        ? l10n.daysCount(1)
+                        : l10n.daysCount(days),
+                  ),
+                  subtitle: Text(
+                    days == 0
+                        ? l10n.trashForeverSub
+                        : l10n.trashExpiresIn(days),
+                  ),
+                  // ignore: deprecated_member_use
+                  onChanged: (int? value) async {
+                    if (value == null) return;
+                    await settings.setTrashRetentionDays(value);
+                    if (sheetContext.mounted) Navigator.pop(sheetContext);
+                    if (context.mounted) setState(() {});
+                  },
                 ),
-                subtitle: Text(
-                  days == 0
-                      ? 'Nada é apagado sozinho; você esvazia manualmente.'
-                      : 'O que for excluído hoje será apagado em $days '
-                            '${days == 1 ? 'dia' : 'dias'}.',
-                ),
-                // ignore: deprecated_member_use
-                onChanged: (int? value) async {
-                  if (value == null) return;
-                  await settings.setTrashRetentionDays(value);
-                  if (sheetContext.mounted) Navigator.pop(sheetContext);
-                  if (context.mounted) setState(() {});
-                },
-              ),
-          ],
-        ),
-      ),
+            ],
+          ),
+        );
+      },
     );
   }
 
@@ -356,16 +385,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
             shrinkWrap: true,
             children: <Widget>[
               for (final int option in SettingsProvider.crossfadeOptions)
-                RadioListTile<int>(
-                  value: option,
-                  title: Text(option == 0 ? 'Desligado' : '$option s'),
-                  subtitle: Text(
-                    option == 0
-                        ? 'Troca de faixa direta (padrão).'
-                        : 'Nos últimos ${option}s da faixa e nos '
-                            'primeiros ${option}s da próxima, o volume '
-                            'faz a transição.',
-                  ),
+                Builder(
+                  builder: (BuildContext optionContext) {
+                    final AppLocalizations l10n = l10nOf(optionContext);
+                    return RadioListTile<int>(
+                      value: option,
+                      title: Text(
+                        option == 0 ? l10n.offOption : l10n.secondsShort(option),
+                      ),
+                      subtitle: Text(
+                        option == 0
+                            ? l10n.crossfadeDirect
+                            : l10n.crossfadeOverlap(option),
+                      ),
+                    );
+                  },
                 ),
             ],
           ),
@@ -396,16 +430,20 @@ class _SettingsScreenState extends State<SettingsScreen> {
             shrinkWrap: true,
             children: <Widget>[
               for (final int option in SettingsProvider.minDurationOptions)
-                RadioListTile<int>(
-                  value: option,
-                  title: Text(_durationLabel(option)),
-                  subtitle: Text(
-                    option == 0
-                        ? 'Todas as faixas aparecem (padrão).'
-                        : 'Esconde do catálogo o que tiver menos de '
-                            '${_durationLabel(option)} — some com toques '
-                            'e notificações curtas.',
-                  ),
+                Builder(
+                  builder: (BuildContext optionContext) {
+                    final AppLocalizations l10n = l10nOf(optionContext);
+                    final String label = _minDurationLabel(l10n, option);
+                    return RadioListTile<int>(
+                      value: option,
+                      title: Text(label),
+                      subtitle: Text(
+                        option == 0
+                            ? l10n.minDurationAll
+                            : l10n.minDurationHideShort(label),
+                      ),
+                    );
+                  },
                 ),
             ],
           ),
@@ -433,6 +471,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         isScrollControlled: true,
         builder: (BuildContext sheetContext) => StatefulBuilder(
           builder: (BuildContext sheetContext, void Function(void Function()) setSheetState) {
+            final AppLocalizations l10n = l10nOf(sheetContext);
             return SafeArea(
               child: Padding(
                 padding: EdgeInsets.only(
@@ -445,29 +484,27 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   child: ListView(
                     shrinkWrap: true,
                     children: <Widget>[
-                      const Padding(
-                        padding: EdgeInsets.fromLTRB(24, 8, 24, 0),
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(24, 8, 24, 0),
                         child: Text(
-                          'Pastas ignoradas',
-                          style: TextStyle(
+                          l10n.ignoredFoldersTitle,
+                          style: const TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.w600,
                           ),
                         ),
                       ),
-                      const Padding(
-                        padding: EdgeInsets.fromLTRB(24, 4, 24, 8),
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(24, 4, 24, 8),
                         child: Text(
-                          'Faixas DENTRO da pasta somem da biblioteca. '
-                          'Cole o caminho da pasta (subpastas também '
-                          'contam).',
-                          style: TextStyle(fontSize: 13),
+                          l10n.ignoredFoldersSheetSub,
+                          style: const TextStyle(fontSize: 13),
                         ),
                       ),
                       if (settings.ignoredFolders.isEmpty)
-                        const ListTile(
-                          leading: Icon(Icons.check_circle_outline),
-                          title: Text('Nenhuma pasta ignorada'),
+                        ListTile(
+                          leading: const Icon(Icons.check_circle_outline),
+                          title: Text(l10n.noIgnoredFolders),
                         ),
                       for (final String folder in settings.ignoredFolders)
                         ListTile(
@@ -478,7 +515,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             overflow: TextOverflow.ellipsis,
                           ),
                           trailing: IconButton(
-                            tooltip: 'Remover da lista',
+                            tooltip: l10n.removeFromListTooltip,
                             icon: const Icon(Icons.close),
                             onPressed: () async {
                               final bool ok = await settings
@@ -518,7 +555,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                   setSheetState(() {});
                                 }
                               },
-                              child: const Text('Adicionar'),
+                              child: Text(l10n.addButton),
                             ),
                           ],
                         ),
@@ -538,45 +575,65 @@ class _SettingsScreenState extends State<SettingsScreen> {
     await context.read<PlayerProvider>().rescanCatalog();
   }
 
-  static String _durationLabel(int seconds) {
-    if (seconds == 0) return 'Desligado';
-    if (seconds >= 60 && seconds % 60 == 0) return '${seconds ~/ 60} min';
-    return '$seconds s';
+  /// Rótulo da duração mínima (0 = desligado) — antes um getter pronto
+  /// no provider; item 5.1: formatado na UI com as localizações.
+  static String _minDurationLabel(AppLocalizations l10n, int seconds) {
+    if (seconds == 0) return l10n.offOption;
+    if (seconds >= 60 && seconds % 60 == 0) return l10n.minutesShort(seconds ~/ 60);
+    return l10n.secondsShort(seconds);
+  }
+
+  /// Rótulo do crossfade (0 = desligado).
+  static String _crossfadeLabel(AppLocalizations l10n, SettingsProvider settings) {
+    final int seconds = settings.crossfadeSeconds;
+    return seconds == 0 ? l10n.offOption : l10n.secondsShort(seconds);
+  }
+
+  /// Rótulo do prazo da lixeira.
+  static String _trashLabel(AppLocalizations l10n, SettingsProvider settings) {
+    final int days = settings.trashRetentionDays;
+    if (days == 0) return l10n.foreverOption;
+    if (days == 1) return l10n.daysCount(1);
+    return l10n.daysCount(days);
   }
 
   Future<void> _showErrorLog() async {
+    final AppLocalizations l10n = l10nOf(context);
     final String? content = await ErrorLogService.read();
     if (!mounted) return;
     final String text = content?.trim().isNotEmpty == true
         ? content!
-        : 'Nenhum erro registrado.';
+        : l10n.noErrorsRecorded;
     await showDialog<void>(
       context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('Log de erros'),
-        content: SizedBox(
-          width: double.maxFinite,
-          child: SingleChildScrollView(
-            child: SelectableText(
-              text,
-              style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
+      builder: (dialogContext) {
+        final AppLocalizations dialogL10n = l10nOf(dialogContext);
+        return AlertDialog(
+          title: Text(dialogL10n.errorLogTitle),
+          content: SizedBox(
+            width: double.maxFinite,
+            child: SingleChildScrollView(
+              child: SelectableText(
+                text,
+                style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
+              ),
             ),
           ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () async {
-              await ErrorLogService.clear();
-              if (dialogContext.mounted) Navigator.pop(dialogContext);
-            },
-            child: const Text('Limpar'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(dialogContext),
-            child: const Text('Fechar'),
-          ),
-        ],
-      ),
+          actions: [
+            TextButton(
+              onPressed: () async {
+                await ErrorLogService.clear();
+                if (dialogContext.mounted) Navigator.pop(dialogContext);
+              },
+              child: Text(dialogL10n.clearButton),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: Text(dialogL10n.closeButton),
+            ),
+          ],
+        );
+      },
     );
   }
 }

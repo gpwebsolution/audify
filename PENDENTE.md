@@ -225,3 +225,57 @@ Cada linha: ID do item, o que falta e o motivo.
   agora.** Se a fase visual/idiomas fechar sem pendência melhor,
   retomar com a bancada de testes de arquivo (mp3 de exemplo +
   roundtrip de capa) antes de qualquer UI.
+
+---
+
+## 5.1 — Internacionalização de verdade
+
+- **Escopo migrado: só 3 telas** (Música, Player, Configurações).
+  O resto do app — widgets compartilhados (`song_list_tile`,
+  `media_actions`, `selection_bar`, diálogos de confirmação), outras
+  telas (detalhe de playlist, buscas, histórico, favoritos,
+  equalizador, sobre, permissões) e sheets de contexto — continua com
+  strings PT hardcoded. A infraestrutura já está pronta: para migrar
+  mais tela é só mover a chave para os `.arb` e trocar por
+  `l10nOf(context).chave`.
+- **Provider/serviço mandam códigos, UI traduz** (regra da spec), mas
+  só foi aplicado nas 3 telas: mensagens que nascem fora delas
+  (erros de permissão vindos do `PermissionService`, contagens do
+  `PlayerProvider`, mensagens do `AudioService`) continuam nascendo em
+  PT no código-fonte e só chegam traduzidas onde a tela da vez as
+  exibe.
+- **Fallback do `l10nOf` é `AppLocalizationsPt`**: contexto sem
+  delegate montado (harness de teste, builder solto) cai em PT por
+  conveniência — é o que mantém os 491 testes legados verdes sem
+  mexer em nenhum harness.
+- **"Sistema" é resolução, não tradução completa**: o
+  `localeListResolutionCallback` manda `en*` para inglês e QUALQUER
+  outro locale (fr, zh, ar, de…) para pt-BR — não há 3ª tradução, o
+  pt-BR é o fallback único. `resolveAppLocale` está exportada de
+  `lib/main.dart` e é testada unitariamente.
+- **No teste de widget, "Sistema" é coberto sem depender do
+  ambiente**: o binding de teste (`flutter test`) não propaga
+  `platformDispatcher.localeTestValue` para o `Localizations` do
+  harness — por isso o teste asserção a alternância real com escolhas
+  EXPLÍCITAS (Português ⇄ English, com a tela inteira reconstruindo) e
+  trata "Sistema" com um expect flexível (pt ou en), deixando a
+  regra de fallback pt-BR para o teste unitário de
+  `resolveAppLocale`.
+- **`lib/l10n/app_localizations*.dart` são versionados** (não estão no
+  `.gitignore`): `git clone && flutter test` passa sem etapa extra.
+  Ao editar os `.arb`, rodar `flutter gen-l10n` (ou qualquer comando
+  Flutter, que dispara o gen) antes do commit.
+- **Rótulos do provider fora da UI viraram valor bruto**:
+  `crossfadeLabel`, `trashRetentionLabel` e `libraryMinDurationLabel`
+  foram REMOVIDOS do `SettingsProvider` — a tela formata via l10n
+  (`_crossfadeLabel` etc.); dois testes que asseguravam o label passam
+  a assegurar o valor. Se outro teste que usar esses getters aparecer,
+  o analyzer acusa (campo inexistente).
+- **`SongSortKey.label` foi removido** do enum: os rótulos vivem em
+  `_sortKeyLabel(l10n, key)` na tela de Configurações/Música.
+- **Fora de escopo de propósito:** presets do equalizador
+  (identidade persistida pelo usuário — traduzir quebraria presets
+  salvos), path técnico
+  `'/storage/.../WhatsApp/Audio'` e o nome próprio `Audify`
+  (localização de nome próprio não é string de UI), e os nomes
+  "Português"/"English" do seletor (nome de idioma não se traduz).

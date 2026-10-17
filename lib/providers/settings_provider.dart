@@ -4,6 +4,7 @@
 import 'package:flutter/material.dart' hide RepeatMode;
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../models/app_locale_choice.dart';
 import '../models/repeat_mode.dart';
 import '../models/song_sort_key.dart';
 
@@ -33,6 +34,9 @@ class SettingsProvider extends ChangeNotifier {
   // Item 4.3 — ordenação escolhível da biblioteca.
   static const String _librarySortKeyKey = 'library_sort_key';
   static const String _librarySortAscendingKey = 'library_sort_ascending';
+
+  // Item 5.1 — idioma escolhido (null/sistema = seguir o aparelho).
+  static const String _localeChoiceKey = 'locale_choice';
 
   /// Opções de prazo da lixeira, em dias. `0` = manter para sempre.
   static const List<int> trashRetentionOptions = <int>[
@@ -199,6 +203,9 @@ class SettingsProvider extends ChangeNotifier {
   /// Sentido crescente (padrão). False = decrescente.
   bool _sortAscending = true;
 
+  /// Idioma escolhido (item 5.1) — padrão: seguir o sistema.
+  AppLocaleChoice _localeChoice = AppLocaleChoice.system;
+
   bool _isDisposed = false;
 
   ThemeMode get themeMode => _themeMode;
@@ -219,9 +226,16 @@ class SettingsProvider extends ChangeNotifier {
   /// Crossfade em segundos (0 = desligado; ver [maxCrossfadeSeconds]).
   int get crossfadeSeconds => _crossfadeSeconds;
 
-  /// Rótulo do crossfade, para a UI.
-  String get crossfadeLabel =>
-      _crossfadeSeconds == 0 ? 'Desligado' : '$_crossfadeSeconds s';
+  /// Idioma escolhido (item 5.1) — padrão: seguir o sistema.
+  AppLocaleChoice get localeChoice => _localeChoice;
+
+  /// Locale concreto para o MaterialApp; `null` = seguir o sistema
+  /// (o fallback pt-BR acontece na resolução do main.dart).
+  Locale? get localeOverride => switch (_localeChoice) {
+        AppLocaleChoice.system => null,
+        AppLocaleChoice.portuguese => const Locale('pt', 'BR'),
+        AppLocaleChoice.english => const Locale('en'),
+      };
 
   /// Equalizador ligado (item 3.3).
   bool get equalizerEnabled => _equalizerEnabled;
@@ -251,21 +265,9 @@ class SettingsProvider extends ChangeNotifier {
   /// `0` significa "até o usuário apagar" — sem expurgo automático.
   int get trashRetentionDays => _trashRetentionDays;
 
-  /// Rótulo curto do prazo, para a UI.
-  String get trashRetentionLabel =>
-      _trashRetentionDays == 0 ? 'Para sempre' : '$_trashRetentionDays dias';
-
   /// Duração mínima da biblioteca em segundos (`0` = desligado) —
   /// item 2.5.
   int get libraryMinDurationSeconds => _libraryMinDurationSeconds;
-
-  /// Rótulo da duração mínima, para a UI.
-  String get libraryMinDurationLabel {
-    final int seconds = _libraryMinDurationSeconds;
-    if (seconds == 0) return 'Desligado';
-    if (seconds >= 60 && seconds % 60 == 0) return '${seconds ~/ 60} min';
-    return '$seconds s';
-  }
 
   /// Pastas cujas faixas não aparecem na biblioteca (item 2.5).
   List<String> get ignoredFolders => List<String>.unmodifiable(
@@ -461,6 +463,8 @@ class SettingsProvider extends ChangeNotifier {
       // corrompido) volta para título; sentido cai em crescente.
       _sortKey = SongSortKey.fromName(prefs.getString(_librarySortKeyKey));
       _sortAscending = prefs.getBool(_librarySortAscendingKey) ?? true;
+      // Item 5.1: chave desconhecida volta para "seguir o sistema".
+      _localeChoice = AppLocaleChoice.fromName(prefs.getString(_localeChoiceKey));
       _notify();
     } catch (e) {
       // Sem persistência disponível: mantém o padrão (system).
@@ -619,6 +623,19 @@ class SettingsProvider extends ChangeNotifier {
       final SharedPreferences prefs = await SharedPreferences.getInstance();
       await prefs.setString(_librarySortKeyKey, key.name);
       await prefs.setBool(_librarySortAscendingKey, ascending);
+    } catch (e) {
+      // Falha de escrita não quebra a sessão atual.
+    }
+  }
+
+  /// Persiste o idioma escolhido (item 5.1). `system` segue o aparelho.
+  Future<void> setLocaleChoice(AppLocaleChoice choice) async {
+    if (_localeChoice == choice) return;
+    _localeChoice = choice;
+    _notify();
+    try {
+      final SharedPreferences prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_localeChoiceKey, choice.name);
     } catch (e) {
       // Falha de escrita não quebra a sessão atual.
     }

@@ -275,7 +275,7 @@ void main() {
       await tester.tap(find.byTooltip('Fila de reprodução'));
       await tester.pumpAndSettle();
 
-      expect(find.textContaining('faixa(s)'), findsOneWidget);
+      expect(find.textContaining('faixas'), findsOneWidget);
       expect(find.text('Tocando agora'), findsOneWidget);
       expect(find.text('Beta'), findsOneWidget);
       expect(find.text('Gamma'), findsOneWidget);
@@ -284,7 +284,7 @@ void main() {
       await tester.tap(find.text('Beta'));
       await tester.pumpAndSettle();
 
-      expect(find.textContaining('faixa(s)'), findsNothing);
+      expect(find.textContaining('faixas'), findsNothing);
       expect(provider.currentSong?.title, 'Beta');
       expect(audio.played.last.title, 'Beta');
 
@@ -315,7 +315,7 @@ void main() {
       await tester.tap(find.byTooltip('Remover da fila').first);
       await tester.pumpAndSettle();
 
-      expect(find.textContaining('2 faixa(s)'), findsOneWidget);
+      expect(find.textContaining('2 faixas'), findsOneWidget);
       expect(find.text('Alpha'), findsNothing); // saiu da folha e do player
       expect(_titles(provider.queue), <String>['Beta', 'Gamma']);
       // A sobrevivente assumiu e recarregou.
@@ -402,7 +402,7 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.byType(SongListTile).at(1));
       await tester.pumpAndSettle();
-      expect(find.textContaining('2 selecionada(s)'), findsOneWidget);
+      expect(find.textContaining('2 selecionadas'), findsOneWidget);
 
       await tester.tap(find.byTooltip('Ações da seleção'));
       await tester.pumpAndSettle();
@@ -416,7 +416,7 @@ void main() {
       expect(_titles(provider.queue), <String>['Alpha', 'Beta']);
       expect(_titles(audio.played), <String>['Alpha']);
       expect(provider.currentSong?.title, 'Alpha');
-      expect(find.textContaining('selecionada(s)'), findsNothing);
+      expect(find.textContaining('selecionadas'), findsNothing);
       expect(find.byTooltip('Ações da seleção'), findsNothing);
 
       await tester.pumpWidget(const SizedBox());
