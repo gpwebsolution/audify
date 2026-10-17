@@ -714,3 +714,57 @@ equalizador em dispositivo físico e aparelho industrial (Impeller off).
       desligado.
 - [ ] Android Auto: browse (Todas/Favoritas/Recentes) e toque pelo head
       unit/Bluetooth (6.5a).
+
+---
+
+## 9 — Correções pós-entrega (17/10/2026) e defeitos deferidos
+
+Escopo acordado com o dono: **"só esses dois por ora"** (editar/papel de parede
++ erro de ciclo de usuário da marca d'água). Feito e commitado:
+
+### Feito
+
+- **Editar / papel de parede** (`db21d66`): a causa raiz era o canal — o Dart
+  (`ImageActionsService`) fala com `audify/file_query`, mas o nativo só
+  escutava em `audify/media_delete` desde o split 6.1; nunca funcionou da
+  tela. As 3 ações + helpers foram movidas para `FileQueryHandler`;
+  `media_delete` ficou só com `deleteBatch`. Verificado por compilação e
+  conferência do wiring (E2E de UI exige Intent/ActivityResult em aparelho —
+  checklist abaixo).
+- **Erro de ciclo de usuário** (`255d023`): `controller.dispose()` logo após
+  `await showDialog(...)` descartava o controller com a subárvore ainda na
+  animação de saída → "controller used after being disposed" → cascata até o
+  assert `_dependents.isEmpty` que o dono viu. `dispose()` removido nos dois
+  diálogos com o padrão (marca d'água e timer de sono); controller local morre
+  no GC. Teste widget E2E cobre cancelar / aplicar vazio / aplicar com texto
+  gerando a cópia.
+- **Marca d'água** (`e92fbd7`): escala `0.035 → 0.8` (design 80%/30%),
+  `bakeOrientation` (EXIF) e `asciiFold` (acentos/©). +5 testes (escala
+  medida no raster, EXIF orientation 6, asciiFold).
+
+### DEFERIDOS (relatados — fora do "só esses dois")
+
+- **Cópia fora da galeria**: `applyText` salva em
+  `getExternalStorageDirectory()/Audify` = `Android/data/<pkg>/files/Audify` —
+  invisível na galeria e no gerenciador de arquivos comum; nenhuma varredura
+  MediaStore. Corrigir exigiria gravar em `Pictures/Audify` via MediaStore
+  (escopo novo: permissão/fluxo por versão do SO, mais teste em aparelho).
+- **HEIC**: o pacote `image` não decodifica HEIC → `StateError('Formato de
+  imagem não reconhecido.')` — falha com mensagem clara, sem crash.
+- **Widget 6.5b**: continua adiado (decisão do dono).
+
+### Verificado (17/10/2026)
+
+- `flutter analyze`: **No issues found!**
+- `flutter test`: **554 passed** (546 → 554: +3 widget da marca d'água, +5
+  de marca d'água).
+- `flutter build apk --debug`: ✓ (Kotlin movido compila).
+
+### Checklist de teste manual (em aparelho real, para o dono)
+
+- [ ] Foto → Editar abre o editor do sistema (sem "erro de canal").
+- [ ] Foto → Definir como papel de parede abre a tela do sistema.
+- [ ] Marca d'água → Aplicar com texto sai legível de longe, com acentos/©,
+      na mesma orientação do original, sem erro de ciclo de usuário.
+- [ ] Timer de sono → escolher minutos não derruba o player (mesmo defeito).
+

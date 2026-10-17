@@ -9,6 +9,36 @@ Para novas mudanças: descreva o quê e por quê, na data, no topo desta seção
 
 ---
 
+## 17/10/2026 — Correções pós-entrega (dois defeitos reportados)
+
+- **Editar / papel de parede não funcionavam**: o Dart chamava
+  `getContentUri`/`setAsWallpaper`/`editImage` pelo canal `audify/file_query`,
+  mas o Android só os escutava em `audify/media_delete` (desde o split 6.1) —
+  nunca tinham funcionado da tela. As ações foram movidas para
+  `FileQueryHandler`, o canal que o Dart realmente usa. (commit `db21d66`)
+- **Erro de ciclo de usuário ao usar a marca d'água**
+  (`_dependents.isEmpty`): o `TextEditingController` era descartado no momento
+  do pop, com o diálogo ainda na animação de saída → exceção no build →
+  cascata até o assert do framework. Removido o `dispose()` nesse instante no
+  diálogo da marca d'água e no do timer de sono (mesmo defeito). (commit
+  `255d023`)
+- **Marca d'água ilegível/girada/com buracos**: o texto saía com 3,5% da
+  largura (default `0.035` → `0.8`, o design "80%/30%" original); cópia de
+  foto gravada "de lado" saía girada 90° (EXIF `Orientation` não era assado);
+  `©`/acentos sumiam (fonte bitmap só tem glifos ASCII e o `drawString` pula
+  os ausentes em silêncio) → novo `asciiFold` antes do isolate. (commit
+  `e92fbd7`)
+
+Defeitos conhecidos e **não** corrigidos (relatados, fora do escopo acordado):
+a cópia vai para `Android/data/.../files/Audify` (invisível na galeria/gerenciador,
+sem scan MediaStore) e HEIC não é suportado pelo pacote `image` (falha com
+mensagem clara, sem crash). Detalhe em `PENDENTE.md` §9.
+
+Verificado: `flutter analyze` limpo · `flutter test` **546 → 554** ·
+`flutter build apk --debug` ✓.
+
+---
+
 # Correções do Audify — Auditoria de estabilidade (ago/2026)
 
 Este documento explica, em linguagem simples, **o que estava quebrado**, **por quê**
