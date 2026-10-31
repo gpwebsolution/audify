@@ -5,6 +5,34 @@ Cada linha: ID do item, o que falta e o motivo.
 
 ---
 
+## Atualização 31/10/2026 — Fase 0 e correções P0
+
+Resolvido nesta rodada (detalhes em `CHANGELOG.md` e
+`docs/RELATORIO_FINAL.md`): extração ZIP segura (zip-slip/bomb/symlink),
+validação única de nomes, operações tipadas, cópia/move entre volumes com
+verificação e rollback, lixeira com manifesto atômico, `foreign_keys` no
+banco, `INTERNET` removida do release, backup/cleartext desabilitados,
+FileProvider restrito, crash de miniatura em Android 7–9, `ACTION_EDIT`
+perdendo a URI e lint do app (8 erros → 0).
+
+Continua pendente:
+
+- **Aparelho real**: todo o checklist manual por versão do Android (9, 10,
+  11/12, 13, 14) e os itens “não validado em aparelho” abaixo. Sem hardware,
+  nada disso pode ser declarado pronto.
+- **Assinatura de release**: keystore/`key.properties` do dono. Hoje o build
+  cai em debug com aviso.
+- **Decisões do dono**: `applicationId` definitivo, Android-only ×
+  multiplataforma, sabor lite sem permissões amplas, política da lixeira,
+  motor de áudio, licença do projeto e licença do Syncfusion.
+- **Dependências**: 75 pacotes desatualizados; atualizar em lotes com teste em
+  aparelho.
+- **Cobertura**: 52,2% (piso do CI em 51,5%). Subir sem reduzir o piso.
+- **Lint global**: `./gradlew lint` ainda acusa erros do plugin
+  `audio_service`; `:app:lintDebug` é o portão oficial e está em 0 erros.
+
+---
+
 ## 3.4 — Gapless e crossfade
 
 - **Crossfade é rampa de volume, sem sobreposição de áudio.** O fade-out
