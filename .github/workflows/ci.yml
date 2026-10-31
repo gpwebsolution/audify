@@ -1,52 +1,187 @@
-# CI do item 6.3 — sem segredos e sem assinatura de release: só pub get,
-# analyze, test e o APK de DEBUG publicado como artefato.
+# CI do Audify — sem segredos e sem assinatura de release.
 #
-# Versões fixas (nada de "stable" flutuante): Flutter conforme o README
-# (3.44+ / Dart 3.12+ — aqui 3.47.2, a mesma do desenvolvimento) e JDK 17
-# (mínimo do AGP 9.0.1 usado pelo projeto; Gradle 9.1 também pede 17+).
+# Portões (todos precisam passar):
+#   format  -> dart format --output=none --set-exit-if-changed
+#   analyze -> flutter analyze (0 issues)
+#   test    -> flutter test --coverage + piso de cobertura
+#   android -> :app:lintDebug + :app:testDebugUnitTest (Kotlin)
+#   build   -> APK release por ABI + APK debug (artefatos)
+#
+# Versões fixas (nada de "stable" flutuante): Flutter 3.47.7 (mesma do
+# desenvolvimento) e JDK 17 (mínimo do AGP/Gradle usados pelo projeto).
 name: CI
 
 on:
   push:
   pull_request:
 
-jobs:
-  build:
-    name: Analyze, test e APK debug
-    runs-on: ubuntu-latest
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
 
+env:
+  FLUTTER_VERSION: '3.47.7'
+  # Piso de cobertura medido na Fase 0 (52,1%) com pequena margem. Subir
+  # junto com a cobertura real; nunca reduzir para "consertar" o CI.
+  MIN_COVERAGE: '51.5'
+
+jobs:
+  quality:
+    name: Format, analyze e test
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: JDK 17 (AGP 9.0.1 / Gradle 9.1)
+      - name: JDK 17 (AGP / Gradle)
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
 
-      - name: Flutter 3.47.2 fixo (README pede 3.44+ / Dart 3.12+)
+      - name: Flutter ${{ env.FLUTTER_VERSION }} fixo
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.47.2'
+          flutter-version: ${{ env.FLUTTER_VERSION }}
           channel: stable
           cache: true
 
       - name: flutter pub get
         run: flutter pub get
 
+      - name: Formatação (dart format)
+        run: dart format --output=none --set-exit-if-changed lib test
+
       - name: flutter analyze
         run: flutter analyze
 
-      - name: flutter test
-        run: flutter test
+      - name: flutter test com cobertura
+        run: flutter test --coverage
 
-      - name: flutter build apk --debug
+      - name: Piso de cobertura
+        run: |
+          python3 - <<'PY'
+          import os, sys
+          path = 'coverage/lcov.info'
+          if not os.path.exists(path):
+              sys.exit('coverage/lcov.info não gerado')
+          found = hit = 0
+          with open(path) as f:
+              for line in f:
+                  if line.startswith('DA:'):
+                      found += 1
+                      if int(line.split(',')[1]) > 0:
+                          hit += 1
+          pct = (100.0 * hit / found) if found else 0.0
+          floor = float(os.environ.get('MIN_COVERAGE', '0'))
+          print(f'Cobertura de linhas: {pct:.2f}% ({hit}/{found}) — piso {floor:.1f}%')
+          if pct < floor:
+              sys.exit(1)
+          PY
+
+  android:
+    name: Lint e testes Kotlin
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: JDK 17 (AGP / Gradle)
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Flutter ${{ env.FLUTTER_VERSION }} fixo
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+
+      - name: flutter pub get
+        run: flutter pub get
+
+      - name: :app:lintDebug e :app:testDebugUnitTest
+        working-directory: android
+        run: ./gradlew --no-daemon :app:lintDebug :app:testDebugUnitTest
+
+      - name: Publicar relatório de lint (se falhar)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-lint-report
+          path: build/app/reports/lint-results-debug.html
+          if-no-files-found: ignore
+
+  build:
+    name: APK release (por ABI) e debug
+    runs-on: ubuntu-latest
+    needs: quality
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: JDK 17 (AGP / Gradle)
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Flutter ${{ env.FLUTTER_VERSION }} fixo
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+
+      - name: flutter pub get
+        run: flutter pub get
+
+      - name: APK release por ABI
+        run: flutter build apk --release --split-per-abi
+
+      - name: APK debug
         run: flutter build apk --debug
 
-      - name: Publicar app-debug.apk como artefato
+      - name: Publicar APKs release
+        uses: actions/upload-artifact@v4
+        with:
+          name: audify-release-apk
+          path: build/app/outputs/flutter-apk/app-*-release.apk
+          if-no-files-found: error
+
+      - name: Publicar APK debug
         uses: actions/upload-artifact@v4
         with:
           name: audify-debug-apk
           path: build/app/outputs/flutter-apk/app-debug.apk
           if-no-files-found: error
+
+      - name: Publicar mapping R8 (se existir)
+        uses: actions/upload-artifact@v4
+        with:
+          name: audify-mapping
+          path: build/app/outputs/mapping/release/mapping.txt
+          if-no-files-found: ignore
+
+  dependencies:
+    name: Dependências desatualizadas (informativo)
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Flutter ${{ env.FLUTTER_VERSION }} fixo
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+
+      - name: flutter pub get
+        run: flutter pub get
+
+      - name: flutter pub outdated
+        run: flutter pub outdated

@@ -9,6 +9,45 @@ Para novas mudanças: descreva o quê e por quê, na data, no topo desta seção
 
 ---
 
+## 31/10/2026 — Fase 0 + correções P0 de segurança e perda de dados
+
+Auditoria de estabilidade com foco em arquivos, ZIP, lixeira e privacidade.
+Nenhuma funcionalidade visível foi removida; as mudanças endurecem caminhos
+que podiam corromper/apagar dados ou expor arquivos.
+
+- **ZIP seguro** (`archive_service.dart`): bloqueia zip-slip, caminho absoluto,
+  symlink, duplicata e zip bomb (limites de entradas/tamanho/taxa); valida
+  assinatura; apaga saída parcial; roda em isolate.
+- **Nomes e operações**: validação única (`file_name_validator.dart`), retorno
+  tipado (`FileOpResult`), cópia/move entre volumes com verificação de
+  tamanho/SHA-256 e rollback, sem sobrescrever destino.
+- **Lixeira**: manifesto atômico (`pending` → `moved`), JSON por linha com
+  escape, linhas corrompidas ignoradas e restauração entre volumes sem
+  sobrescrever (`nome (1)`).
+- **Android**: corrigido crash em Android 7–9 ao gerar miniatura de vídeo
+  (sobrecarga de API 29 sem guarda) e `ACTION_EDIT` que perdia a URI
+  (`setData` + `setType` → `setDataAndType`); lint do app de 8 erros para 0.
+- **Privacidade**: `INTERNET` removida do release, `allowBackup=false`,
+  cleartext desabilitado, regras de backup/exclusão, FileProvider restrito a
+  `external-path`, content URI só para imagem existente e
+  `READ_MEDIA_VISUAL_USER_SELECTED` (Android 14).
+- **Banco**: `foreign_keys=ON` e `onDowngrade` explícito (sem apagar dados).
+- **Testes**: 554 → 590, incluindo zip-slip, zip bomb, nomes inválidos,
+  manifesto corrompido, colisão na lixeira e move entre volumes.
+- **CI**: format + analyze + test com piso de cobertura + `:app:lintDebug` +
+  `:app:testDebugUnitTest` + APK release por ABI; Dependabot sem merge
+  automático.
+- **Docs**: `docs/BASELINE.md`, `SECURITY.md`, `ARCHITECTURE.md`,
+  `RELEASE.md`, `PRIVACY.md`, `TROUBLESHOOTING.md` e `RELATORIO_FINAL.md`.
+
+Verificado: `flutter analyze` 0 · `dart format` limpo · 590 testes ·
+`:app:lintDebug` 0 erros · release arm64/armv7/x86_64 gera · APK release sem
+`INTERNET` e com `allowBackup=false`. **Não verificado**: aparelho real,
+assinatura de release e checklist por versão do Android (ver
+`docs/RELATORIO_FINAL.md`).
+
+---
+
 ## 17/10/2026 — Correções pós-entrega (dois defeitos reportados)
 
 - **Editar / papel de parede não funcionavam**: o Dart chamava
