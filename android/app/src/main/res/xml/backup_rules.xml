@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Backup automático (Android 11 e anteriores).
+
+    O app é 100% offline e sem conta: nada de dados pessoais deve sair do
+    aparelho sem o usuário pedir. Mesmo com allowBackup="false" no manifest,
+    estas exclusões ficam explícitas como defesa em profundidade.
+-->
+<full-backup-content>
+    <exclude domain="file" path="logs/" />
+    <exclude domain="file" path="trash/" />
+    <exclude domain="database" path="." />
+    <exclude domain="sharedpref" path="." />
+    <exclude domain="external" path="." />
+</full-backup-content>

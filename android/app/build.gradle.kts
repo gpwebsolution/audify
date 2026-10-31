@@ -1,7 +1,20 @@
+import java.io.FileInputStream
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
     id("dev.flutter.flutter-gradle-plugin")
+}
+
+// Assinatura de release: key.properties fica fora do versionamento (já está
+// no .gitignore). Sem ele o build de release continua usando a chave de debug
+// APENAS para sideload local — nunca publique um APK assim.
+val keystoreProperties = Properties()
+val keystorePropertiesFile = rootProject.file("key.properties")
+val hasReleaseKeystore = keystorePropertiesFile.exists()
+if (hasReleaseKeystore) {
+    FileInputStream(keystorePropertiesFile).use { keystoreProperties.load(it) }
 }
 
 android {
@@ -12,6 +25,17 @@ android {
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
+    }
+
+    signingConfigs {
+        if (hasReleaseKeystore) {
+            create("release") {
+                keyAlias = keystoreProperties["keyAlias"] as String
+                keyPassword = keystoreProperties["keyPassword"] as String
+                storeFile = file(keystoreProperties["storeFile"] as String)
+                storePassword = keystoreProperties["storePassword"] as String
+            }
+        }
     }
 
     defaultConfig {
@@ -32,10 +56,18 @@ android {
 
     buildTypes {
         release {
-            // Uso pessoal (sideload): assinado com a chave debug — não há
-            // publicação na Play Store, então uma keystore dedicada só
-            // adicionaria atrito sem benefício.
-            signingConfig = signingConfigs.getByName("debug")
+            // Com key.properties presente, usa a keystore própria (obrigatório
+            // para atualizar por cima e para publicar). Sem o arquivo, cai na
+            // chave de debug só para sideload local — a CI avisa no log.
+            if (hasReleaseKeystore) {
+                signingConfig = signingConfigs.getByName("release")
+            } else {
+                logger.warn(
+                    "AVISO: key.properties ausente; release assinado com a " +
+                    "chave de DEBUG. NÃO publique este APK."
+                )
+                signingConfig = signingConfigs.getByName("debug")
+            }
             // Release minificado: R8 + resource shrink. O proguard-rules.pro
             // mantém o que resolve recursos/classes por reflexão
             // (audio_service/notificação de mídia).

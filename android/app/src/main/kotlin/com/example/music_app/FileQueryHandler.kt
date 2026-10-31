@@ -334,7 +334,19 @@ class FileQueryHandler(
     private fun queryContentUri(path: String): String? {
         return try {
             val file = java.io.File(path)
-            if (!file.exists()) return null
+            if (!file.exists() || !file.isFile) return null
+            // O FileProvider agora expõe só o armazenamento compartilhado.
+            // Além disso, os únicos fluxos que usam URI são "papel de parede"
+            // e "editar imagem": recusar qualquer outra extensão reduz o
+            // alcance de um bug futuro.
+            val ext = file.extension.lowercase()
+            if (ext !in IMAGE_EXTENSIONS) {
+                android.util.Log.w(
+                    "AudifyNative",
+                    "contentUri recusado (não é imagem): $path"
+                )
+                return null
+            }
             androidx.core.content.FileProvider.getUriForFile(
                 activity,
                 "${activity.packageName}.fileprovider",
@@ -344,6 +356,12 @@ class FileQueryHandler(
             android.util.Log.w("AudifyNative", "contentUri($path): $e")
             null
         }
+    }
+
+    private companion object {
+        val IMAGE_EXTENSIONS = setOf(
+            "jpg", "jpeg", "png", "webp", "gif", "bmp", "heic", "heif"
+        )
     }
 
     /**
@@ -385,8 +403,8 @@ class FileQueryHandler(
             return
         }
         val intent = Intent(Intent.ACTION_EDIT).apply {
-            data = Uri.parse(uri)
-            type = "image/*"
+            // setData + setType se anulam; o editor precisa dos dois.
+            setDataAndType(Uri.parse(uri), "image/*")
             addFlags(
                 Intent.FLAG_GRANT_READ_URI_PERMISSION or
                     Intent.FLAG_GRANT_WRITE_URI_PERMISSION

@@ -128,11 +128,22 @@ class VideoQueryHandler(
             try {
                 val path = queryVideoPath(id)
                 if (path != null) {
-                    bitmap = android.media.ThumbnailUtils.createVideoThumbnail(
-                        java.io.File(path),
-                        android.util.Size(width, width),
-                        null
-                    )
+                    // A sobrecarga (File, Size, CancellationSignal) só existe
+                    // no API 29+. Em Android 7–9 (minSdk 24) ela derrubaria o
+                    // app com NoSuchMethodError — usa a sobrecarga antiga.
+                    bitmap = if (Build.VERSION.SDK_INT >= 29) {
+                        android.media.ThumbnailUtils.createVideoThumbnail(
+                            java.io.File(path),
+                            android.util.Size(width, width),
+                            null
+                        )
+                    } else {
+                        @Suppress("DEPRECATION")
+                        android.media.ThumbnailUtils.createVideoThumbnail(
+                            path,
+                            android.provider.MediaStore.Video.Thumbnails.MINI_KIND
+                        )
+                    }
                 } else {
                     android.util.Log.w("AudifyNative", "fallback video $id: caminho não encontrado")
                 }

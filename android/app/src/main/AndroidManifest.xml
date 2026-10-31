@@ -23,6 +23,10 @@
     <uses-permission android:name="android.permission.READ_MEDIA_AUDIO" />
     <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
     <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" />
+    <!-- Android 14+: o usuário pode conceder acesso só às fotos/vídeos
+         selecionados. Declarar a permissão evita que o pedido falhe; a UI
+         lista o que o MediaStore devolver (acesso parcial). -->
+    <uses-permission android:name="android.permission.READ_MEDIA_VISUAL_USER_SELECTED" />
     <uses-permission
         android:name="android.permission.READ_EXTERNAL_STORAGE"
         android:maxSdkVersion="32" />
@@ -97,7 +101,11 @@
     <application
         android:label="audify"
         android:name="${applicationName}"
-        android:icon="@mipmap/launcher_icon">
+        android:icon="@mipmap/launcher_icon"
+        android:allowBackup="false"
+        android:fullBackupContent="@xml/backup_rules"
+        android:dataExtractionRules="@xml/data_extraction_rules"
+        android:usesCleartextTraffic="false">
 
         <!-- ============================================================
              FileProvider — content:// para arquivos do armazenamento
@@ -157,6 +165,8 @@
             tools:ignore="Instantiatable">
             <intent-filter>
                 <action android:name="android.media.browse.MediaBrowserService" />
+                <!-- Android Auto: busca por voz ("tocar X"). -->
+                <action android:name="android.media.action.MEDIA_PLAY_FROM_SEARCH" />
             </intent-filter>
         </service>
         <!-- Botões de mídia (fone com fio/Bluetooth) com o app em

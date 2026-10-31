@@ -1,5 +1,6 @@
 package com.example.music_app
 
+import android.annotation.SuppressLint
 import android.app.Activity
 import android.app.RecoverableSecurityException
 import android.content.ContentUris
@@ -11,6 +12,7 @@ import android.net.Uri
 import android.os.Build
 import android.os.Environment
 import android.provider.MediaStore
+import androidx.annotation.RequiresApi
 import java.util.concurrent.atomic.AtomicBoolean
 import com.ryanheise.audioservice.AudioServiceActivity
 import io.flutter.embedding.engine.FlutterEngine
@@ -106,6 +108,10 @@ class MediaDeleteHandler(
     /// RESULT_CANCELED = usuário recusou). O lote pendente vive no
     /// [companion] porque o IntentSender do SO responde de forma assíncrona e
     /// sobrevive à recriação da Activity.
+    // Só é chamado depois de um diálogo createDeleteRequest (API 30+) ou
+    // RecoverableSecurityException (API 29); o retry abaixo nunca roda em
+    // Android < 10, mas o lint não consegue provar isso pela ordem dos fatos.
+    @SuppressLint("NewApi")
     fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         if (requestCode != DELETE_MEDIA_REQUEST) return
         val pending = synchronized(deleteLock) {
@@ -298,6 +304,7 @@ class MediaDeleteHandler(
      * voltaria para o Dart como "não confirmado" — mesmo com o arquivo já
      * apagado pelo sistema.
      */
+    @RequiresApi(Build.VERSION_CODES.R)
     private fun deleteWithSystemDialog(
         state: DeleteState,
         targets: List<Pair<DeleteItem, Uri>>
@@ -369,6 +376,10 @@ class MediaDeleteHandler(
      * diálogo de confirmação. Quem chama com `true` precisa recebê-la de volta
      * em vez de engoli-la num desfecho genérico.
      */
+    // RecoverableSecurityException e o diálogo do SO existem só no API 29+;
+    // os chamadores (deleteWithSystemDialog R e deleteRecoverable Q) já são
+    // guardados por Build.VERSION — o lint não enxerga através das funções.
+    @SuppressLint("NewApi")
     private fun deleteViaResolver(
         item: DeleteItem,
         uri: Uri,
@@ -393,6 +404,7 @@ class MediaDeleteHandler(
     }
 
     /// Android 10: apaga o que puder e pede confirmação do SO para o resto.
+    @RequiresApi(Build.VERSION_CODES.Q)
     private fun deleteRecoverable(
         state: DeleteState,
         targets: List<Pair<DeleteItem, Uri>>

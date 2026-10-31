@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Manifesto exclusivo de release.
+
+    O Audify é 100% offline. O manifesto de debug do Flutter declara INTERNET
+    para o hot reload/VM service; em release ela é removida à força, mesmo que
+    alguma dependência tente reintroduzi-la. Se um dia o app precisar de rede,
+    esta é a linha que deve ser revista (e documentada em docs/SECURITY.md).
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+    <uses-permission
+        android:name="android.permission.INTERNET"
+        tools:node="remove" />
+</manifest>
