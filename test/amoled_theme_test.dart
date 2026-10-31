@@ -66,16 +66,28 @@ void main() {
     final Color bg = t.scaffoldBackgroundColor;
 
     // Texto comum sobre o fundo AMOLED (títulos, corpo, legendas).
-    expect(_contrast(c.onSurface, bg), greaterThanOrEqualTo(4.5),
-        reason: 'onSurface sobre preto');
-    expect(_contrast(c.onSurfaceVariant, bg), greaterThanOrEqualTo(4.5),
-        reason: 'onSurfaceVariant (subtítulos) sobre preto');
-    expect(_contrast(c.primary, bg), greaterThanOrEqualTo(4.5),
-        reason: 'primary (links/chips ativos) sobre preto');
+    expect(
+      _contrast(c.onSurface, bg),
+      greaterThanOrEqualTo(4.5),
+      reason: 'onSurface sobre preto',
+    );
+    expect(
+      _contrast(c.onSurfaceVariant, bg),
+      greaterThanOrEqualTo(4.5),
+      reason: 'onSurfaceVariant (subtítulos) sobre preto',
+    );
+    expect(
+      _contrast(c.primary, bg),
+      greaterThanOrEqualTo(4.5),
+      reason: 'primary (links/chips ativos) sobre preto',
+    );
 
     // Pares intrínsecos dos componentes (não dependem do fundo).
-    expect(_contrast(c.onPrimary, c.primary), greaterThanOrEqualTo(4.5),
-        reason: 'texto do botão preenchido');
+    expect(
+      _contrast(c.onPrimary, c.primary),
+      greaterThanOrEqualTo(4.5),
+      reason: 'texto do botão preenchido',
+    );
     expect(
       _contrast(c.onErrorContainer, c.errorContainer),
       greaterThanOrEqualTo(4.5),

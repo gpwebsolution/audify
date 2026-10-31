@@ -21,8 +21,7 @@ void main() {
     expect(settings.repeatMode, RepeatMode.off);
   });
 
-  test('shuffle e repeat são persistidos e restaurados',
-      () async {
+  test('shuffle e repeat são persistidos e restaurados', () async {
     final SettingsProvider settings = SettingsProvider();
     await settings.load();
 
@@ -37,8 +36,7 @@ void main() {
     expect(restored.repeatMode, RepeatMode.all);
   });
 
-  test('todos os modos de repeat voltam do storage',
-      () async {
+  test('todos os modos de repeat voltam do storage', () async {
     final SettingsProvider settings = SettingsProvider();
     await settings.load();
     await settings.setRepeatMode(RepeatMode.one);
@@ -73,14 +71,16 @@ void main() {
 
   // ---- Item 5.2 — preferências novas das Configurações ----
 
-  test('padrões 5.2: AMOLED off, sono padrão off, parar pausado 30 min',
-      () async {
-    final SettingsProvider settings = SettingsProvider();
-    await settings.load();
-    expect(settings.themeAmoled, isFalse);
-    expect(settings.sleepDefaultMinutes, 0);
-    expect(settings.stopServicePausedMinutes, 30);
-  });
+  test(
+    'padrões 5.2: AMOLED off, sono padrão off, parar pausado 30 min',
+    () async {
+      final SettingsProvider settings = SettingsProvider();
+      await settings.load();
+      expect(settings.themeAmoled, isFalse);
+      expect(settings.sleepDefaultMinutes, 0);
+      expect(settings.stopServicePausedMinutes, 30);
+    },
+  );
 
   test('preferências 5.2 são persistidas e restauradas', () async {
     final SettingsProvider settings = SettingsProvider();

@@ -127,10 +127,8 @@ class LyricsService {
     }
   }
 
-  static Uint8List _byteList(ByteData data) => data.buffer.asUint8List(
-        data.offsetInBytes,
-        data.lengthInBytes,
-      );
+  static Uint8List _byteList(ByteData data) =>
+      data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes);
 
   /// .lrc antigos vêm em latin1; UTF-8 estrito falha e cai nele.
   static String _decode(List<int> bytes) {

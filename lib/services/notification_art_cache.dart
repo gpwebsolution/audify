@@ -60,8 +60,9 @@ class NotificationArtCache {
       final String? cachedPath = await ThumbnailDiskCache.pathOf(key);
       if (cachedPath != null) return uriFromPath(cachedPath);
 
-      final Uint8List? bytes =
-          song.isAsset ? await _logoBytes() : await _albumBytes(song);
+      final Uint8List? bytes = song.isAsset
+          ? await _logoBytes()
+          : await _albumBytes(song);
       if (bytes == null || bytes.isEmpty) return null;
 
       await ThumbnailDiskCache.put(key, bytes);

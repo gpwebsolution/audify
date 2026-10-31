@@ -37,11 +37,7 @@ class _FakeRepo extends SongRepository {
   Completer<void>? gate;
   int scans = 0;
 
-  _FakeRepo({
-    required this.device,
-    this.delay = Duration.zero,
-    this.gate,
-  });
+  _FakeRepo({required this.device, this.delay = Duration.zero, this.gate});
 
   @override
   Future<List<Song>> loadDeviceSongs() async {
@@ -82,12 +78,9 @@ Song _song({required String id, required String title}) =>
 
 /// Catálogo grande (títulos ordenáveis e > limite do compute).
 List<Song> _many(int n) => <Song>[
-      for (int i = 0; i < n; i++)
-        _song(
-          id: 't$i',
-          title: 'Faixa ${i.toString().padLeft(4, '0')}',
-        ),
-    ];
+  for (int i = 0; i < n; i++)
+    _song(id: 't$i', title: 'Faixa ${i.toString().padLeft(4, '0')}'),
+];
 
 Directory _tempDir() =>
     Directory.systemTemp.createTempSync('audify_snapshot_test');
@@ -114,14 +107,13 @@ PlayerProvider _provider(
   _FakeRepo repo,
   CatalogSnapshotService? snapshot, {
   DateTime Function()? clock,
-}) =>
-    PlayerProvider(
-      PlayableAudioService(),
-      songRepository: repo,
-      sessionRepository: _FakeSession(),
-      snapshotService: snapshot,
-      clock: clock,
-    );
+}) => PlayerProvider(
+  PlayableAudioService(),
+  songRepository: repo,
+  sessionRepository: _FakeSession(),
+  snapshotService: snapshot,
+  clock: clock,
+);
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -130,8 +122,9 @@ void main() {
     test('roundtrip: save + load devolve as mesmas faixas', () async {
       final Directory dir = _tempDir();
       addTearDown(() => dir.deleteSync(recursive: true));
-      final CatalogSnapshotService snap =
-          CatalogSnapshotService(directory: () async => dir);
+      final CatalogSnapshotService snap = CatalogSnapshotService(
+        directory: () async => dir,
+      );
 
       final List<Song> songs = <Song>[
         _song(id: 'x1', title: 'Ação ao Vivo'),
@@ -149,10 +142,10 @@ void main() {
     test('JSON corrompido ou versão futura degrada para null', () async {
       final Directory dir = _tempDir();
       addTearDown(() => dir.deleteSync(recursive: true));
-      final File file =
-          File('${dir.path}/${CatalogSnapshotService.fileName}');
-      final CatalogSnapshotService snap =
-          CatalogSnapshotService(directory: () async => dir);
+      final File file = File('${dir.path}/${CatalogSnapshotService.fileName}');
+      final CatalogSnapshotService snap = CatalogSnapshotService(
+        directory: () async => dir,
+      );
 
       file.writeAsStringSync('{isso não é json');
       expect(await snap.load(), isNull, reason: 'corrompido → sem snapshot');
@@ -167,24 +160,26 @@ void main() {
   });
 
   group('PlayerProvider: snapshot e reconciliação (2.4)', () {
-    test('boot com snapshot: lista visível ANTES de o scan terminar',
-        () async {
+    test('boot com snapshot: lista visível ANTES de o scan terminar', () async {
       final Directory dir = _tempDir();
       addTearDown(() => dir.deleteSync(recursive: true));
-      final CatalogSnapshotService snap =
-          CatalogSnapshotService(directory: () async => dir);
+      final CatalogSnapshotService snap = CatalogSnapshotService(
+        directory: () async => dir,
+      );
       final List<Song> catalog = _many(1000);
 
       // Aquecimento: caminho frio grava o snapshot (compute roda aqui —
       // zona real).
-      final _FakeRepo warming =
-          _FakeRepo(device: catalog, delay: const Duration(milliseconds: 50));
+      final _FakeRepo warming = _FakeRepo(
+        device: catalog,
+        delay: const Duration(milliseconds: 50),
+      );
       final PlayerProvider warm = _provider(warming, snap);
       await warm.init();
       warm.dispose();
       await _waitUntil(
-        () => File('${dir.path}/${CatalogSnapshotService.fileName}')
-            .existsSync(),
+        () =>
+            File('${dir.path}/${CatalogSnapshotService.fileName}').existsSync(),
       );
 
       // Boot 2 com a varredura TRAVADA no gate.
@@ -195,13 +190,20 @@ void main() {
 
       await provider.init();
 
-      expect(provider.songs, hasLength(1000),
-          reason: 'lista completa vem do SNAPSHOT, sem esperar o scan');
+      expect(
+        provider.songs,
+        hasLength(1000),
+        reason: 'lista completa vem do SNAPSHOT, sem esperar o scan',
+      );
       expect(provider.isLoading, isFalse);
-      expect(repo.scans, 1,
-          reason: 'a varredura foi disparada em segundo plano (e está '
-              'travada no gate — se o boot esperasse, init não teria '
-              'retornado)');
+      expect(
+        repo.scans,
+        1,
+        reason:
+            'a varredura foi disparada em segundo plano (e está '
+            'travada no gate — se o boot esperasse, init não teria '
+            'retornado)',
+      );
 
       int notifies = 0;
       provider.addListener(() => notifies++);
@@ -209,66 +211,72 @@ void main() {
       await _quiet();
 
       expect(repo.scans, 1);
-      expect(notifies, 0,
-          reason: 'scan com o MESMO conteúdo = reconciliação silenciosa');
+      expect(
+        notifies,
+        0,
+        reason: 'scan com o MESMO conteúdo = reconciliação silenciosa',
+      );
       expect(provider.songs, hasLength(1000));
     });
 
-    test('reconciliação: faixa nova aparece; pull igual não notifica',
-        () async {
-      final Directory dir = _tempDir();
-      addTearDown(() => dir.deleteSync(recursive: true));
-      final CatalogSnapshotService snap =
-          CatalogSnapshotService(directory: () async => dir);
+    test(
+      'reconciliação: faixa nova aparece; pull igual não notifica',
+      () async {
+        final Directory dir = _tempDir();
+        addTearDown(() => dir.deleteSync(recursive: true));
+        final CatalogSnapshotService snap = CatalogSnapshotService(
+          directory: () async => dir,
+        );
 
-      final List<Song> three = <Song>[
-        _song(id: 'a', title: 'Faixa A'),
-        _song(id: 'b', title: 'Faixa B'),
-        _song(id: 'c', title: 'Faixa C'),
-      ];
-      final _FakeRepo first = _FakeRepo(device: three);
-      final PlayerProvider warm = _provider(first, snap);
-      await warm.init();
-      warm.dispose();
-      await _waitUntil(
-        () => File('${dir.path}/${CatalogSnapshotService.fileName}')
-            .existsSync(),
-      );
+        final List<Song> three = <Song>[
+          _song(id: 'a', title: 'Faixa A'),
+          _song(id: 'b', title: 'Faixa B'),
+          _song(id: 'c', title: 'Faixa C'),
+        ];
+        final _FakeRepo first = _FakeRepo(device: three);
+        final PlayerProvider warm = _provider(first, snap);
+        await warm.init();
+        warm.dispose();
+        await _waitUntil(
+          () => File(
+            '${dir.path}/${CatalogSnapshotService.fileName}',
+          ).existsSync(),
+        );
 
-      // O repositório ganhou UMA faixa fora do app.
-      final _FakeRepo repo = _FakeRepo(
-        device: <Song>[
-          ...three,
-          _song(id: 'd', title: 'Faixa D'),
-        ],
-      );
-      final PlayerProvider provider = _provider(repo, snap);
-      addTearDown(provider.dispose);
+        // O repositório ganhou UMA faixa fora do app.
+        final _FakeRepo repo = _FakeRepo(
+          device: <Song>[
+            ...three,
+            _song(id: 'd', title: 'Faixa D'),
+          ],
+        );
+        final PlayerProvider provider = _provider(repo, snap);
+        addTearDown(provider.dispose);
 
-      await provider.init();
-      // Snapshot ainda tem 3; a reconciliação de fundo deve trazer a 4ª.
-      await _waitUntil(() => provider.songs.length == 4);
-      expect(provider.songs.map((Song s) => s.id), contains('d'));
+        await provider.init();
+        // Snapshot ainda tem 3; a reconciliação de fundo deve trazer a 4ª.
+        await _waitUntil(() => provider.songs.length == 4);
+        expect(provider.songs.map((Song s) => s.id), contains('d'));
 
-      // Pull-to-refresh SEM mudança: silêncio na UI.
-      int notifies = 0;
-      provider.addListener(() => notifies++);
-      await provider.rescanCatalog();
-      expect(notifies, 0, reason: 'conteúdo igual → sem rebuild');
+        // Pull-to-refresh SEM mudança: silêncio na UI.
+        int notifies = 0;
+        provider.addListener(() => notifies++);
+        await provider.rescanCatalog();
+        expect(notifies, 0, reason: 'conteúdo igual → sem rebuild');
 
-      // Pull-to-refresh COM mudança: aparece e notifica 1x.
-      repo.device = <Song>[...repo.device, _song(id: 'e', title: 'Faixa E')];
-      await provider.rescanCatalog();
-      expect(provider.songs.length, 5);
-      expect(notifies, 1);
-    });
+        // Pull-to-refresh COM mudança: aparece e notifica 1x.
+        repo.device = <Song>[...repo.device, _song(id: 'e', title: 'Faixa E')];
+        await provider.rescanCatalog();
+        expect(provider.songs.length, 5);
+        expect(notifies, 1);
+      },
+    );
 
-    test('onAppResumed re-escaneia com throttle de 30s; pull ignora',
-        () async {
+    test('onAppResumed re-escaneia com throttle de 30s; pull ignora', () async {
       DateTime now = DateTime(2026, 1, 1, 12);
-      final _FakeRepo repo = _FakeRepo(device: <Song>[
-        _song(id: 'a', title: 'Faixa A'),
-      ]);
+      final _FakeRepo repo = _FakeRepo(
+        device: <Song>[_song(id: 'a', title: 'Faixa A')],
+      );
       final PlayerProvider provider = _provider(repo, null, clock: () => now);
       addTearDown(provider.dispose);
 
@@ -280,12 +288,12 @@ void main() {
       // Retorno imediato (dentro da janela): não varre de novo.
       provider.onAppResumed();
       await _quiet();
-      expect(repo.scans, afterBoot,
-          reason: 'throttle: boot acabou de varrer');
+      expect(repo.scans, afterBoot, reason: 'throttle: boot acabou de varrer');
 
       // Passou da janela: varre.
-      now = now.add(PlayerProvider.catalogRescanThrottle +
-          const Duration(seconds: 1));
+      now = now.add(
+        PlayerProvider.catalogRescanThrottle + const Duration(seconds: 1),
+      );
       provider.onAppResumed();
       await _waitUntil(() => repo.scans == afterBoot + 1);
       // O contador incrementa no COMEÇO da varredura; espera a
@@ -302,8 +310,9 @@ void main() {
         'depois (snapshot)', () async {
       final Directory dir = _tempDir();
       addTearDown(() => dir.deleteSync(recursive: true));
-      final CatalogSnapshotService snap =
-          CatalogSnapshotService(directory: () async => dir);
+      final CatalogSnapshotService snap = CatalogSnapshotService(
+        directory: () async => dir,
+      );
       final List<Song> catalog = _many(5000);
 
       // ANTES: primeira execução — snapshot vazio, scan de verdade
@@ -317,12 +326,15 @@ void main() {
       await cold.init();
       swCold.stop();
       cold.dispose();
-      expect(swCold.elapsedMilliseconds, greaterThanOrEqualTo(400),
-          reason: 'caminho frio espera a varredura inteira');
+      expect(
+        swCold.elapsedMilliseconds,
+        greaterThanOrEqualTo(400),
+        reason: 'caminho frio espera a varredura inteira',
+      );
       // O save roda em background: espera gravar antes do boot quente.
       await _waitUntil(
-        () => File('${dir.path}/${CatalogSnapshotService.fileName}')
-            .existsSync(),
+        () =>
+            File('${dir.path}/${CatalogSnapshotService.fileName}').existsSync(),
       );
       await _quiet();
 
@@ -340,10 +352,16 @@ void main() {
       );
 
       expect(warm.songs, hasLength(5000));
-      expect(swWarm.elapsed, lessThan(swCold.elapsed),
-          reason: 'snapshot tem que vencer o caminho frio');
-      expect(swWarm.elapsedMilliseconds, lessThan(400),
-          reason: 'boot quente não pode esperar o scan (400ms)');
+      expect(
+        swWarm.elapsed,
+        lessThan(swCold.elapsed),
+        reason: 'snapshot tem que vencer o caminho frio',
+      );
+      expect(
+        swWarm.elapsedMilliseconds,
+        lessThan(400),
+        reason: 'boot quente não pode esperar o scan (400ms)',
+      );
 
       await _quiet(const Duration(milliseconds: 400));
       warm.dispose();

@@ -113,20 +113,20 @@ class Song {
   /// entre sessões (id do MediaStore ou caminho do asset), então basta
   /// guardar os campos de exibição para reconstruir offline.
   Map<String, Object?> toStored() => {
-        'song_id': id,
-        'title': title,
-        'artist': artist,
-        'album': album,
-        'media_id': mediaId,
-        'album_id': albumId,
-        'file_path': filePath,
-        'asset_path': assetPath,
-        'asset_key': assetKey,
-        'is_asset': isAsset ? 1 : 0,
-        'duration_ms': duration?.inMilliseconds,
-        'date_added': dateAdded,
-        'track_number': trackNumber,
-      };
+    'song_id': id,
+    'title': title,
+    'artist': artist,
+    'album': album,
+    'media_id': mediaId,
+    'album_id': albumId,
+    'file_path': filePath,
+    'asset_path': assetPath,
+    'asset_key': assetKey,
+    'is_asset': isAsset ? 1 : 0,
+    'duration_ms': duration?.inMilliseconds,
+    'date_added': dateAdded,
+    'track_number': trackNumber,
+  };
 
   /// Reconstrói uma [Song] a partir do mapa do banco (colunas snake_case).
   /// Retorna null se o registro estiver corrompido (defensivo — nunca

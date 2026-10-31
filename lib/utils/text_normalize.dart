@@ -14,12 +14,31 @@ library;
 /// Diacríticos minúsculos -> letra base ('œ'/'æ' viram as duplas, que o
 /// decompor Unicode não toca: são letras, não acentos).
 const Map<String, String> _lowerDiacritics = <String, String>{
-  'à': 'a', 'á': 'a', 'â': 'a', 'ã': 'a', 'ä': 'a', 'å': 'a',
-  'è': 'e', 'é': 'e', 'ê': 'e', 'ë': 'e',
-  'ì': 'i', 'í': 'i', 'î': 'i', 'ï': 'i',
-  'ò': 'o', 'ó': 'o', 'ô': 'o', 'õ': 'o', 'ö': 'o',
-  'ù': 'u', 'ú': 'u', 'û': 'u', 'ü': 'u',
-  'ý': 'y', 'ÿ': 'y',
+  'à': 'a',
+  'á': 'a',
+  'â': 'a',
+  'ã': 'a',
+  'ä': 'a',
+  'å': 'a',
+  'è': 'e',
+  'é': 'e',
+  'ê': 'e',
+  'ë': 'e',
+  'ì': 'i',
+  'í': 'i',
+  'î': 'i',
+  'ï': 'i',
+  'ò': 'o',
+  'ó': 'o',
+  'ô': 'o',
+  'õ': 'o',
+  'ö': 'o',
+  'ù': 'u',
+  'ú': 'u',
+  'û': 'u',
+  'ü': 'u',
+  'ý': 'y',
+  'ÿ': 'y',
   'ç': 'c',
   'ñ': 'n',
   'œ': 'oe',
@@ -33,7 +52,8 @@ const Map<String, String> _lowerDiacritics = <String, String>{
 /// Tabela com as duas caixas ('á'->'a' e 'Á'->'A'): [stripDiacritics]
 /// preserva a caixa do texto de entrada.
 final Map<String, String> _diacriticsTable = <String, String>{
-  for (final MapEntry<String, String> entry in _lowerDiacritics.entries) ...<String, String>{
+  for (final MapEntry<String, String> entry
+      in _lowerDiacritics.entries) ...<String, String>{
     entry.key: entry.value,
     entry.key.toUpperCase(): entry.value.toUpperCase(),
   },

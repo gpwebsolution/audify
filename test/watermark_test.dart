@@ -202,9 +202,7 @@ void main() {
         text: 'texto bem comprido para testar',
       );
 
-      final img.Image out = img.decodeJpg(
-        File(result.path).readAsBytesSync(),
-      )!;
+      final img.Image out = img.decodeJpg(File(result.path).readAsBytesSync())!;
       int minX = out.width, maxX = 0;
       for (int y = (out.height * 0.7).round(); y < out.height; y++) {
         for (int x = 0; x < out.width; x++) {
@@ -247,9 +245,7 @@ void main() {
         text: 'lado',
       );
 
-      final img.Image out = img.decodeJpg(
-        File(result.path).readAsBytesSync(),
-      )!;
+      final img.Image out = img.decodeJpg(File(result.path).readAsBytesSync())!;
       expect(out.width, 300, reason: 'largura deve girar junto com a foto');
       expect(out.height, 400, reason: 'altura deve girar junto com a foto');
     });

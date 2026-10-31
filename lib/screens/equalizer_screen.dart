@@ -96,8 +96,7 @@ class _ControlsView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final TextTheme text = Theme.of(context).textTheme;
-    final bool checking =
-        eq.support == EqualizerSupport.unknown && eq.enabled;
+    final bool checking = eq.support == EqualizerSupport.unknown && eq.enabled;
 
     return ListView(
       padding: const EdgeInsets.only(bottom: 32),
@@ -132,9 +131,7 @@ class _ControlsView extends StatelessWidget {
               children: <Widget>[
                 Text(
                   _headerTitle,
-                  style: text.titleSmall?.copyWith(
-                    fontWeight: FontWeight.bold,
-                  ),
+                  style: text.titleSmall?.copyWith(fontWeight: FontWeight.bold),
                 ),
                 const SizedBox(height: 8),
                 Wrap(
@@ -145,8 +142,7 @@ class _ControlsView extends StatelessWidget {
                       ChoiceChip(
                         label: Text(name),
                         selected: eq.preset == name,
-                        onSelected: (_) =>
-                            unawaited(eq.applyPreset(name)),
+                        onSelected: (_) => unawaited(eq.applyPreset(name)),
                       ),
                     if (eq.preset == SettingsProvider.equalizerCustomPreset)
                       const _CustomPresetChip(),
@@ -160,9 +156,7 @@ class _ControlsView extends StatelessWidget {
           SwitchListTile(
             secondary: const Icon(Icons.graphic_eq),
             title: const Text('Reforço de graves'),
-            subtitle: const Text(
-              'Soma ganho às duas bandas mais graves.',
-            ),
+            subtitle: const Text('Soma ganho às duas bandas mais graves.'),
             value: eq.bassEnabled,
             onChanged: eq.setBassEnabled,
           ),
@@ -171,10 +165,7 @@ class _ControlsView extends StatelessWidget {
               padding: const EdgeInsets.fromLTRB(16, 0, 16, 0),
               child: Row(
                 children: <Widget>[
-                  Text(
-                    'Força: ${eq.bassStrength}%',
-                    style: text.bodyMedium,
-                  ),
+                  Text('Força: ${eq.bassStrength}%', style: text.bodyMedium),
                   Expanded(
                     child: Slider(
                       value: eq.bassStrength.toDouble(),
@@ -198,9 +189,7 @@ class _ControlsView extends StatelessWidget {
               children: <Widget>[
                 Text(
                   'Bandas',
-                  style: text.titleSmall?.copyWith(
-                    fontWeight: FontWeight.bold,
-                  ),
+                  style: text.titleSmall?.copyWith(fontWeight: FontWeight.bold),
                 ),
                 const SizedBox(height: 4),
                 Text(
@@ -317,10 +306,9 @@ class _BandColumn extends StatelessWidget {
   static String _freqLabel(double hz) {
     if (hz >= 1000) {
       final double k = hz / 1000;
-      final String number = (k == k.roundToDouble()
-              ? k.round().toString()
-              : k.toStringAsFixed(1))
-          .replaceAll('.', ',');
+      final String number =
+          (k == k.roundToDouble() ? k.round().toString() : k.toStringAsFixed(1))
+              .replaceAll('.', ',');
       return '$number kHz';
     }
     return '${hz.round()} Hz';

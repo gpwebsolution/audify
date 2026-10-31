@@ -128,22 +128,21 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
           // Aguarda a última página salva antes de montar o viewer, para
           // abrir direto nela (sem piscar da página 1).
           : _initialPage == null
-              ? const Center(child: CircularProgressIndicator())
-              : SfPdfViewer.file(
-                  file,
-                  controller: _controller,
-                  initialPageNumber: _initialPage!,
-                  // Falha de decodificação = estado de erro visual (sem crash).
-                  onDocumentLoadFailed: (details) =>
-                      setState(() => _loadFailed = true),
-                  onDocumentLoaded: (_) =>
-                      setState(() => _documentLoaded = true),
-                  // Salva o progresso a cada troca de página.
-                  onPageChanged: (details) => PdfProgressService.saveLastPage(
-                    widget.pdf.path,
-                    details.newPageNumber,
-                  ),
-                ),
+          ? const Center(child: CircularProgressIndicator())
+          : SfPdfViewer.file(
+              file,
+              controller: _controller,
+              initialPageNumber: _initialPage!,
+              // Falha de decodificação = estado de erro visual (sem crash).
+              onDocumentLoadFailed: (details) =>
+                  setState(() => _loadFailed = true),
+              onDocumentLoaded: (_) => setState(() => _documentLoaded = true),
+              // Salva o progresso a cada troca de página.
+              onPageChanged: (details) => PdfProgressService.saveLastPage(
+                widget.pdf.path,
+                details.newPageNumber,
+              ),
+            ),
     );
   }
 }

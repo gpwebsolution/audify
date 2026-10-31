@@ -265,8 +265,9 @@ class PlaylistProvider extends ChangeNotifier {
         continue;
       }
       final String? path = song.filePath;
-      final Song? samePath =
-          (path == null || path.isEmpty) ? null : byPath[path];
+      final Song? samePath = (path == null || path.isEmpty)
+          ? null
+          : byPath[path];
       if (samePath != null) {
         available.add(samePath);
         continue;
@@ -292,10 +293,7 @@ class PlaylistProvider extends ChangeNotifier {
   /// Lote: vários DELETEs e **um** [reload] no fim (padrão de
   /// [removeSongsFromAll] — um reload por faixa gastava queries e a contagem
   /// das playlists ficava defasada).
-  Future<void> removeUnavailableSongs(
-    int playlistId,
-    List<Song> songs,
-  ) async {
+  Future<void> removeUnavailableSongs(int playlistId, List<Song> songs) async {
     if (songs.isEmpty) return;
     try {
       for (final Song song in songs) {

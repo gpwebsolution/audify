@@ -222,21 +222,14 @@ class _HistoryTiles extends StatelessWidget {
           backgroundColor: colors.tertiaryContainer,
           child: Icon(icon, color: colors.onTertiaryContainer),
         ),
-        title: Text(
-          title,
-          style: const TextStyle(fontWeight: FontWeight.w600),
-        ),
+        title: Text(title, style: const TextStyle(fontWeight: FontWeight.w600)),
         subtitle: Text(subtitle),
         trailing: const Icon(Icons.chevron_right),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
-        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         onTap: () => Navigator.of(context).push(
           MaterialPageRoute<void>(
-            builder: (_) => AutoPlaylistDetailScreen(
-              title: title,
-              recent: recent,
-            ),
+            builder: (_) =>
+                AutoPlaylistDetailScreen(title: title, recent: recent),
           ),
         ),
       ),
@@ -308,10 +301,8 @@ class _EmptyPlaylists extends StatelessWidget {
             FilledButton.icon(
               icon: const Icon(Icons.add),
               label: Text(l10n.newPlaylistBtn),
-              onPressed: () => askPlaylistName(
-                context,
-                context.read<PlaylistProvider>(),
-              ),
+              onPressed: () =>
+                  askPlaylistName(context, context.read<PlaylistProvider>()),
             ),
           ],
         ),

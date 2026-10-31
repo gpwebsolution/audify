@@ -61,9 +61,7 @@ class AppTheme {
       bottomSheetTheme: pureBlack
           ? const BottomSheetThemeData(backgroundColor: black)
           : null,
-      popupMenuTheme: pureBlack
-          ? const PopupMenuThemeData(color: black)
-          : null,
+      popupMenuTheme: pureBlack ? const PopupMenuThemeData(color: black) : null,
       sliderTheme: SliderThemeData(
         // Polegar levemente maior para facilitar o arrasto do seek.
         thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 8),

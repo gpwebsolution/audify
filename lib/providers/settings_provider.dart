@@ -79,8 +79,10 @@ class SettingsProvider extends ChangeNotifier {
   static const int maxCrossfadeSeconds = 12;
 
   /// Opções do seletor: desligado + 1..12 s.
-  static final List<int> crossfadeOptions =
-      List<int>.generate(maxCrossfadeSeconds + 1, (int i) => i);
+  static final List<int> crossfadeOptions = List<int>.generate(
+    maxCrossfadeSeconds + 1,
+    (int i) => i,
+  );
 
   // ---- Equalizador (item 3.3) ----
 
@@ -104,16 +106,16 @@ class SettingsProvider extends ChangeNotifier {
   /// (clamp na camada de serviço).
   static const Map<String, List<double>> equalizerPresets =
       <String, List<double>>{
-    equalizerDefaultPreset: <double>[0, 0, 0, 0, 0],
-    'Graves': <double>[9, 6, 1, -1, -2],
-    'Graves & agudos': <double>[8, 3, 0, 3, 8],
-    'Vocal': <double>[-2, -1, 4, 3, 1],
-    'Rock': <double>[5, 3, 0, 2, 5],
-    'Pop': <double>[1, 3, 4, 3, 1],
-    'Jazz': <double>[4, 2, 0, 2, 4],
-    'Clássico': <double>[4, 3, 0, 3, 4],
-    'Eletrônico': <double>[7, 3, 0, 3, 7],
-  };
+        equalizerDefaultPreset: <double>[0, 0, 0, 0, 0],
+        'Graves': <double>[9, 6, 1, -1, -2],
+        'Graves & agudos': <double>[8, 3, 0, 3, 8],
+        'Vocal': <double>[-2, -1, 4, 3, 1],
+        'Rock': <double>[5, 3, 0, 2, 5],
+        'Pop': <double>[1, 3, 4, 3, 1],
+        'Jazz': <double>[4, 2, 0, 2, 4],
+        'Clássico': <double>[4, 3, 0, 3, 4],
+        'Eletrônico': <double>[7, 3, 0, 3, 7],
+      };
 
   /// Faixa de ganho CANÔNICA (dB) para validação/persistência — a faixa
   /// real do aparelho (±15 dB na maioria) é lida no probe e o clamp
@@ -250,18 +252,16 @@ class SettingsProvider extends ChangeNotifier {
   /// Locale concreto para o MaterialApp; `null` = seguir o sistema
   /// (o fallback pt-BR acontece na resolução do main.dart).
   Locale? get localeOverride => switch (_localeChoice) {
-        AppLocaleChoice.system => null,
-        AppLocaleChoice.portuguese => const Locale('pt', 'BR'),
-        AppLocaleChoice.english => const Locale('en'),
-      };
+    AppLocaleChoice.system => null,
+    AppLocaleChoice.portuguese => const Locale('pt', 'BR'),
+    AppLocaleChoice.english => const Locale('en'),
+  };
 
   /// Equalizador ligado (item 3.3).
   bool get equalizerEnabled => _equalizerEnabled;
 
   /// Bandas do equalizador em dB (cópia imutável).
-  List<double> get equalizerBands => List<double>.unmodifiable(
-        _equalizerBands,
-      );
+  List<double> get equalizerBands => List<double>.unmodifiable(_equalizerBands);
 
   /// Nome do preset ativo ('Plano', 'Rock'... ou [equalizerCustomPreset]).
   String get equalizerPreset => _equalizerPreset;
@@ -288,9 +288,7 @@ class SettingsProvider extends ChangeNotifier {
   int get libraryMinDurationSeconds => _libraryMinDurationSeconds;
 
   /// Pastas cujas faixas não aparecem na biblioteca (item 2.5).
-  List<String> get ignoredFolders => List<String>.unmodifiable(
-        _ignoredFolders,
-      );
+  List<String> get ignoredFolders => List<String>.unmodifiable(_ignoredFolders);
 
   /// Ordenação escolhida da biblioteca (item 4.3).
   SongSortKey get sortKey => _sortKey;
@@ -337,8 +335,9 @@ class SettingsProvider extends ChangeNotifier {
   /// Remove uma pasta ignorada. Retorna true se a lista mudou.
   Future<bool> removeIgnoredFolder(String path) async {
     if (!_ignoredFolders.contains(path)) return false;
-    _ignoredFolders =
-        _ignoredFolders.where((String f) => f != path).toList(growable: false);
+    _ignoredFolders = _ignoredFolders
+        .where((String f) => f != path)
+        .toList(growable: false);
     _notify();
     await _persistIgnoredFolders();
     return true;
@@ -440,9 +439,8 @@ class SettingsProvider extends ChangeNotifier {
       // Item 3.2: só aceita valor finito dentro da faixa; corrompido
       // volta ao normal (1.0).
       final double storedSpeed = prefs.getDouble(_playbackSpeedKey) ?? 1.0;
-      _playbackSpeed = storedSpeed.isFinite &&
-              storedSpeed >= 0.5 &&
-              storedSpeed <= 2.0
+      _playbackSpeed =
+          storedSpeed.isFinite && storedSpeed >= 0.5 && storedSpeed <= 2.0
           ? storedSpeed
           : 1.0;
       // Item 3.4: fora de 0–12 (corrompido) volta ao padrão desligado.
@@ -459,13 +457,13 @@ class SettingsProvider extends ChangeNotifier {
             .whereType<double>()
             .toList(growable: false),
       );
-      final String storedPreset = prefs.getString(_eqPresetKey) ??
-          equalizerDefaultPreset;
+      final String storedPreset =
+          prefs.getString(_eqPresetKey) ?? equalizerDefaultPreset;
       _equalizerPreset =
           equalizerPresets.containsKey(storedPreset) ||
-                  storedPreset == equalizerCustomPreset
-              ? storedPreset
-              : equalizerDefaultPreset;
+              storedPreset == equalizerCustomPreset
+          ? storedPreset
+          : equalizerDefaultPreset;
       _equalizerBassEnabled = prefs.getBool(_eqBassEnabledKey) ?? false;
       _equalizerBassStrength =
           (prefs.getInt(_eqBassStrengthKey) ?? defaultEqualizerBassStrength)
@@ -478,8 +476,8 @@ class SettingsProvider extends ChangeNotifier {
         minColumns,
         maxColumns,
       );
-      _libraryMinDurationSeconds = minDurationOptions
-              .contains(prefs.getInt(_minDurationKey))
+      _libraryMinDurationSeconds =
+          minDurationOptions.contains(prefs.getInt(_minDurationKey))
           ? prefs.getInt(_minDurationKey)!
           : 0;
       _ignoredFolders =
@@ -492,15 +490,17 @@ class SettingsProvider extends ChangeNotifier {
       _sortKey = SongSortKey.fromName(prefs.getString(_librarySortKeyKey));
       _sortAscending = prefs.getBool(_librarySortAscendingKey) ?? true;
       // Item 5.1: chave desconhecida volta para "seguir o sistema".
-      _localeChoice = AppLocaleChoice.fromName(prefs.getString(_localeChoiceKey));
+      _localeChoice = AppLocaleChoice.fromName(
+        prefs.getString(_localeChoiceKey),
+      );
       // Item 5.2: fora da lista de opções volta para o padrão da spec.
       _themeAmoled = prefs.getBool(_amoledKey) ?? false;
-      _sleepDefaultMinutes = sleepDefaultOptions
-              .contains(prefs.getInt(_sleepDefaultKey))
+      _sleepDefaultMinutes =
+          sleepDefaultOptions.contains(prefs.getInt(_sleepDefaultKey))
           ? prefs.getInt(_sleepDefaultKey)!
           : 0;
-      _stopServicePausedMinutes = stopPausedOptions
-              .contains(prefs.getInt(_stopPausedKey))
+      _stopServicePausedMinutes =
+          stopPausedOptions.contains(prefs.getInt(_stopPausedKey))
           ? prefs.getInt(_stopPausedKey)!
           : defaultStopPausedMinutes;
       _notify();
@@ -581,8 +581,9 @@ class SettingsProvider extends ChangeNotifier {
   /// 0,5–2,0 ou não finitos caem no normal (1.0) — a mesma faixa que o
   /// seletor oferece e que o serviço garante por clamp.
   Future<void> setPlaybackSpeed(double speed) async {
-    final double valid =
-        speed.isFinite && speed >= 0.5 && speed <= 2.0 ? speed : 1.0;
+    final double valid = speed.isFinite && speed >= 0.5 && speed <= 2.0
+        ? speed
+        : 1.0;
     if (_playbackSpeed == valid) return;
     _playbackSpeed = valid;
     _notify();
@@ -621,8 +622,8 @@ class SettingsProvider extends ChangeNotifier {
     required int bassStrength,
   }) async {
     final List<double> safeBands = sanitizeEqualizerBands(bands);
-    final String safePreset = equalizerPresets.containsKey(preset) ||
-            preset == equalizerCustomPreset
+    final String safePreset =
+        equalizerPresets.containsKey(preset) || preset == equalizerCustomPreset
         ? preset
         : equalizerDefaultPreset;
     final int safeStrength = bassStrength.clamp(0, 100);

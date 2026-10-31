@@ -53,8 +53,10 @@ class SessionRepository {
       if (ids.length > maxQueueIds) {
         start = (clamped - maxQueueIds ~/ 2).clamp(0, ids.length - maxQueueIds);
       }
-      final List<String> window =
-          ids.sublist(start, min(start + maxQueueIds, ids.length));
+      final List<String> window = ids.sublist(
+        start,
+        min(start + maxQueueIds, ids.length),
+      );
       await prefs.setString(_queueIdsKey, jsonEncode(window));
       await prefs.setInt(_queueIndexKey, clamped - start);
     } catch (e) {
@@ -109,8 +111,8 @@ class SessionRepository {
       final String? json = prefs.getString(_lastSongKey);
       if (json == null) return (null, Duration.zero);
 
-      final Map<String, Object?> stored =
-          (jsonDecode(json) as Map).cast<String, Object?>();
+      final Map<String, Object?> stored = (jsonDecode(json) as Map)
+          .cast<String, Object?>();
       final Song? song = Song.fromStored(stored);
       if (song == null || song.id.isEmpty) return (null, Duration.zero);
       final int positionMs = prefs.getInt(_lastPositionKey) ?? 0;

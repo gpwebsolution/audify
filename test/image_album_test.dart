@@ -27,8 +27,12 @@ void main() {
     });
 
     test('displayName de caminho simples retorna o próprio nome', () {
-      final album = ImageAlbum.fromChannel(
-          {'id': 1, 'name': 'WhatsApp', 'count': 3, 'coverId': 1});
+      final album = ImageAlbum.fromChannel({
+        'id': 1,
+        'name': 'WhatsApp',
+        'count': 3,
+        'coverId': 1,
+      });
       expect(album.displayName, 'WhatsApp');
     });
   });

@@ -63,26 +63,15 @@ Song _song({
 /// Catálogo bagunçado de propósito: acentos, caixa mista e números com
 /// dígitos de tamanhos diferentes.
 List<Song> _catalog() => [
-      _song(id: 'a1', title: 'Zebra Blues', album: 'Outro', artist: 'Zeca'),
-      _song(id: 'a2', title: 'Faixa 10', album: 'Álbum 10', artist: 'Yara'),
-      _song(id: 'a3', title: 'Faixa 2', album: 'Álbum 2', artist: 'Xena'),
-      _song(
-        id: 'a4',
-        title: 'Ação ao Vivo',
-        album: 'Ao Vivo',
-        artist: 'Ângela',
-      ),
-      _song(
-        id: 'a5',
-        title: 'Árvore de Natal',
-        album: 'Álbum 10',
-        artist: 'Bruno',
-      ),
-    ];
+  _song(id: 'a1', title: 'Zebra Blues', album: 'Outro', artist: 'Zeca'),
+  _song(id: 'a2', title: 'Faixa 10', album: 'Álbum 10', artist: 'Yara'),
+  _song(id: 'a3', title: 'Faixa 2', album: 'Álbum 2', artist: 'Xena'),
+  _song(id: 'a4', title: 'Ação ao Vivo', album: 'Ao Vivo', artist: 'Ângela'),
+  _song(id: 'a5', title: 'Árvore de Natal', album: 'Álbum 10', artist: 'Bruno'),
+];
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
-
 
   group('stripDiacritics', () {
     test('remove diacríticos comuns de pt-BR/ES/FR preservando caixa', () {
@@ -198,8 +187,10 @@ void main() {
     });
 
     test('chaves de grupo ordenadas natural e sem acento', () {
-      final List<String> keys =
-          provider.visibleGroups(MusicGroupMode.album).map((g) => g.key).toList();
+      final List<String> keys = provider
+          .visibleGroups(MusicGroupMode.album)
+          .map((g) => g.key)
+          .toList();
       expect(keys, <String>[
         'Álbum 2', // 'album 2' antes de 'album 10' (ordem natural)
         'Álbum 10',

@@ -19,15 +19,14 @@ Song _song({
   Duration? duration,
   String? filePath,
   bool isAsset = false,
-}) =>
-    Song.fromStored(<String, Object?>{
-      'song_id': id,
-      'title': title,
-      'file_path': filePath,
-      'asset_path': isAsset ? 'assets/songs/$id.mp3' : null,
-      'duration_ms': duration?.inMilliseconds,
-      'is_asset': isAsset ? 1 : 0,
-    })!;
+}) => Song.fromStored(<String, Object?>{
+  'song_id': id,
+  'title': title,
+  'file_path': filePath,
+  'asset_path': isAsset ? 'assets/songs/$id.mp3' : null,
+  'duration_ms': duration?.inMilliseconds,
+  'is_asset': isAsset ? 1 : 0,
+})!;
 
 class _FakeRepo extends SongRepository {
   final List<Song> device;
@@ -102,16 +101,10 @@ void main() {
         duration: const Duration(minutes: 3),
         filePath: '/storage/emulated/0/WhatsApp/Audio/notas.opus',
       ),
-      _song(
-        id: 'asset',
-        title: 'Asset do app',
-        duration: null,
-        isAsset: true,
-      ),
+      _song(id: 'asset', title: 'Asset do app', duration: null, isAsset: true),
     ];
 
-    test('duração mínima: 0 desliga; 30 s esconde só a faixa curta',
-        () {
+    test('duração mínima: 0 desliga; 30 s esconde só a faixa curta', () {
       expect(
         PlayerProvider.filterDeviceSongs(
           catalog,
@@ -130,7 +123,8 @@ void main() {
       expect(
         filtered.map((Song s) => s.id),
         <String>['limite', 'longa', 'sem_dur', 'wa', 'asset'],
-        reason: '5 s cai; 30 s (igual ao mínimo) passa; duração null '
+        reason:
+            '5 s cai; 30 s (igual ao mínimo) passa; duração null '
             'e asset passam por segurança',
       );
     });
@@ -139,9 +133,7 @@ void main() {
       final List<Song> filtered = PlayerProvider.filterDeviceSongs(
         catalog,
         minDurationSeconds: 0,
-        ignoredFolders: const <String>[
-          '/storage/emulated/0/WhatsApp/Audio',
-        ],
+        ignoredFolders: const <String>['/storage/emulated/0/WhatsApp/Audio'],
       );
       expect(
         filtered.map((Song s) => s.id),
@@ -156,11 +148,7 @@ void main() {
 
       final List<Song> boundary = PlayerProvider.filterDeviceSongs(
         <Song>[
-          _song(
-            id: 'ok',
-            title: 'Embaixo',
-            filePath: '/music/rock/funk.mp3',
-          ),
+          _song(id: 'ok', title: 'Embaixo', filePath: '/music/rock/funk.mp3'),
           _song(
             id: 'falso',
             title: 'Prefixo parecido',
@@ -175,25 +163,23 @@ void main() {
         minDurationSeconds: 0,
         ignoredFolders: const <String>['/music/rock'],
       );
-      expect(
-        boundary.map((Song s) => s.id),
-        <String>['falso'],
-        reason: '/music/rock/ pega subpastas mas NÃO /music/rockabilly/',
-      );
+      expect(boundary.map((Song s) => s.id), <String>[
+        'falso',
+      ], reason: '/music/rock/ pega subpastas mas NÃO /music/rockabilly/');
     });
 
     test('as duas regras juntas', () {
       final List<Song> filtered = PlayerProvider.filterDeviceSongs(
         catalog,
         minDurationSeconds: 30,
-        ignoredFolders: const <String>[
-          '/storage/emulated/0/WhatsApp/Audio',
-        ],
+        ignoredFolders: const <String>['/storage/emulated/0/WhatsApp/Audio'],
       );
-      expect(
-        filtered.map((Song s) => s.id),
-        <String>['limite', 'longa', 'sem_dur', 'asset'],
-      );
+      expect(filtered.map((Song s) => s.id), <String>[
+        'limite',
+        'longa',
+        'sem_dur',
+        'asset',
+      ]);
     });
   });
 
@@ -201,8 +187,7 @@ void main() {
     test('duração mínima e pastas passam para a próxima sessão', () async {
       final SettingsProvider settings = SettingsProvider();
       await settings.load();
-      expect(settings.libraryMinDurationSeconds, 0,
-          reason: 'padrão desligado');
+      expect(settings.libraryMinDurationSeconds, 0, reason: 'padrão desligado');
       expect(settings.ignoredFolders, isEmpty);
 
       await settings.setLibraryMinDuration(30);
@@ -230,22 +215,28 @@ void main() {
       await settings.load();
 
       await settings.setLibraryMinDuration(7);
-      expect(settings.libraryMinDurationSeconds, 0,
-          reason: '7 não está em minDurationOptions');
-
       expect(
-        await settings.addIgnoredFolder('/pasta/'),
-        isTrue,
+        settings.libraryMinDurationSeconds,
+        0,
+        reason: '7 não está em minDurationOptions',
       );
+
+      expect(await settings.addIgnoredFolder('/pasta/'), isTrue);
       expect(
         await settings.addIgnoredFolder('/pasta'),
         isFalse,
         reason: 'duplicata (a normalização bate com a gravada)',
       );
-      expect(await settings.addIgnoredFolder('   '), isFalse,
-          reason: 'vazio não vira pasta');
-      expect(await settings.addIgnoredFolder('/'), isFalse,
-          reason: 'raiz é useless e é rejeitada');
+      expect(
+        await settings.addIgnoredFolder('   '),
+        isFalse,
+        reason: 'vazio não vira pasta',
+      );
+      expect(
+        await settings.addIgnoredFolder('/'),
+        isFalse,
+        reason: 'raiz é useless e é rejeitada',
+      );
 
       expect(await settings.removeIgnoredFolder('/pasta'), isTrue);
       expect(settings.ignoredFolders, isEmpty);
@@ -293,9 +284,13 @@ void main() {
       addTearDown(provider.dispose);
       await provider.init();
 
-      expect(_ids(provider), <String>['longa', 'curta', 'wa'],
-          reason: 'sem filtro ativo, tudo aparece (ordem natural: '
-              'Faixa < Toque < WhatsApp)');
+      expect(
+        _ids(provider),
+        <String>['longa', 'curta', 'wa'],
+        reason:
+            'sem filtro ativo, tudo aparece (ordem natural: '
+            'Faixa < Toque < WhatsApp)',
+      );
 
       // Duração mínima de 30 s → o toque de 5 s some.
       await settings.setLibraryMinDuration(30);
@@ -314,35 +309,40 @@ void main() {
       expect(_ids(provider), <String>['longa', 'curta', 'wa']);
     });
 
-    test('a reconciliação em segundo plano (onAppResumed) mantém o filtro',
-        () async {
-      DateTime now = DateTime(2026, 1, 1, 12);
-      final PlayerProvider provider = PlayerProvider(
-        PlayableAudioService(),
-        songRepository: repo,
-        sessionRepository: _FakeSession(),
-        settings: settings,
-        clock: () => now,
-      );
-      addTearDown(provider.dispose);
-      await settings.setLibraryMinDuration(30);
-      await provider.init();
-      expect(_ids(provider), <String>['longa', 'wa']);
-      final int scansAfterBoot = repo.scans;
+    test(
+      'a reconciliação em segundo plano (onAppResumed) mantém o filtro',
+      () async {
+        DateTime now = DateTime(2026, 1, 1, 12);
+        final PlayerProvider provider = PlayerProvider(
+          PlayableAudioService(),
+          songRepository: repo,
+          sessionRepository: _FakeSession(),
+          settings: settings,
+          clock: () => now,
+        );
+        addTearDown(provider.dispose);
+        await settings.setLibraryMinDuration(30);
+        await provider.init();
+        expect(_ids(provider), <String>['longa', 'wa']);
+        final int scansAfterBoot = repo.scans;
 
-      // Fora da janela de throttle: o resume varre de verdade...
-      now = now.add(PlayerProvider.catalogRescanThrottle +
-          const Duration(seconds: 1));
-      provider.onAppResumed();
-      await Future<void>.delayed(const Duration(milliseconds: 200));
+        // Fora da janela de throttle: o resume varre de verdade...
+        now = now.add(
+          PlayerProvider.catalogRescanThrottle + const Duration(seconds: 1),
+        );
+        provider.onAppResumed();
+        await Future<void>.delayed(const Duration(milliseconds: 200));
 
-      expect(repo.scans, scansAfterBoot + 1,
-          reason: 'resume fora do throttle dispara re-scan');
-      expect(
-        _ids(provider),
-        <String>['longa', 'wa'],
-        reason: 're-scan automático re-filtra (não devolve o filtrado)',
-      );
-    });
+        expect(
+          repo.scans,
+          scansAfterBoot + 1,
+          reason: 'resume fora do throttle dispara re-scan',
+        );
+        expect(_ids(provider), <String>[
+          'longa',
+          'wa',
+        ], reason: 're-scan automático re-filtra (não devolve o filtrado)');
+      },
+    );
   });
 }

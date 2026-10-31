@@ -129,20 +129,23 @@ void main() {
       expect(items[0].playable, isTrue);
 
       expect(
-        (await svc.getChildren(AudioService.browseFavoritesId))
-            .map((MediaItem m) => m.id),
+        (await svc.getChildren(
+          AudioService.browseFavoritesId,
+        )).map((MediaItem m) => m.id),
         <String>['song:b2'],
       );
       expect(
-        (await svc.getChildren(AudioService.browseRecentId))
-            .map((MediaItem m) => m.id),
+        (await svc.getChildren(
+          AudioService.browseRecentId,
+        )).map((MediaItem m) => m.id),
         <String>['song:c3'],
       );
       // A raiz "recent" que o Android Auto pede (EXTRA_RECENT) usa a
       // mesma fonte da categoria.
       expect(
-        (await svc.getChildren(AudioService.browseRecentRootId))
-            .map((MediaItem m) => m.id),
+        (await svc.getChildren(
+          AudioService.browseRecentRootId,
+        )).map((MediaItem m) => m.id),
         <String>['song:c3'],
       );
     });

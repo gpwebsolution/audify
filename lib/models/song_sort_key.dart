@@ -14,9 +14,8 @@ enum SongSortKey {
 
   /// Restaura a partir do valor persistido; string desconhecida
   /// (banco corrompido/antigo) volta para o padrão — título.
-  static SongSortKey fromName(String? name) =>
-      SongSortKey.values.firstWhere(
-        (SongSortKey k) => k.name == name,
-        orElse: () => SongSortKey.title,
-      );
+  static SongSortKey fromName(String? name) => SongSortKey.values.firstWhere(
+    (SongSortKey k) => k.name == name,
+    orElse: () => SongSortKey.title,
+  );
 }

@@ -46,14 +46,16 @@ class SongCatalogService {
 
   /// Carrega as músicas empacotadas nos assets.
   static Future<List<Song>> loadAssetSongs() async {
-    final AssetManifest manifest =
-        await AssetManifest.loadFromAssetBundle(rootBundle);
+    final AssetManifest manifest = await AssetManifest.loadFromAssetBundle(
+      rootBundle,
+    );
 
     final songs = <Song>[];
     for (final assetKey in manifest.listAssets()) {
       final isInSongsFolder = assetKey.startsWith(songsFolder);
-      final isAcceptedFormat =
-          assetKey.toLowerCase().endsWith(acceptedExtension);
+      final isAcceptedFormat = assetKey.toLowerCase().endsWith(
+        acceptedExtension,
+      );
       if (isInSongsFolder && isAcceptedFormat) {
         songs.add(Song.fromAsset(assetPath: assetKey));
       }

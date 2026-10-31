@@ -41,8 +41,9 @@ int compareSongs(
       (a.duration ?? Duration.zero).inMilliseconds.compareTo(
         (b.duration ?? Duration.zero).inMilliseconds,
       ),
-    SongSortKey.mostPlayed =>
-      (playCounts[a.id] ?? 0).compareTo(playCounts[b.id] ?? 0),
+    SongSortKey.mostPlayed => (playCounts[a.id] ?? 0).compareTo(
+      playCounts[b.id] ?? 0,
+    ),
   };
   final int directed = ascending ? primary : -primary;
   if (directed != 0) return directed;

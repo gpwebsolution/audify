@@ -402,7 +402,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
               ListTile(
                 leading: const Icon(Icons.playlist_add),
                 title: const Text('Adicionar à playlist'),
-                onTap: () => go(() => _addToPlaylist(context, playlists, video)),
+                onTap: () =>
+                    go(() => _addToPlaylist(context, playlists, video)),
               ),
               ListTile(
                 leading: const Icon(Icons.share_outlined),

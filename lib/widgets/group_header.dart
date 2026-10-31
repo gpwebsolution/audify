@@ -30,7 +30,8 @@ class GroupHeader extends StatelessWidget {
   final VoidCallback onToggle;
   final VoidCallback onPlayAll;
 
-  const GroupHeader({super.key, 
+  const GroupHeader({
+    super.key,
     required this.icon,
     required this.title,
     required this.count,

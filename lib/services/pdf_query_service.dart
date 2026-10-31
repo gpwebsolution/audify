@@ -33,8 +33,9 @@ class PdfQueryService {
     if (!isSupported) return const [];
 
     try {
-      final List<dynamic>? raw =
-          await _channel.invokeMethod<List<dynamic>>('getPdfs');
+      final List<dynamic>? raw = await _channel.invokeMethod<List<dynamic>>(
+        'getPdfs',
+      );
       if (raw == null) return const [];
       return raw
           .map((e) => PdfFile.fromChannel(e as Map<dynamic, dynamic>))
@@ -50,7 +51,10 @@ class PdfQueryService {
   static final Map<String, Uint8List> _thumbCache = {};
 
   /// Miniatura da primeira página do PDF (cache em memória + disco).
-  static Future<Uint8List?> loadThumbnail(String path, {int width = 240}) async {
+  static Future<Uint8List?> loadThumbnail(
+    String path, {
+    int width = 240,
+  }) async {
     final Uint8List? cached = _thumbCache[path];
     if (cached != null) return cached;
 
@@ -64,8 +68,10 @@ class PdfQueryService {
     }
 
     try {
-      final Uint8List? bytes = await _channel
-          .invokeMethod<Uint8List>('getThumbnail', {'path': path, 'width': width});
+      final Uint8List? bytes = await _channel.invokeMethod<Uint8List>(
+        'getThumbnail',
+        {'path': path, 'width': width},
+      );
       if (bytes != null && bytes.isNotEmpty) {
         _thumbCache[path] = bytes;
         await ThumbnailDiskCache.put(diskKey, bytes);
@@ -87,10 +93,9 @@ class PdfQueryService {
     if (cached != null) return cached;
     if (!isSupported) return null;
     try {
-      final int? count = await _channel.invokeMethod<int>(
-        'getPageCount',
-        {'path': path},
-      );
+      final int? count = await _channel.invokeMethod<int>('getPageCount', {
+        'path': path,
+      });
       if (count != null && count > 0) _pageCountCache[path] = count;
       return count;
     } catch (_) {

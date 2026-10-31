@@ -58,16 +58,19 @@ void main() {
   testWidgets('arquivo sem decoder nativo cai no erro de reprodução', (
     WidgetTester tester,
   ) async {
-    final File file =
-        File('${Directory.systemTemp.path}/audify_caract_video.mp4')
-          ..writeAsBytesSync(<int>[0, 0, 0, 0]);
+    final File file = File(
+      '${Directory.systemTemp.path}/audify_caract_video.mp4',
+    )..writeAsBytesSync(<int>[0, 0, 0, 0]);
     addTearDown(() {
       if (file.existsSync()) file.deleteSync();
     });
 
     await pumpScreen(tester, makeVideo(file.path));
 
-    expect(find.text('Não foi possível reproduzir este vídeo.'), findsOneWidget);
+    expect(
+      find.text('Não foi possível reproduzir este vídeo.'),
+      findsOneWidget,
+    );
     expect(find.byIcon(Icons.videocam_off_outlined), findsOneWidget);
   });
 }

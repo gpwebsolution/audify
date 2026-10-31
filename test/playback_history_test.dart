@@ -21,8 +21,7 @@ import 'package:audify/services/playlist_database.dart';
 
 import 'support/playable_audio_service.dart';
 
-Song _track(String name) =>
-    Song.fromAsset(assetPath: 'assets/songs/$name.mp3');
+Song _track(String name) => Song.fromAsset(assetPath: 'assets/songs/$name.mp3');
 
 class _FakeSongRepository extends SongRepository {
   final List<Song> assets;
@@ -65,10 +64,7 @@ PlayerProvider _provider(PlayableAudioService svc, PlaybackHistoryService h) =>
     );
 
 /// Serviço com spy de gravação e relógio fixo (a regra não toca banco).
-PlaybackHistoryService _service(
-  List<(String, int)> records, {
-  DateTime? now,
-}) =>
+PlaybackHistoryService _service(List<(String, int)> records, {DateTime? now}) =>
     PlaybackHistoryService(
       onRecord: (String songId, int playedAtMs) async {
         records.add((songId, playedAtMs));
@@ -182,15 +178,27 @@ void main() {
       final Song beta = _track('beta');
       const Duration twoMin = Duration(minutes: 2);
 
-      svc.onProgress(alpha, const Duration(seconds: 30), twoMin,
-          isPlaying: true);
-      svc.onProgress(beta, const Duration(seconds: 30), twoMin,
-          isPlaying: true);
+      svc.onProgress(
+        alpha,
+        const Duration(seconds: 30),
+        twoMin,
+        isPlaying: true,
+      );
+      svc.onProgress(
+        beta,
+        const Duration(seconds: 30),
+        twoMin,
+        isPlaying: true,
+      );
       expect(records, hasLength(2));
 
       // Volta para a faixa já tocada: nova execução → conta de novo.
-      svc.onProgress(alpha, const Duration(seconds: 30), twoMin,
-          isPlaying: true);
+      svc.onProgress(
+        alpha,
+        const Duration(seconds: 30),
+        twoMin,
+        isPlaying: true,
+      );
       expect(records, hasLength(3));
       expect(records.last.$1, alpha.id);
     });
@@ -201,11 +209,19 @@ void main() {
       final Song alpha = _track('alpha');
       const Duration twoMin = Duration(minutes: 2);
 
-      svc.onProgress(alpha, const Duration(seconds: 30), twoMin,
-          isPlaying: true);
+      svc.onProgress(
+        alpha,
+        const Duration(seconds: 30),
+        twoMin,
+        isPlaying: true,
+      );
       svc.onProgress(null, Duration.zero, twoMin, isPlaying: false);
-      svc.onProgress(alpha, const Duration(seconds: 30), twoMin,
-          isPlaying: true);
+      svc.onProgress(
+        alpha,
+        const Duration(seconds: 30),
+        twoMin,
+        isPlaying: true,
+      );
       expect(records, hasLength(2));
     });
 
@@ -263,8 +279,7 @@ void main() {
 
     test('recordPlay cria a linha e soma nas repetições', () async {
       await PlaylistDatabase.recordPlay('s1', playedAtMs: 100);
-      List<Map<String, Object?>> rows =
-          await PlaylistDatabase.getStats();
+      List<Map<String, Object?>> rows = await PlaylistDatabase.getStats();
       expect(rows, hasLength(1));
       expect(rows.single['song_id'], 's1');
       expect(rows.single['play_count'], 1);
@@ -277,8 +292,7 @@ void main() {
       expect(rows.single['last_played'], 200);
     });
 
-    test('getStats ordena por contagem e depois pelo último toque',
-        () async {
+    test('getStats ordena por contagem e depois pelo último toque', () async {
       // A: 2 plays (último 10) | B: 3 plays | C: 2 plays (último 30).
       await PlaylistDatabase.recordPlay('a', playedAtMs: 9);
       await PlaylistDatabase.recordPlay('a', playedAtMs: 10);
@@ -288,8 +302,7 @@ void main() {
       await PlaylistDatabase.recordPlay('c', playedAtMs: 29);
       await PlaylistDatabase.recordPlay('c', playedAtMs: 30);
 
-      final List<Map<String, Object?>> rows =
-          await PlaylistDatabase.getStats();
+      final List<Map<String, Object?>> rows = await PlaylistDatabase.getStats();
       expect(
         rows.map((Map<String, Object?> r) => r['song_id']).toList(),
         <String>['b', 'c', 'a'],
@@ -371,15 +384,12 @@ void main() {
         ),
       );
       await dbV4.insert('playlists', <String, Object?>{'name': 'Antiga'});
-      await dbV4.insert(
-        'favorite_songs',
-        <String, Object?>{
-          'song_id': 'fav1',
-          'title': 'Favorita',
-          'is_asset': 0,
-          'added_at': 42,
-        },
-      );
+      await dbV4.insert('favorite_songs', <String, Object?>{
+        'song_id': 'fav1',
+        'title': 'Favorita',
+        'is_asset': 0,
+        'added_at': 42,
+      });
       await dbV4.close();
 
       // Reabre pelo caminho do app (version 5 dispara o onUpgrade).
@@ -395,12 +405,10 @@ void main() {
   });
 
   group('PlayerProvider registra reprodução (4.2)', () {
-    test('posição acima do limiar grava uma única vez por execução',
-        () async {
+    test('posição acima do limiar grava uma única vez por execução', () async {
       final PlayableAudioService audio = PlayableAudioService();
       final List<(String, int)> records = <(String, int)>[];
-      final PlayerProvider provider =
-          _provider(audio, _service(records));
+      final PlayerProvider provider = _provider(audio, _service(records));
       addTearDown(provider.dispose);
       await provider.init();
 
@@ -438,8 +446,7 @@ void main() {
     test('50% da faixa conta sem chegar aos 30 s', () async {
       final PlayableAudioService audio = PlayableAudioService();
       final List<(String, int)> records = <(String, int)>[];
-      final PlayerProvider provider =
-          _provider(audio, _service(records));
+      final PlayerProvider provider = _provider(audio, _service(records));
       addTearDown(provider.dispose);
       await provider.init();
 

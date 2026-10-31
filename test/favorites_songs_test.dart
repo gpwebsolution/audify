@@ -55,10 +55,10 @@ void main() {
 
       List<Song> favorites = await PlaylistDatabase.getFavorites();
       // Ordem de leitura: título sem distinção de maiúsculas.
-      expect(
-        favorites.map((Song s) => s.id).toList(),
-        <String>['media-2', 'media-1'],
-      );
+      expect(favorites.map((Song s) => s.id).toList(), <String>[
+        'media-2',
+        'media-1',
+      ]);
 
       await PlaylistDatabase.removeFavorite('media-1');
       favorites = await PlaylistDatabase.getFavorites();
@@ -71,23 +71,20 @@ void main() {
       expect(await PlaylistDatabase.getFavorites(), hasLength(1));
     });
 
-    test(
-      'getFavorites reconstrói a Song com file_path (reserva) e '
-      'campos de exibição',
-      () async {
-        await PlaylistDatabase.addFavorite(
-          song('media-3', 'Guardada', filePath: '/music/guardada.mp3'),
-        );
-        final Song loaded = (await PlaylistDatabase.getFavorites()).single;
+    test('getFavorites reconstrói a Song com file_path (reserva) e '
+        'campos de exibição', () async {
+      await PlaylistDatabase.addFavorite(
+        song('media-3', 'Guardada', filePath: '/music/guardada.mp3'),
+      );
+      final Song loaded = (await PlaylistDatabase.getFavorites()).single;
 
-        expect(loaded.id, 'media-3');
-        expect(loaded.title, 'Guardada');
-        expect(loaded.artist, 'Artista media-3');
-        expect(loaded.filePath, '/music/guardada.mp3');
-        expect(loaded.duration, const Duration(minutes: 3));
-        expect(loaded.isAsset, isFalse);
-      },
-    );
+      expect(loaded.id, 'media-3');
+      expect(loaded.title, 'Guardada');
+      expect(loaded.artist, 'Artista media-3');
+      expect(loaded.filePath, '/music/guardada.mp3');
+      expect(loaded.duration, const Duration(minutes: 3));
+      expect(loaded.isAsset, isFalse);
+    });
 
     test('faixa asset também favorita (asset_path preservado)', () async {
       await PlaylistDatabase.addFavorite(assetSong('alpha', 'Alpha'));

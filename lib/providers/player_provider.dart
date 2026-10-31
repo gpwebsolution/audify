@@ -136,8 +136,9 @@ class PlayerProvider extends ChangeNotifier {
   /// (~5x/s) NÃO passa por notifyListeners(), então a lista da
   /// biblioteca não reconstrói enquanto toca. Só os widgets de
   /// progresso consomem, via ValueListenableBuilder ([positionListenable]).
-  final ValueNotifier<Duration> _positionNotifier =
-      ValueNotifier<Duration>(Duration.zero);
+  final ValueNotifier<Duration> _positionNotifier = ValueNotifier<Duration>(
+    Duration.zero,
+  );
 
   Duration _duration = Duration.zero;
   PlayerStatus _status = PlayerStatus.idle;
@@ -239,9 +240,11 @@ class PlayerProvider extends ChangeNotifier {
   }) : _songRepository = songRepository ?? SongRepository(),
        _sessionRepository = sessionRepository ?? SessionRepository(),
        _playbackQueue = playbackQueue ?? PlaybackQueue(),
-       _requestNotificationPermission = requestNotificationPermission ??
+       _requestNotificationPermission =
+           requestNotificationPermission ??
            PermissionService.requestNotificationAccess,
-       _history = history ??
+       _history =
+           history ??
            PlaybackHistoryService(onRecorded: HistoryProvider.instance.refresh),
        _sortKey = settings?.sortKey ?? SongSortKey.title,
        _sortAscending = settings?.sortAscending ?? true,
@@ -327,8 +330,9 @@ class PlayerProvider extends ChangeNotifier {
     // Item 2.4: SNAPSHOT primeiro — a biblioteca aparece na hora (sem
     // esperar o MediaStore) e a varredura real roda em segundo plano,
     // reconciliando. Só cai no caminho frio quem não tem snapshot.
-    final List<Song>? snapshot =
-        _isDisposed ? null : await _snapshotService?.load();
+    final List<Song>? snapshot = _isDisposed
+        ? null
+        : await _snapshotService?.load();
     if (snapshot != null && !_isDisposed) {
       _songs = await _buildCatalog(List<Song>.of(snapshot));
       if (_isDisposed) return;
@@ -393,8 +397,10 @@ class PlayerProvider extends ChangeNotifier {
           ? await _loadFilteredDeviceSongs()
           : const <Song>[];
       final List<Song> assets = await _songRepository.loadAssetSongs();
-      final List<Song> merged =
-          await _buildCatalog(<Song>[...device, ...assets]);
+      final List<Song> merged = await _buildCatalog(<Song>[
+        ...device,
+        ...assets,
+      ]);
       if (_isDisposed) return;
       if (_catalogEquals(_songs, merged)) return; // sem mudança: silêncio
 
@@ -421,8 +427,8 @@ class PlayerProvider extends ChangeNotifier {
   /// Pull-to-refresh da aba Música (item 2.4): ação EXPLÍCITA do
   /// usuário — varre sempre, sem o throttle do onAppResumed.
   Future<void> rescanCatalog() => _reconcileCatalog(
-        includeDevice: _permission == AudioPermissionState.granted,
-      );
+    includeDevice: _permission == AudioPermissionState.granted,
+  );
 
   void _markCatalogScanStarted() => _lastCatalogScan = _clock();
 
@@ -452,24 +458,26 @@ class PlayerProvider extends ChangeNotifier {
   }) {
     if (minDurationSeconds <= 0 && ignoredFolders.isEmpty) return device;
     final int minMs = minDurationSeconds * 1000;
-    return device.where((Song song) {
-      if (song.isAsset) return true;
-      if (minMs > 0) {
-        final Duration? duration = song.duration;
-        if (duration != null && duration.inMilliseconds < minMs) {
-          return false;
-        }
-      }
-      if (ignoredFolders.isNotEmpty) {
-        final String? path = song.filePath;
-        if (path != null) {
-          for (final String folder in ignoredFolders) {
-            if (path.startsWith('$folder/')) return false;
+    return device
+        .where((Song song) {
+          if (song.isAsset) return true;
+          if (minMs > 0) {
+            final Duration? duration = song.duration;
+            if (duration != null && duration.inMilliseconds < minMs) {
+              return false;
+            }
           }
-        }
-      }
-      return true;
-    }).toList(growable: false);
+          if (ignoredFolders.isNotEmpty) {
+            final String? path = song.filePath;
+            if (path != null) {
+              for (final String folder in ignoredFolders) {
+                if (path.startsWith('$folder/')) return false;
+              }
+            }
+          }
+          return true;
+        })
+        .toList(growable: false);
   }
 
   /// Igualdade REAL do catálogo — [Song.==] compara só o id, então
@@ -580,8 +588,9 @@ class PlayerProvider extends ChangeNotifier {
     // Item 4.3: ordenação escolhida — mesmo com busca filtrando,
     // o que sobrou sai na ordem pedida.
     if (_sortKey != SongSortKey.title || !_sortAscending) {
-      final Map<String, int> counts =
-          _sortKey == SongSortKey.mostPlayed ? _playCounts() : const {};
+      final Map<String, int> counts = _sortKey == SongSortKey.mostPlayed
+          ? _playCounts()
+          : const {};
       filtered.sort(
         (Song a, Song b) => compareSongs(
           a,
@@ -619,8 +628,7 @@ class PlayerProvider extends ChangeNotifier {
     for (final Song song in songs) {
       byKey.putIfAbsent(_groupKeyOf(song, mode), () => <Song>[]).add(song);
     }
-    final List<String> sortedKeys = byKey.keys.toList()
-      ..sort(naturalCompare);
+    final List<String> sortedKeys = byKey.keys.toList()..sort(naturalCompare);
     return <SongGroup>[
       for (final String key in sortedKeys)
         SongGroup(
@@ -996,10 +1004,7 @@ class PlayerProvider extends ChangeNotifier {
   /// canal quando a identidade muda — ver [AudioService.publishQueue]).
   void _publishQueueToService() {
     if (_isDisposed) return;
-    _audioService.publishQueue(
-      _playbackQueue.queue,
-      _playbackQueue.queueIndex,
-    );
+    _audioService.publishQueue(_playbackQueue.queue, _playbackQueue.queueIndex);
     _syncModesToService();
   }
 

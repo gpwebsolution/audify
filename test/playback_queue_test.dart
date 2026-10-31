@@ -279,17 +279,19 @@ void main() {
       expect(queue.current, _song(2));
     });
 
-    test('remoção da ÚLTIMA faixa com corrente no fim fica no índice válido',
-        () {
-      final PlaybackQueue queue = PlaybackQueue();
-      queue.setQueue(_threeSongs(), 2);
-      expect(queue.current, _song(3));
+    test(
+      'remoção da ÚLTIMA faixa com corrente no fim fica no índice válido',
+      () {
+        final PlaybackQueue queue = PlaybackQueue();
+        queue.setQueue(_threeSongs(), 2);
+        expect(queue.current, _song(3));
 
-      queue.removeSongs(<String>{_song(3).id});
+        queue.removeSongs(<String>{_song(3).id});
 
-      expect(queue.queueIndex, 1);
-      expect(queue.current, _song(2));
-    });
+        expect(queue.queueIndex, 1);
+        expect(queue.current, _song(2));
+      },
+    );
 
     test('remover todas as faixas esvazia a fila', () {
       final PlaybackQueue queue = PlaybackQueue();
@@ -337,10 +339,7 @@ void main() {
       final bool changed = queue.insertNext(<Song>[_song(4)]);
 
       expect(changed, isTrue);
-      expect(
-        queue.queue,
-        <Song>[_song(1), _song(2), _song(4), _song(3)],
-      );
+      expect(queue.queue, <Song>[_song(1), _song(2), _song(4), _song(3)]);
       expect(queue.queueIndex, 1);
       expect(queue.current, _song(2));
     });
@@ -373,16 +372,23 @@ void main() {
       // A corrente (_song(1)) no lote é ignorada; _song(2) já estava
       // logo após e entra no BLOCO na ordem do lote (4, 2, 5), nunca
       // em dobro.
-      final bool changed =
-          queue.insertNext(<Song>[_song(4), _song(1), _song(2), _song(5)]);
+      final bool changed = queue.insertNext(<Song>[
+        _song(4),
+        _song(1),
+        _song(2),
+        _song(5),
+      ]);
 
       // _song(2) já estava logo após a corrente: entra no BLOCO na
       // ordem do lote (4, 2, 5), nunca em dobro; a corrente não sai.
       expect(changed, isTrue);
-      expect(
-        queue.queue,
-        <Song>[_song(1), _song(4), _song(2), _song(5), _song(3)],
-      );
+      expect(queue.queue, <Song>[
+        _song(1),
+        _song(4),
+        _song(2),
+        _song(5),
+        _song(3),
+      ]);
       expect(queue.queueIndex, 0);
     });
 

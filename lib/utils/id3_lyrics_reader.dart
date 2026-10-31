@@ -93,10 +93,7 @@ String? _parseUsult(Uint8List bytes, int start, int end) {
   }
   // Sem terminador = payload fora do padrão: não arrisca leitura torta.
   if (textStart == null) return null;
-  final String decoded = _decodeText(
-    encoding,
-    bytes.sublist(textStart, end),
-  );
+  final String decoded = _decodeText(encoding, bytes.sublist(textStart, end));
   // Terminadores sobrescrevendo texto vazio; remove só o NUL final.
   return decoded.replaceAll('\x00', '').trim();
 }
@@ -143,4 +140,7 @@ int _synchsafe(Uint8List bytes, int at) =>
     (bytes[at + 3] & 0x7f);
 
 int _be32(Uint8List bytes, int at) =>
-    (bytes[at] << 24) | (bytes[at + 1] << 16) | (bytes[at + 2] << 8) | bytes[at + 3];
+    (bytes[at] << 24) |
+    (bytes[at + 1] << 16) |
+    (bytes[at + 2] << 8) |
+    bytes[at + 3];

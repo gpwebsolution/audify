@@ -61,19 +61,17 @@ class JustAudioMock {
 
   /// Ganhos enviados por banda, na ordem das chamadas.
   List<double> get gainCalls => callsWhere('androidEqualizerBandSetGain')
-      .map(
-        (MethodCall c) => ((c.arguments as Map)['gain'] as num).toDouble(),
-      )
+      .map((MethodCall c) => ((c.arguments as Map)['gain'] as num).toDouble())
       .toList();
 
-  List<int> get gainBands => callsWhere('androidEqualizerBandSetGain')
-      .map((MethodCall c) => (c.arguments as Map)['bandIndex'] as int)
-      .toList();
+  List<int> get gainBands => callsWhere(
+    'androidEqualizerBandSetGain',
+  ).map((MethodCall c) => (c.arguments as Map)['bandIndex'] as int).toList();
 
   /// Estados enviados em audioEffectSetEnabled.
-  List<bool> get enabledCalls => callsWhere('audioEffectSetEnabled')
-      .map((MethodCall c) => (c.arguments as Map)['enabled'] as bool)
-      .toList();
+  List<bool> get enabledCalls => callsWhere(
+    'audioEffectSetEnabled',
+  ).map((MethodCall c) => (c.arguments as Map)['enabled'] as bool).toList();
 
   /// Índices enviados em seek (na ordem das chamadas).
   List<int> get seekIndices => callsWhere('seek')
@@ -109,18 +107,14 @@ class JustAudioMock {
 
   /// Monta um PlayerDataMessage (canal data) para emitir pelo [dataSink].
   Map<dynamic, dynamic> playerData({bool? playing, double? volume}) =>
-      <dynamic, dynamic>{
-        'playing': ?playing,
-        'volume': ?volume,
-      };
+      <dynamic, dynamic>{'playing': ?playing, 'volume': ?volume};
 
   /// Agenda o evento `ready` de um load (o nativo emite após o player
   /// terminar de carregar). Enfileirado no EVENT loop (não microtask)
   /// para chegar depois de o cliente assinar o processingStateStream.
   void _scheduleAutoReady(MethodCall call) {
     if (!autoReadyOnLoad) return;
-    final Map<Object?, Object?> args =
-        call.arguments as Map<Object?, Object?>;
+    final Map<Object?, Object?> args = call.arguments as Map<Object?, Object?>;
     final int index = (args['initialIndex'] as int?) ?? 0;
     final int positionMs = ((args['initialPosition'] as int?) ?? 0) ~/ 1000;
     Future<void>.delayed(Duration.zero, () {
@@ -139,21 +133,21 @@ class JustAudioMock {
   void Function() install() {
     final TestWidgetsFlutterBinding binding =
         TestWidgetsFlutterBinding.ensureInitialized();
-    const MethodChannel main =
-        MethodChannel('com.ryanheise.just_audio.methods');
-
-    binding.defaultBinaryMessenger.setMockMethodCallHandler(
-      main,
-      (MethodCall call) async {
-        calls.add(call);
-        if (call.method == 'init') {
-          _installPlayerChannels(binding);
-        }
-        // void/Map: resposta vazia cobre init (void) e os métodos com
-        // Response.fromMap (payload nunca-nulo).
-        return <dynamic, dynamic>{};
-      },
+    const MethodChannel main = MethodChannel(
+      'com.ryanheise.just_audio.methods',
     );
+
+    binding.defaultBinaryMessenger.setMockMethodCallHandler(main, (
+      MethodCall call,
+    ) async {
+      calls.add(call);
+      if (call.method == 'init') {
+        _installPlayerChannels(binding);
+      }
+      // void/Map: resposta vazia cobre init (void) e os métodos com
+      // Response.fromMap (payload nunca-nulo).
+      return <dynamic, dynamic>{};
+    });
 
     return () {
       binding.defaultBinaryMessenger.setMockMethodCallHandler(main, null);

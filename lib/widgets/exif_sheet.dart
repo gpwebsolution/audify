@@ -46,7 +46,8 @@ class _ExifContent extends StatelessWidget {
 
   static double? _dmsToDecimal(List<num>? parts, String ref) {
     if (parts == null || parts.length < 3) return null;
-    final double value = parts[0].toDouble() +
+    final double value =
+        parts[0].toDouble() +
         parts[1].toDouble() / 60 +
         parts[2].toDouble() / 3600;
     return (ref == 'S' || ref == 'W') ? -value : value;
@@ -54,8 +55,10 @@ class _ExifContent extends StatelessWidget {
 
   static List<num>? _parseRationals(String raw) {
     try {
-      final List<String> pieces =
-          raw.replaceAll('[', '').replaceAll(']', '').split(',');
+      final List<String> pieces = raw
+          .replaceAll('[', '')
+          .replaceAll(']', '')
+          .split(',');
       if (pieces.length < 3) return null;
       num parseOne(String s) {
         s = s.trim();
@@ -65,6 +68,7 @@ class _ExifContent extends StatelessWidget {
         }
         return num.parse(s);
       }
+
       return [parseOne(pieces[0]), parseOne(pieces[1]), parseOne(pieces[2])];
     } catch (_) {
       return null;
@@ -93,19 +97,25 @@ class _ExifContent extends StatelessWidget {
 
     final String? latRaw = exif['GPSLatitude']?.toString();
     final String? lonRaw = exif['GPSLongitude']?.toString();
-    final double? latitude =
-        _dmsToDecimal(_parseRationals(latRaw ?? ''), exif['GPSLatitudeRef']?.toString() ?? '');
-    final double? longitude =
-        _dmsToDecimal(_parseRationals(lonRaw ?? ''), exif['GPSLongitudeRef']?.toString() ?? '');
+    final double? latitude = _dmsToDecimal(
+      _parseRationals(latRaw ?? ''),
+      exif['GPSLatitudeRef']?.toString() ?? '',
+    );
+    final double? longitude = _dmsToDecimal(
+      _parseRationals(lonRaw ?? ''),
+      exif['GPSLongitudeRef']?.toString() ?? '',
+    );
 
     final List<Widget> rows = <Widget>[
       _Row('Tamanho', formatBytes(details.size)),
       for (final entry in exif.entries)
-        if (_labels.containsKey(entry.key)) _Row(_labels[entry.key]!, '${entry.value}'),
+        if (_labels.containsKey(entry.key))
+          _Row(_labels[entry.key]!, '${entry.value}'),
       if (latitude != null && longitude != null)
         _Row(
-            'Localização',
-            '${latitude.toStringAsFixed(6)}, ${longitude.toStringAsFixed(6)}'),
+          'Localização',
+          '${latitude.toStringAsFixed(6)}, ${longitude.toStringAsFixed(6)}',
+        ),
     ];
 
     final bool hasAnyMetadata = exif.isNotEmpty;
@@ -128,10 +138,9 @@ class _ExifContent extends StatelessWidget {
           const SizedBox(height: 4),
           SelectableText(
             details.path,
-            style: Theme.of(context)
-                .textTheme
-                .bodySmall
-                ?.copyWith(fontFamily: 'monospace'),
+            style: Theme.of(
+              context,
+            ).textTheme.bodySmall?.copyWith(fontFamily: 'monospace'),
           ),
           const Divider(height: 24),
           ...rows,
@@ -140,8 +149,9 @@ class _ExifContent extends StatelessWidget {
               padding: const EdgeInsets.symmetric(vertical: 12),
               child: Text(
                 'Esta imagem não possui metadados EXIF.',
-                style: Theme.of(context).textTheme.bodyMedium
-                    ?.copyWith(color: colors.onSurfaceVariant),
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  color: colors.onSurfaceVariant,
+                ),
               ),
             ),
           if (latitude != null && longitude != null) ...[
@@ -151,11 +161,13 @@ class _ExifContent extends StatelessWidget {
               label: const Text('Copiar coordenadas GPS'),
               onPressed: () async {
                 await Clipboard.setData(
-                    ClipboardData(text: '$latitude, $longitude'));
+                  ClipboardData(text: '$latitude, $longitude'),
+                );
                 if (context.mounted) {
                   Navigator.pop(context);
                   ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Coordenadas copiadas.')));
+                    const SnackBar(content: Text('Coordenadas copiadas.')),
+                  );
                 }
               },
             ),
@@ -170,12 +182,17 @@ class _ExifContent extends StatelessWidget {
                 final navigator = Navigator.of(context);
                 final String? result =
                     await ImageMetadataService.saveCopyWithoutMetadata(
-                        details.path);
-                messenger.showSnackBar(SnackBar(
-                  content: Text(result == null
-                      ? 'Falha ao re-encodar imagem.'
-                      : 'Cópia limpa salva: ${result.split('/').last}'),
-                ));
+                      details.path,
+                    );
+                messenger.showSnackBar(
+                  SnackBar(
+                    content: Text(
+                      result == null
+                          ? 'Falha ao re-encodar imagem.'
+                          : 'Cópia limpa salva: ${result.split('/').last}',
+                    ),
+                  ),
+                );
                 navigator.pop();
               },
             ),
@@ -210,13 +227,15 @@ class _Row extends StatelessWidget {
             child: Text(
               label,
               style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: Theme.of(context).colorScheme.onSurfaceVariant,
-                  ),
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
             ),
           ),
           Expanded(
-            child: SelectableText(value,
-                style: Theme.of(context).textTheme.bodyMedium),
+            child: SelectableText(
+              value,
+              style: Theme.of(context).textTheme.bodyMedium,
+            ),
           ),
         ],
       ),

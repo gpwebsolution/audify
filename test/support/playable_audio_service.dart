@@ -59,13 +59,15 @@ class PlayableAudioService extends AudioService {
     // O serviço real publica em _updateMediaItem (sem capa aqui: não há
     // cache de arte em teste) — a recarga da fila lê mediaItem para
     // saber se a faixa que SOA é a corrente.
-    mediaItem.add(MediaItem(
-      id: song.id,
-      title: song.title,
-      artist: song.displayArtist,
-      album: song.album,
-      duration: song.duration,
-    ));
+    mediaItem.add(
+      MediaItem(
+        id: song.id,
+        title: song.title,
+        artist: song.displayArtist,
+        album: song.album,
+        duration: song.duration,
+      ),
+    );
   }
 
   Song? _current;

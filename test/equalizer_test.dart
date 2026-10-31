@@ -109,37 +109,36 @@ void main() {
     await audio.dispose();
   });
 
-  test('ganho é clampado na faixa real e bandas extras são ignoradas',
-      () async {
-    final JustAudioMock mock = mockJustAudio(
-      minDb: -10,
-      maxDb: 10,
-      bandCount: 3,
-    );
-    final AudioService audio = AudioService();
+  test(
+    'ganho é clampado na faixa real e bandas extras são ignoradas',
+    () async {
+      final JustAudioMock mock = mockJustAudio(
+        minDb: -10,
+        maxDb: 10,
+        bandCount: 3,
+      );
+      final AudioService audio = AudioService();
 
-    await audio.applyEqualizerSettings(
-      const EqualizerSettings(
-        enabled: true,
-        bands: <double>[99, -99, 5, 9, 9],
-        bassEnabled: false,
-      ),
-    );
-    final EqualizerSupport support = await audio.probeEqualizer();
+      await audio.applyEqualizerSettings(
+        const EqualizerSettings(
+          enabled: true,
+          bands: <double>[99, -99, 5, 9, 9],
+          bassEnabled: false,
+        ),
+      );
+      final EqualizerSupport support = await audio.probeEqualizer();
 
-    expect(support, EqualizerSupport.supported);
-    expect(audio.equalizerBandFrequencies, hasLength(3));
-    expect(mock.gainBands, <int>[0, 1, 2]);
-    expect(mock.gainCalls, <double>[10, -10, 5]);
-    await audio.dispose();
-  });
+      expect(support, EqualizerSupport.supported);
+      expect(audio.equalizerBandFrequencies, hasLength(3));
+      expect(mock.gainBands, <int>[0, 1, 2]);
+      expect(mock.gainCalls, <double>[10, -10, 5]);
+      await audio.dispose();
+    },
+  );
 
   test('apply pré-ativação é local e saneia valores', () async {
     final AudioService audio = AudioService();
-    expect(
-      audio.equalizerBandFrequencies,
-      <double>[60, 230, 910, 3600, 14000],
-    );
+    expect(audio.equalizerBandFrequencies, <double>[60, 230, 910, 3600, 14000]);
 
     await audio.applyEqualizerSettings(
       const EqualizerSettings(
@@ -188,10 +187,7 @@ void main() {
     await reloaded.load();
     expect(reloaded.equalizerEnabled, isFalse);
     expect(reloaded.equalizerBands, <double>[1, 2, 3]);
-    expect(
-      reloaded.equalizerPreset,
-      SettingsProvider.equalizerCustomPreset,
-    );
+    expect(reloaded.equalizerPreset, SettingsProvider.equalizerCustomPreset);
     expect(reloaded.equalizerBassStrength, 45);
   });
 
@@ -214,10 +210,7 @@ void main() {
     });
     final SettingsProvider oversized = SettingsProvider();
     await oversized.load();
-    expect(
-      oversized.equalizerBands,
-      <double>[0, 0, 0, 0, 0],
-    );
+    expect(oversized.equalizerBands, <double>[0, 0, 0, 0, 0]);
   });
 
   // ------------------------------------------------------------------
@@ -298,8 +291,9 @@ void main() {
   // Tela própria (widget)
   // ------------------------------------------------------------------
 
-  testWidgets('tela: suporte conhecido — mestre, presets, bandas e graves',
-      (WidgetTester tester) async {
+  testWidgets('tela: suporte conhecido — mestre, presets, bandas e graves', (
+    WidgetTester tester,
+  ) async {
     // Viewport alto: a lista da tela inteira cabe sem scroll (ListView é
     // lazy e itens fora da tela não existem na árvore).
     tester.view.physicalSize = const Size(1080, 2200);
@@ -361,8 +355,9 @@ void main() {
     expect(find.byType(Slider), findsNWidgets(6));
   });
 
-  testWidgets('tela: aparelho sem suporte mostra estado desligado',
-      (WidgetTester tester) async {
+  testWidgets('tela: aparelho sem suporte mostra estado desligado', (
+    WidgetTester tester,
+  ) async {
     SharedPreferences.setMockInitialValues(<String, Object>{});
     final SettingsProvider settings = SettingsProvider();
     await settings.load();

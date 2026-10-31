@@ -30,14 +30,13 @@ void main() {
     List<Map<String, String>> failed = const <Map<String, String>>[],
     bool cancelled = false,
     bool permissionRequired = false,
-  }) =>
-      <String, Object?>{
-        'deleted': deleted,
-        'notFound': notFound,
-        'failed': failed,
-        'cancelled': cancelled,
-        'permissionRequired': permissionRequired,
-      };
+  }) => <String, Object?>{
+    'deleted': deleted,
+    'notFound': notFound,
+    'failed': failed,
+    'cancelled': cancelled,
+    'permissionRequired': permissionRequired,
+  };
 
   /// Instala um handler que responde o payload depois de [delay].
   void respondWith(
@@ -102,8 +101,10 @@ void main() {
 
       // Confirmado pelo SO → a UI pode limpar.
       expect(result.removed.length, 2);
-      expect(result.removed.map((MediaRef r) => r.key).toSet(),
-          <String>{'audio:7', 'video:8'});
+      expect(result.removed.map((MediaRef r) => r.key).toSet(), <String>{
+        'audio:7',
+        'video:8',
+      });
       expect(result.message, '2 arquivos excluídos.');
     });
 
@@ -189,10 +190,7 @@ void main() {
         if (dir.existsSync()) dir.deleteSync();
       });
 
-      final MediaRef alive = MediaRef.audio(
-        mediaId: 99,
-        path: file.path,
-      );
+      final MediaRef alive = MediaRef.audio(mediaId: 99, path: file.path);
       respondWith(payload(notFound: <String>[alive.key]));
 
       final DeleteResult result = await MediaDeleteService.deleteMedia(
@@ -226,9 +224,9 @@ void main() {
       // Se o timeout não existisse, isto nunca completaria e o teste
       // terminaria por timeout do próprio runner em vez de passar.
       await expectLater(
-        MediaDeleteService.deleteMedia(items).timeout(
-          const Duration(seconds: 5),
-        ),
+        MediaDeleteService.deleteMedia(
+          items,
+        ).timeout(const Duration(seconds: 5)),
         completes,
       );
     });
@@ -274,8 +272,9 @@ void main() {
 
     test('lista vazia não chama o canal', () async {
       respondWith(payload());
-      final DeleteResult result =
-          await MediaDeleteService.deleteMedia(const <MediaRef>[]);
+      final DeleteResult result = await MediaDeleteService.deleteMedia(
+        const <MediaRef>[],
+      );
       expect(calls, isEmpty);
       expect(result.total, 0);
     });

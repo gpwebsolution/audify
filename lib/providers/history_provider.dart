@@ -44,7 +44,9 @@ class HistoryProvider extends ChangeNotifier {
   /// Ids em ordem "tocado recentemente" (último toque primeiro).
   List<String> get recentIds {
     final List<SongStat> byRecent = [..._stats]
-      ..sort((SongStat a, SongStat b) => b.lastPlayedMs.compareTo(a.lastPlayedMs));
+      ..sort(
+        (SongStat a, SongStat b) => b.lastPlayedMs.compareTo(a.lastPlayedMs),
+      );
     return [for (final SongStat s in byRecent) s.songId];
   }
 
@@ -63,8 +65,7 @@ class HistoryProvider extends ChangeNotifier {
   Future<void> refresh() async {
     if (_isDisposed) return;
     try {
-      final List<Map<String, Object?>> rows =
-          await PlaylistDatabase.getStats();
+      final List<Map<String, Object?>> rows = await PlaylistDatabase.getStats();
       _stats = <SongStat>[
         for (final Map<String, Object?> row in rows)
           SongStat(

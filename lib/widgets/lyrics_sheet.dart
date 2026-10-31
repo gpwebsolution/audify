@@ -165,12 +165,15 @@ class _LyricsViewState extends State<_LyricsView> {
     // árvore), então ensureVisible não tem alvo. Salta para a posição
     // ESTIMADA; no frame seguinte a linha já está perto e o refino
     // abaixo centraliza com precisão.
-    final ScrollPosition? position =
-        _scroll.hasClients ? _scroll.position : null;
+    final ScrollPosition? position = _scroll.hasClients
+        ? _scroll.position
+        : null;
     if (position == null) return;
     final double target =
-        (index * _estimatedLineExtent - position.viewportDimension * 0.4)
-            .clamp(0.0, position.maxScrollExtent);
+        (index * _estimatedLineExtent - position.viewportDimension * 0.4).clamp(
+          0.0,
+          position.maxScrollExtent,
+        );
     _scroll.jumpTo(target);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final BuildContext? refined = _currentLine.currentContext;

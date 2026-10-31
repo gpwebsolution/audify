@@ -12,22 +12,25 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
   group('resolveAppLocale (5.1)', () {
-    test('inglês vira en; qualquer outro idioma e lista vazia caem no pt-BR', () {
-      expect(
-        resolveAppLocale(const <Locale>[Locale('en', 'US')]),
-        const Locale('en'),
-      );
-      expect(
-        resolveAppLocale(const <Locale>[Locale('pt', 'BR')]),
-        const Locale('pt', 'BR'),
-      );
-      expect(
-        resolveAppLocale(const <Locale>[Locale('fr', 'FR')]),
-        const Locale('pt', 'BR'),
-      );
-      expect(resolveAppLocale(const <Locale>[]), const Locale('pt', 'BR'));
-      expect(resolveAppLocale(null), const Locale('pt', 'BR'));
-    });
+    test(
+      'inglês vira en; qualquer outro idioma e lista vazia caem no pt-BR',
+      () {
+        expect(
+          resolveAppLocale(const <Locale>[Locale('en', 'US')]),
+          const Locale('en'),
+        );
+        expect(
+          resolveAppLocale(const <Locale>[Locale('pt', 'BR')]),
+          const Locale('pt', 'BR'),
+        );
+        expect(
+          resolveAppLocale(const <Locale>[Locale('fr', 'FR')]),
+          const Locale('pt', 'BR'),
+        );
+        expect(resolveAppLocale(const <Locale>[]), const Locale('pt', 'BR'));
+        expect(resolveAppLocale(null), const Locale('pt', 'BR'));
+      },
+    );
   });
 
   group('Configurações > Aparência — idioma (5.1)', () {
@@ -45,15 +48,14 @@ void main() {
           value: settings,
           child: Builder(
             builder: (BuildContext context) {
-              final SettingsProvider current =
-                  context.watch<SettingsProvider>();
+              final SettingsProvider current = context
+                  .watch<SettingsProvider>();
               return MaterialApp(
                 locale: current.localeOverride,
                 supportedLocales: const [Locale('pt', 'BR'), Locale('en')],
                 localeListResolutionCallback: (List<Locale>? locales, _) =>
                     resolveAppLocale(locales),
-                localizationsDelegates:
-                    AppLocalizations.localizationsDelegates,
+                localizationsDelegates: AppLocalizations.localizationsDelegates,
                 home: const Scaffold(body: SettingsScreen()),
               );
             },
@@ -94,7 +96,11 @@ void main() {
       await settings.setLocaleChoice(AppLocaleChoice.system);
       await tester.pumpAndSettle();
       expect(settings.localeOverride, isNull);
-      expect(find.text('Idioma').evaluate().isNotEmpty || find.text('Language').evaluate().isNotEmpty, isTrue);
+      expect(
+        find.text('Idioma').evaluate().isNotEmpty ||
+            find.text('Language').evaluate().isNotEmpty,
+        isTrue,
+      );
 
       settings.dispose();
     });

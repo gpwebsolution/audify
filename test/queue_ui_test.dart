@@ -33,10 +33,10 @@ import 'support/playable_audio_service.dart';
 Song _track(String name) => Song.fromAsset(assetPath: 'assets/songs/$name.mp3');
 
 List<Song> _threeTracks() => <Song>[
-      _track('alpha'),
-      _track('beta'),
-      _track('gamma'),
-    ];
+  _track('alpha'),
+  _track('beta'),
+  _track('gamma'),
+];
 
 class _FakeSongRepository extends SongRepository {
   final List<Song> assets;
@@ -67,23 +67,21 @@ class _FakeSessionRepository extends SessionRepository {
 }
 
 PlayerProvider _provider(PlayableAudioService svc) => PlayerProvider(
-      svc,
-      songRepository: _FakeSongRepository(_threeTracks()),
-      sessionRepository: _FakeSessionRepository(),
-    );
+  svc,
+  songRepository: _FakeSongRepository(_threeTracks()),
+  sessionRepository: _FakeSessionRepository(),
+);
 
-List<String> _titles(Iterable<Song> songs) =>
-    <String>[for (final Song s in songs) s.title];
+List<String> _titles(Iterable<Song> songs) => <String>[
+  for (final Song s in songs) s.title,
+];
 
 /// Botão ⋮ da faixa [title] — o tile corrente troca o ⋮ pelo ícone de
 /// tocando (song_list_tile), então achar por índice fica frágil.
 Finder _menuOf(String title) => find.descendant(
-      of: find.ancestor(
-        of: find.text(title),
-        matching: find.byType(SongListTile),
-      ),
-      matching: find.byTooltip('Ações da faixa'),
-    );
+  of: find.ancestor(of: find.text(title), matching: find.byType(SongListTile)),
+  matching: find.byTooltip('Ações da faixa'),
+);
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -116,8 +114,7 @@ void main() {
       expect(audio.queue.value, hasLength(4));
     });
 
-    test('append de faixa já presente não faz nada (sem recarga)',
-        () async {
+    test('append de faixa já presente não faz nada (sem recarga)', () async {
       final PlayableAudioService audio = PlayableAudioService();
       final PlayerProvider provider = _provider(audio);
       addTearDown(provider.dispose);
@@ -132,23 +129,25 @@ void main() {
       expect(audio.played.length, 1); // nada recarregou
     });
 
-    test('nunca tocou: adicionar à fila começa a primeira reprodução',
-        () async {
-      final PlayableAudioService audio = PlayableAudioService();
-      final PlayerProvider provider = _provider(audio);
-      addTearDown(provider.dispose);
+    test(
+      'nunca tocou: adicionar à fila começa a primeira reprodução',
+      () async {
+        final PlayableAudioService audio = PlayableAudioService();
+        final PlayerProvider provider = _provider(audio);
+        addTearDown(provider.dispose);
 
-      await provider.init();
-      expect(provider.currentSong, isNull);
+        await provider.init();
+        expect(provider.currentSong, isNull);
 
-      provider.queueAppend(<Song>[_track('beta')]);
-      await pumpEventQueue();
+        provider.queueAppend(<Song>[_track('beta')]);
+        await pumpEventQueue();
 
-      expect(_titles(provider.queue), <String>['Beta']);
-      expect(provider.currentSong?.title, 'Beta');
-      expect(_titles(audio.played), <String>['Beta']);
-      expect(audio.status.value, PlayerStatus.playing);
-    });
+        expect(_titles(provider.queue), <String>['Beta']);
+        expect(provider.currentSong?.title, 'Beta');
+        expect(_titles(audio.played), <String>['Beta']);
+        expect(audio.status.value, PlayerStatus.playing);
+      },
+    );
 
     test('remover a corrente: a sobrevivente toca do início', () async {
       final PlayableAudioService audio = PlayableAudioService();
@@ -169,48 +168,51 @@ void main() {
       expect(audio.mediaItem.value?.id, provider.currentSong?.id);
     });
 
-    test('recarga preserva a posição quando a corrente continua a mesma',
-        () async {
-      final PlayableAudioService audio = PlayableAudioService();
-      final PlayerProvider provider = _provider(audio);
-      addTearDown(provider.dispose);
+    test(
+      'recarga preserva a posição quando a corrente continua a mesma',
+      () async {
+        final PlayableAudioService audio = PlayableAudioService();
+        final PlayerProvider provider = _provider(audio);
+        addTearDown(provider.dispose);
 
-      await provider.init();
-      await provider.playVisibleAt(0); // Alpha
-      audio.position.value = const Duration(seconds: 42);
+        await provider.init();
+        await provider.playVisibleAt(0); // Alpha
+        audio.position.value = const Duration(seconds: 42);
 
-      provider.queueAppend(<Song>[_track('delta')]); // Alpha segue
-      await pumpEventQueue();
+        provider.queueAppend(<Song>[_track('delta')]); // Alpha segue
+        await pumpEventQueue();
 
-      expect(provider.currentSong?.title, 'Alpha');
-      // Alpha é a faixa que soa: a recarga reabre na MESMA posição.
-      expect(audio.lastStartAt, const Duration(seconds: 42));
-      expect(audio.played.length, 2);
-      expect(audio.status.value, PlayerStatus.playing);
-    });
+        expect(provider.currentSong?.title, 'Alpha');
+        // Alpha é a faixa que soa: a recarga reabre na MESMA posição.
+        expect(audio.lastStartAt, const Duration(seconds: 42));
+        expect(audio.played.length, 2);
+        expect(audio.status.value, PlayerStatus.playing);
+      },
+    );
 
-    test('com player pausado, a edição volta a pausar (não vira play)',
-        () async {
-      final PlayableAudioService audio = PlayableAudioService();
-      final PlayerProvider provider = _provider(audio);
-      addTearDown(provider.dispose);
+    test(
+      'com player pausado, a edição volta a pausar (não vira play)',
+      () async {
+        final PlayableAudioService audio = PlayableAudioService();
+        final PlayerProvider provider = _provider(audio);
+        addTearDown(provider.dispose);
 
-      await provider.init();
-      await provider.playVisibleAt(0);
-      await audio.pause();
-      expect(audio.status.value, PlayerStatus.paused);
+        await provider.init();
+        await provider.playVisibleAt(0);
+        await audio.pause();
+        expect(audio.status.value, PlayerStatus.paused);
 
-      provider.queueAppend(<Song>[_track('delta')]);
-      await pumpEventQueue();
+        provider.queueAppend(<Song>[_track('delta')]);
+        await pumpEventQueue();
 
-      // A recarga abre a fila nova e re-aplica o estado pausado.
-      expect(audio.status.value, PlayerStatus.paused);
-      expect(audio.played.length, 2);
-      expect(provider.queue.length, 4);
-    });
+        // A recarga abre a fila nova e re-aplica o estado pausado.
+        expect(audio.status.value, PlayerStatus.paused);
+        expect(audio.played.length, 2);
+        expect(provider.queue.length, 4);
+      },
+    );
 
-    test('reordenar com player tocando: muda a ordem, não a faixa',
-        () async {
+    test('reordenar com player tocando: muda a ordem, não a faixa', () async {
       final PlayableAudioService audio = PlayableAudioService();
       final PlayerProvider provider = _provider(audio);
       addTearDown(provider.dispose);
@@ -221,19 +223,14 @@ void main() {
       provider.queueMove(2, 0); // Gamma vai para o topo
       await pumpEventQueue();
 
-      expect(_titles(provider.queue), <String>[
-        'Gamma',
-        'Alpha',
-        'Beta',
-      ]);
+      expect(_titles(provider.queue), <String>['Gamma', 'Alpha', 'Beta']);
       expect(provider.currentSong?.title, 'Alpha');
       // Recarga reabre a MESMA faixa (posição preservada via mediaItem).
       expect(audio.played.last.title, 'Alpha');
       expect(audio.lastStartAt, Duration.zero); // posição era zero
     });
 
-    test('com player parado, a edição só muda a fila (sem recarga)',
-        () async {
+    test('com player parado, a edição só muda a fila (sem recarga)', () async {
       final PlayableAudioService audio = PlayableAudioService();
       final PlayerProvider provider = _provider(audio);
       addTearDown(provider.dispose);
@@ -254,8 +251,9 @@ void main() {
   });
 
   group('PlayerScreen — folha "Fila" (3.5)', () {
-    testWidgets('abre a folha, lista a fila e tocar um item troca a faixa',
-        (WidgetTester tester) async {
+    testWidgets('abre a folha, lista a fila e tocar um item troca a faixa', (
+      WidgetTester tester,
+    ) async {
       final PlayableAudioService audio = PlayableAudioService();
       final PlayerProvider provider = _provider(audio);
       addTearDown(provider.dispose);
@@ -291,8 +289,9 @@ void main() {
       await tester.pumpWidget(const SizedBox());
     });
 
-    testWidgets('remover da folha atualiza a lista ao vivo sem fechar',
-        (WidgetTester tester) async {
+    testWidgets('remover da folha atualiza a lista ao vivo sem fechar', (
+      WidgetTester tester,
+    ) async {
       final PlayableAudioService audio = PlayableAudioService();
       final PlayerProvider provider = _provider(audio);
       addTearDown(provider.dispose);
@@ -378,8 +377,9 @@ void main() {
       },
     );
 
-    testWidgets('seleção em lote: Adicionar à fila leva o lote e limpa',
-        (WidgetTester tester) async {
+    testWidgets('seleção em lote: Adicionar à fila leva o lote e limpa', (
+      WidgetTester tester,
+    ) async {
       final PlayableAudioService audio = PlayableAudioService();
       final PlayerProvider provider = _provider(audio);
       addTearDown(provider.dispose);

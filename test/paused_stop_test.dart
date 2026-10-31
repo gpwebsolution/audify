@@ -20,10 +20,7 @@ void main() {
   setUp(() async {
     now = DateTime(2026, 1, 1, 22);
     minutes = 30;
-    svc = AudioService(
-      clock: () => now,
-      stopAfterPausedMinutes: () => minutes,
-    );
+    svc = AudioService(clock: () => now, stopAfterPausedMinutes: () => minutes);
     // Drena o replay assíncrono inicial do just_audio (estado idle) —
     // sem isso o evento chega depois do set manual de status e o
     // listener sobrescreve o cenário do teste.
@@ -59,19 +56,22 @@ void main() {
     expect(svc.status.value, PlayerStatus.paused);
   });
 
-  test('desativar a preferência (0) no meio do prazo cancela sem parar', () async {
-    svc.status.value = PlayerStatus.paused;
-    svc.schedulePausedStop();
+  test(
+    'desativar a preferência (0) no meio do prazo cancela sem parar',
+    () async {
+      svc.status.value = PlayerStatus.paused;
+      svc.schedulePausedStop();
 
-    minutes = 0; // usuário escolheu "Desligado" em Configurações
-    now = now.add(const Duration(minutes: 45));
-    expect(await svc.checkPausedStop(), isFalse);
-    expect(svc.status.value, PlayerStatus.paused);
+      minutes = 0; // usuário escolheu "Desligado" em Configurações
+      now = now.add(const Duration(minutes: 45));
+      expect(await svc.checkPausedStop(), isFalse);
+      expect(svc.status.value, PlayerStatus.paused);
 
-    // O prazo foi limpo: voltar para 30 e checar não dispara sozinho.
-    minutes = 30;
-    expect(await svc.checkPausedStop(), isFalse);
-  });
+      // O prazo foi limpo: voltar para 30 e checar não dispara sozinho.
+      minutes = 30;
+      expect(await svc.checkPausedStop(), isFalse);
+    },
+  );
 
   test('preferência 0 na origem: agendar é no-op', () async {
     minutes = 0;

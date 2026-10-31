@@ -24,10 +24,12 @@ String? stripImageMetadataJob(String path) {
     if (decoded == null) return null;
 
     final bool isPng = path.toLowerCase().endsWith('.png');
-    final List<int> encoded =
-        isPng ? img.encodePng(decoded) : img.encodeJpg(decoded, quality: 92);
+    final List<int> encoded = isPng
+        ? img.encodePng(decoded)
+        : img.encodeJpg(decoded, quality: 92);
 
-    final String out = '${path.substring(0, path.lastIndexOf('.'))}_sem_exif'
+    final String out =
+        '${path.substring(0, path.lastIndexOf('.'))}_sem_exif'
         '${isPng ? '.png' : '.jpg'}';
     File(out).writeAsBytesSync(encoded, flush: true);
     return out;

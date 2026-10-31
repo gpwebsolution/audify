@@ -79,7 +79,9 @@ class CatalogSnapshotService {
       if (file == null) return;
       final String payload = jsonEncode(<String, Object?>{
         'version': formatVersion,
-        'songs': <Map<String, Object?>>[for (final Song s in songs) s.toStored()],
+        'songs': <Map<String, Object?>>[
+          for (final Song s in songs) s.toStored(),
+        ],
       });
       final File tmp = File('${file.path}.tmp');
       await tmp.writeAsString(payload, flush: true);

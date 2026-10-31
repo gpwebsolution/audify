@@ -25,14 +25,13 @@ Song _song({
   String? filePath,
   String? assetPath,
   bool isAsset = false,
-}) =>
-    Song.fromStored(<String, Object?>{
-      'song_id': id,
-      'title': title,
-      'file_path': filePath,
-      'asset_path': assetPath,
-      'is_asset': isAsset ? 1 : 0,
-    })!;
+}) => Song.fromStored(<String, Object?>{
+  'song_id': id,
+  'title': title,
+  'file_path': filePath,
+  'asset_path': assetPath,
+  'is_asset': isAsset ? 1 : 0,
+})!;
 
 class _FakeRepo extends SongRepository {
   final List<Song> device;
@@ -96,69 +95,90 @@ void main() {
         catalog: catalog,
       );
 
-      expect(_ids(view.songs), <String>['media-1', 'novo-7'],
-          reason: 'a por id, c por path (com o id atual do catálogo); '
-              'ordem da playlist preservada');
-      expect(view.songs.first.title, 'Título novo A',
-          reason: 'metadados frescos do catálogo, não o snapshot morto');
-      expect(_ids(view.missing), <String>['media-2'],
-          reason: 'b não está no catálogo e /music/b.mp3 não existe');
+      expect(
+        _ids(view.songs),
+        <String>['media-1', 'novo-7'],
+        reason:
+            'a por id, c por path (com o id atual do catálogo); '
+            'ordem da playlist preservada',
+      );
+      expect(
+        view.songs.first.title,
+        'Título novo A',
+        reason: 'metadados frescos do catálogo, não o snapshot morto',
+      );
+      expect(_ids(view.missing), <String>[
+        'media-2',
+      ], reason: 'b não está no catálogo e /music/b.mp3 não existe');
     });
 
-    test('fora do catálogo mas arquivo no disco (filtro 2.5) NÃO é fantasma',
-        () async {
-      final Directory dir = await Directory.systemTemp.createTemp('audify_26');
-      addTearDown(() => dir.delete(recursive: true));
-      final File viva = File(p.join(dir.path, 'viva.mp3'))
-        ..writeAsStringSync('x');
+    test(
+      'fora do catálogo mas arquivo no disco (filtro 2.5) NÃO é fantasma',
+      () async {
+        final Directory dir = await Directory.systemTemp.createTemp(
+          'audify_26',
+        );
+        addTearDown(() => dir.delete(recursive: true));
+        final File viva = File(p.join(dir.path, 'viva.mp3'))
+          ..writeAsStringSync('x');
 
-      final PlaylistSongsView view = await PlaylistProvider.reconcileSongs(
-        <Song>[_song(id: 'escondida', title: 'Filtrada', filePath: viva.path)],
-        catalog: <Song>[
-          _song(id: 'outra', title: 'Outra', filePath: '/music/outra.mp3'),
-        ],
-      );
+        final PlaylistSongsView view = await PlaylistProvider.reconcileSongs(
+          <Song>[
+            _song(id: 'escondida', title: 'Filtrada', filePath: viva.path),
+          ],
+          catalog: <Song>[
+            _song(id: 'outra', title: 'Outra', filePath: '/music/outra.mp3'),
+          ],
+        );
 
-      expect(_ids(view.songs), <String>['escondida'],
-          reason: 'o arquivo existe em disco — só o filtro 2.5 escondeu; '
-              '"Remover indisponíveis" não pode apagar isso');
-      expect(view.missing, isEmpty);
-    });
+        expect(
+          _ids(view.songs),
+          <String>['escondida'],
+          reason:
+              'o arquivo existe em disco — só o filtro 2.5 escondeu; '
+              '"Remover indisponíveis" não pode apagar isso',
+        );
+        expect(view.missing, isEmpty);
+      },
+    );
 
-    test('catálogo vazio não marca nada (guarda) e asset nunca é fantasma',
-        () async {
-      final PlaylistSongsView semCatalogo =
-          await PlaylistProvider.reconcileSongs(
-        <Song>[
-          _song(id: 'a', title: 'A', filePath: '/music/a.mp3'),
-          _song(id: 'b', title: 'B', filePath: '/music/b.mp3'),
-        ],
-        catalog: const <Song>[],
-      );
-      expect(_ids(semCatalogo.songs), <String>['a', 'b'],
-          reason: 'catálogo vazio = ainda carregando/sem permissão; marcar '
+    test(
+      'catálogo vazio não marca nada (guarda) e asset nunca é fantasma',
+      () async {
+        final PlaylistSongsView semCatalogo =
+            await PlaylistProvider.reconcileSongs(<Song>[
+              _song(id: 'a', title: 'A', filePath: '/music/a.mp3'),
+              _song(id: 'b', title: 'B', filePath: '/music/b.mp3'),
+            ], catalog: const <Song>[]);
+        expect(
+          _ids(semCatalogo.songs),
+          <String>['a', 'b'],
+          reason:
+              'catálogo vazio = ainda carregando/sem permissão; marcar '
               'tudo daria "Remover indisponíveis" o poder de apagar a '
-              'playlist inteira à toa');
-      expect(semCatalogo.missing, isEmpty);
+              'playlist inteira à toa',
+        );
+        expect(semCatalogo.missing, isEmpty);
 
-      final PlaylistSongsView comAsset = await PlaylistProvider.reconcileSongs(
-        <Song>[
-          _song(
-            id: 'assets/songs/anjo.mp3',
-            title: 'Anjo',
-            isAsset: true,
-            assetPath: 'assets/songs/anjo.mp3',
-          ),
-          _song(id: 'sumiu', title: 'Sumiu', filePath: '/music/sumiu.mp3'),
-        ],
-        catalog: <Song>[
-          _song(id: 'x', title: 'X', filePath: '/music/x.mp3'),
-        ],
-      );
-      expect(_ids(comAsset.songs), <String>['assets/songs/anjo.mp3'],
-          reason: 'asset vive no bundle — só some se o app mudar');
-      expect(_ids(comAsset.missing), <String>['sumiu']);
-    });
+        final PlaylistSongsView
+        comAsset = await PlaylistProvider.reconcileSongs(
+          <Song>[
+            _song(
+              id: 'assets/songs/anjo.mp3',
+              title: 'Anjo',
+              isAsset: true,
+              assetPath: 'assets/songs/anjo.mp3',
+            ),
+            _song(id: 'sumiu', title: 'Sumiu', filePath: '/music/sumiu.mp3'),
+          ],
+          catalog: <Song>[_song(id: 'x', title: 'X', filePath: '/music/x.mp3')],
+        );
+        expect(_ids(comAsset.songs), <String>[
+          'assets/songs/anjo.mp3',
+        ], reason: 'asset vive no bundle — só some se o app mudar');
+        expect(_ids(comAsset.missing), <String>['sumiu']);
+      },
+    );
   });
 
   group('songsOf + remoção em lote no banco ffi (2.6)', () {
@@ -208,17 +228,20 @@ void main() {
       addTearDown(provider.dispose);
 
       final PlaylistSongsView view = await provider.songsOf(playlistId);
-      expect(_ids(view.songs), <String>['media-1', 'novo-7'],
-          reason: 'a casa por id, c por file_path — nada de fantasma na fila');
+      expect(_ids(view.songs), <String>[
+        'media-1',
+        'novo-7',
+      ], reason: 'a casa por id, c por file_path — nada de fantasma na fila');
       expect(view.songs.first.title, 'A novo');
       expect(_ids(view.missing), <String>['media-2']);
 
       await provider.removeUnavailableSongs(playlistId, view.missing);
 
-      final List<Song> remaining =
-          await PlaylistDatabase.getSongs(playlistId);
-      expect(_ids(remaining), <String>['media-1', 'velho-9'],
-          reason: 'só a fantasma sai; as outras linhas seguem');
+      final List<Song> remaining = await PlaylistDatabase.getSongs(playlistId);
+      expect(_ids(remaining), <String>[
+        'media-1',
+        'velho-9',
+      ], reason: 'só a fantasma sai; as outras linhas seguem');
 
       final PlaylistSongsView again = await provider.songsOf(playlistId);
       expect(again.missing, isEmpty, reason: 'reabriu: nada fantasma');

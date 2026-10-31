@@ -39,10 +39,9 @@ class PlaybackQueue {
 
   bool get isEmpty => _queue.isEmpty;
 
-  Song? get current =>
-      (_queueIndex >= 0 && _queueIndex < _queue.length)
-          ? _queue[_queueIndex]
-          : null;
+  Song? get current => (_queueIndex >= 0 && _queueIndex < _queue.length)
+      ? _queue[_queueIndex]
+      : null;
 
   /// Reconstrói a fila a partir da lista visível (respeita shuffle) e
   /// reencaixa a faixa [keepCurrent] na nova posição, se existir.
@@ -61,14 +60,9 @@ class PlaybackQueue {
       _originalOrder = List.of(visibleSongs);
       final List<Song> rest = keepCurrent == null
           ? List.of(visibleSongs)
-          : visibleSongs
-              .where((Song s) => s.id != keepCurrent.id)
-              .toList();
+          : visibleSongs.where((Song s) => s.id != keepCurrent.id).toList();
       _fisherYates(rest);
-      _queue = <Song>[
-        ?keepCurrent,
-        ...rest,
-      ];
+      _queue = <Song>[?keepCurrent, ...rest];
       // A faixa atual lidera a fila embaralhada; se ela não
       // existir mais na lista visível, a fila fica sem seleção
       // (-1) — mesma semântica de antes.
@@ -272,15 +266,12 @@ class PlaybackQueue {
     if (keep == null) {
       // Sem corrente selecionada o índice -1 continua -1.
     } else if (removed.id == keep.id) {
-      _queueIndex = _queue.isEmpty
-          ? -1
-          : index.clamp(0, _queue.length - 1);
+      _queueIndex = _queue.isEmpty ? -1 : index.clamp(0, _queue.length - 1);
     } else {
       _queueIndex = _queue.indexWhere((Song s) => s.id == keep.id);
     }
     if (_shuffle) {
-      final int pos =
-          _originalOrder.indexWhere((Song s) => s.id == removed.id);
+      final int pos = _originalOrder.indexWhere((Song s) => s.id == removed.id);
       if (pos >= 0) {
         final List<Song> order = List<Song>.of(_originalOrder);
         order.removeAt(pos);
@@ -313,8 +304,9 @@ class PlaybackQueue {
   List<Song> removeSongs(Set<String> removedIds) {
     if (removedIds.isEmpty || _queue.isEmpty) return const [];
 
-    final List<Song> removed =
-        _queue.where((s) => removedIds.contains(s.id)).toList();
+    final List<Song> removed = _queue
+        .where((s) => removedIds.contains(s.id))
+        .toList();
     if (removed.isEmpty) return const [];
 
     final List<Song> before = _queue;
@@ -324,8 +316,9 @@ class PlaybackQueue {
     if (_shuffle) {
       // A ordem original também é a fila "de verdade" do shuffle: sem isto
       // a faixa removida voltaria ao desativar o embaralhamento.
-      _originalOrder =
-          _originalOrder.where((s) => !removedIds.contains(s.id)).toList();
+      _originalOrder = _originalOrder
+          .where((s) => !removedIds.contains(s.id))
+          .toList();
     }
 
     final Song? current = currentIndex >= 0 && currentIndex < before.length
@@ -338,8 +331,8 @@ class PlaybackQueue {
       _queueIndex = _queue.isEmpty
           ? -1
           : currentIndex < 0
-              ? 0
-              : currentIndex.clamp(0, _queue.length - 1);
+          ? 0
+          : currentIndex.clamp(0, _queue.length - 1);
     } else {
       final int idx = _queue.indexWhere((s) => s.id == current.id);
       _queueIndex = idx;

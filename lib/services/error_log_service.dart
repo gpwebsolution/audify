@@ -114,8 +114,7 @@ class ErrorLogService {
         '${now.hour.toString().padLeft(2, '0')}:'
         '${now.minute.toString().padLeft(2, '0')}:'
         '${now.second.toString().padLeft(2, '0')}';
-    final StringBuffer buf = StringBuffer()
-      ..writeln('[$ts][$source] $error');
+    final StringBuffer buf = StringBuffer()..writeln('[$ts][$source] $error');
     if (stack != null && stack.toString().isNotEmpty) {
       buf.writeln(stack.toString());
     }
@@ -156,8 +155,7 @@ class ErrorLogService {
   }
 
   /// Entradas recentes em memória (útil antes do init terminar).
-  static List<String> get memoryEntries =>
-      List.unmodifiable(_memoryBuffer);
+  static List<String> get memoryEntries => List.unmodifiable(_memoryBuffer);
 
   /// Dump do buffer de memória (fallback quando não há arquivo).
   static String get memoryDump => _memoryBuffer.join();

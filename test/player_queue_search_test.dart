@@ -49,16 +49,15 @@ class _FakeSessionRepository extends SessionRepository {
   Future<(List<String>, int)> loadQueue() async => (const <String>[], -1);
 }
 
-Song _track(String name) =>
-    Song.fromAsset(assetPath: 'assets/songs/$name.mp3');
+Song _track(String name) => Song.fromAsset(assetPath: 'assets/songs/$name.mp3');
 
 List<Song> _fiveTracks() => [
-      _track('apple'),
-      _track('banana'),
-      _track('cherry'),
-      _track('mango'),
-      _track('pear'),
-    ];
+  _track('apple'),
+  _track('banana'),
+  _track('cherry'),
+  _track('mango'),
+  _track('pear'),
+];
 
 PlayerProvider _provider() {
   return PlayerProvider(
@@ -71,9 +70,7 @@ PlayerProvider _provider() {
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-
-  test('digitar na busca não altera a fila que está tocando',
-      () async {
+  test('digitar na busca não altera a fila que está tocando', () async {
     final PlayerProvider provider = _provider();
     addTearDown(provider.dispose);
 

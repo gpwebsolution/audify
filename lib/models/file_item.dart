@@ -186,12 +186,13 @@ class FileItem {
     required int createdSeconds,
   }) {
     final String name = path.split('/').where((s) => s.isNotEmpty).last;
-    final String extension =
-        isDirectory ? '' : _extractExtension(name);
+    final String extension = isDirectory ? '' : _extractExtension(name);
     return FileItem(
       path: path,
       name: name,
-      type: isDirectory ? FileType.directory : FileTypeMap.fromExtension(extension),
+      type: isDirectory
+          ? FileType.directory
+          : FileTypeMap.fromExtension(extension),
       size: size,
       dateModified: modifiedSeconds,
       dateCreated: createdSeconds,
@@ -217,12 +218,16 @@ class FileItem {
     if (isDirectory) return '';
     if (size < 1024) return '$size B';
     if (size < 1024 * 1024) return '${(size / 1024).toStringAsFixed(1)} KB';
-    if (size < 1024 * 1024 * 1024) return '${(size / (1024 * 1024)).toStringAsFixed(1)} MB';
+    if (size < 1024 * 1024 * 1024) {
+      return '${(size / (1024 * 1024)).toStringAsFixed(1)} MB';
+    }
     return '${(size / (1024 * 1024 * 1024)).toStringAsFixed(1)} GB';
   }
 
   String get displayDateModified {
-    final DateTime dt = DateTime.fromMillisecondsSinceEpoch(dateModified * 1000);
+    final DateTime dt = DateTime.fromMillisecondsSinceEpoch(
+      dateModified * 1000,
+    );
     return '${dt.day.toString().padLeft(2, '0')}/${dt.month.toString().padLeft(2, '0')}/${dt.year} '
         '${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
   }
@@ -236,14 +241,14 @@ class FileItem {
   IconData get icon => FileTypeMap.iconForType(type);
 
   @override
-  bool operator ==(Object other) =>
-      other is FileItem && other.path == path;
+  bool operator ==(Object other) => other is FileItem && other.path == path;
 
   @override
   int get hashCode => path.hashCode;
 
   @override
-  String toString() => 'FileItem(path: $path, name: $name, type: $type, size: $size)';
+  String toString() =>
+      'FileItem(path: $path, name: $name, type: $type, size: $size)';
 }
 
 /// Atalhos rápidos para pastas do sistema

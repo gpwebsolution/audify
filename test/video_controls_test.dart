@@ -78,8 +78,15 @@ void main() {
     expect(seekStarts, isNotEmpty);
     expect(seekUpdates, isNotEmpty);
     expect(seekEnds, isNotEmpty);
-    for (final Duration d in <Duration>[...seekStarts, ...seekUpdates, ...seekEnds]) {
-      expect(d.inMilliseconds, inInclusiveRange(0, const Duration(minutes: 3).inMilliseconds));
+    for (final Duration d in <Duration>[
+      ...seekStarts,
+      ...seekUpdates,
+      ...seekEnds,
+    ]) {
+      expect(
+        d.inMilliseconds,
+        inInclusiveRange(0, const Duration(minutes: 3).inMilliseconds),
+      );
     }
   });
 
@@ -88,20 +95,18 @@ void main() {
   ) async {
     await t.pumpWidget(
       const MaterialApp(
-        home: Scaffold(
-          body: VideoVolumeOsd(message: null, volume: 0.5),
-        ),
+        home: Scaffold(body: VideoVolumeOsd(message: null, volume: 0.5)),
       ),
     );
-    AnimatedOpacity opacity = t.widget<AnimatedOpacity>(find.byType(AnimatedOpacity));
+    AnimatedOpacity opacity = t.widget<AnimatedOpacity>(
+      find.byType(AnimatedOpacity),
+    );
     expect(opacity.opacity, 0);
     expect(find.text('70%'), findsNothing);
 
     await t.pumpWidget(
       const MaterialApp(
-        home: Scaffold(
-          body: VideoVolumeOsd(message: '70%', volume: 0.7),
-        ),
+        home: Scaffold(body: VideoVolumeOsd(message: '70%', volume: 0.7)),
       ),
     );
     opacity = t.widget<AnimatedOpacity>(find.byType(AnimatedOpacity));

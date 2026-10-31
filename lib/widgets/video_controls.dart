@@ -19,7 +19,11 @@ class VideoVolumeOsd extends StatelessWidget {
   /// Volume atual, usado para escolher o ícone.
   final double volume;
 
-  const VideoVolumeOsd({super.key, required this.message, required this.volume});
+  const VideoVolumeOsd({
+    super.key,
+    required this.message,
+    required this.volume,
+  });
 
   static IconData _iconFor(double value) {
     if (value <= 0.001) return Icons.volume_off;
@@ -99,7 +103,8 @@ class VideoControlsBar extends StatelessWidget {
   final ValueChanged<double> onVolumeChanged;
   final VoidCallback onToggleMute;
 
-  const VideoControlsBar({super.key, 
+  const VideoControlsBar({
+    super.key,
     required this.position,
     required this.duration,
     required this.isPlaying,

@@ -86,9 +86,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
           padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
           child: Text(
             l10n.languageSection,
-            style: Theme.of(context).textTheme.titleSmall?.copyWith(
-              fontWeight: FontWeight.w600,
-            ),
+            style: Theme.of(
+              context,
+            ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600),
           ),
         ),
         RadioGroup<AppLocaleChoice>(
@@ -225,12 +225,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           trailing: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text(
-                _minDurationLabel(
-                  l10n,
-                  settings.libraryMinDurationSeconds,
-                ),
-              ),
+              Text(_minDurationLabel(l10n, settings.libraryMinDurationSeconds)),
               const Icon(Icons.chevron_right),
             ],
           ),
@@ -465,7 +460,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     return RadioListTile<int>(
                       value: option,
                       title: Text(
-                        option == 0 ? l10n.offOption : l10n.secondsShort(option),
+                        option == 0
+                            ? l10n.offOption
+                            : l10n.secondsShort(option),
                       ),
                       subtitle: Text(
                         option == 0
@@ -500,12 +497,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
           child: ListView(
             shrinkWrap: true,
             children: <Widget>[
-              for (final double option
-                  in SettingsProvider.playbackSpeedOptions)
-                RadioListTile<double>(
-                  value: option,
-                  title: Text('${option}x'),
-                ),
+              for (final double option in SettingsProvider.playbackSpeedOptions)
+                RadioListTile<double>(value: option, title: Text('${option}x')),
             ],
           ),
         ),
@@ -716,102 +709,105 @@ class _SettingsScreenState extends State<SettingsScreen> {
         showDragHandle: true,
         isScrollControlled: true,
         builder: (BuildContext sheetContext) => StatefulBuilder(
-          builder: (BuildContext sheetContext, void Function(void Function()) setSheetState) {
-            final AppLocalizations l10n = l10nOf(sheetContext);
-            return SafeArea(
-              child: Padding(
-                padding: EdgeInsets.only(
-                  bottom: MediaQuery.of(sheetContext).viewInsets.bottom,
-                ),
-                child: ConstrainedBox(
-                  constraints: BoxConstraints(
-                    maxHeight: MediaQuery.sizeOf(sheetContext).height * 0.7,
-                  ),
-                  child: ListView(
-                    shrinkWrap: true,
-                    children: <Widget>[
-                      Padding(
-                        padding: const EdgeInsets.fromLTRB(24, 8, 24, 0),
-                        child: Text(
-                          l10n.ignoredFoldersTitle,
-                          style: const TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
+          builder:
+              (
+                BuildContext sheetContext,
+                void Function(void Function()) setSheetState,
+              ) {
+                final AppLocalizations l10n = l10nOf(sheetContext);
+                return SafeArea(
+                  child: Padding(
+                    padding: EdgeInsets.only(
+                      bottom: MediaQuery.of(sheetContext).viewInsets.bottom,
+                    ),
+                    child: ConstrainedBox(
+                      constraints: BoxConstraints(
+                        maxHeight: MediaQuery.sizeOf(sheetContext).height * 0.7,
                       ),
-                      Padding(
-                        padding: const EdgeInsets.fromLTRB(24, 4, 24, 8),
-                        child: Text(
-                          l10n.ignoredFoldersSheetSub,
-                          style: const TextStyle(fontSize: 13),
-                        ),
-                      ),
-                      if (settings.ignoredFolders.isEmpty)
-                        ListTile(
-                          leading: const Icon(Icons.check_circle_outline),
-                          title: Text(l10n.noIgnoredFolders),
-                        ),
-                      for (final String folder in settings.ignoredFolders)
-                        ListTile(
-                          leading: const Icon(Icons.folder_off),
-                          title: Text(
-                            folder,
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                          trailing: IconButton(
-                            tooltip: l10n.removeFromListTooltip,
-                            icon: const Icon(Icons.close),
-                            onPressed: () async {
-                              final bool ok = await settings
-                                  .removeIgnoredFolder(folder);
-                              if (ok) changed = true;
-                              if (sheetContext.mounted) {
-                                setSheetState(() {});
-                              }
-                            },
-                          ),
-                        ),
-                      Padding(
-                        padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-                        child: Row(
-                          children: <Widget>[
-                            Expanded(
-                              child: TextField(
-                                controller: pathController,
-                                decoration: const InputDecoration(
-                                  hintText:
-                                      '/storage/.../WhatsApp/Audio',
-                                  border: OutlineInputBorder(),
-                                  isDense: true,
-                                ),
+                      child: ListView(
+                        shrinkWrap: true,
+                        children: <Widget>[
+                          Padding(
+                            padding: const EdgeInsets.fromLTRB(24, 8, 24, 0),
+                            child: Text(
+                              l10n.ignoredFoldersTitle,
+                              style: const TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w600,
                               ),
                             ),
-                            const SizedBox(width: 8),
-                            FilledButton(
-                              onPressed: () async {
-                                final bool ok = await settings
-                                    .addIgnoredFolder(pathController.text);
-                                if (ok) {
-                                  changed = true;
-                                  pathController.clear();
-                                }
-                                if (sheetContext.mounted) {
-                                  setSheetState(() {});
-                                }
-                              },
-                              child: Text(l10n.addButton),
+                          ),
+                          Padding(
+                            padding: const EdgeInsets.fromLTRB(24, 4, 24, 8),
+                            child: Text(
+                              l10n.ignoredFoldersSheetSub,
+                              style: const TextStyle(fontSize: 13),
                             ),
-                          ],
-                        ),
+                          ),
+                          if (settings.ignoredFolders.isEmpty)
+                            ListTile(
+                              leading: const Icon(Icons.check_circle_outline),
+                              title: Text(l10n.noIgnoredFolders),
+                            ),
+                          for (final String folder in settings.ignoredFolders)
+                            ListTile(
+                              leading: const Icon(Icons.folder_off),
+                              title: Text(
+                                folder,
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              trailing: IconButton(
+                                tooltip: l10n.removeFromListTooltip,
+                                icon: const Icon(Icons.close),
+                                onPressed: () async {
+                                  final bool ok = await settings
+                                      .removeIgnoredFolder(folder);
+                                  if (ok) changed = true;
+                                  if (sheetContext.mounted) {
+                                    setSheetState(() {});
+                                  }
+                                },
+                              ),
+                            ),
+                          Padding(
+                            padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+                            child: Row(
+                              children: <Widget>[
+                                Expanded(
+                                  child: TextField(
+                                    controller: pathController,
+                                    decoration: const InputDecoration(
+                                      hintText: '/storage/.../WhatsApp/Audio',
+                                      border: OutlineInputBorder(),
+                                      isDense: true,
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                FilledButton(
+                                  onPressed: () async {
+                                    final bool ok = await settings
+                                        .addIgnoredFolder(pathController.text);
+                                    if (ok) {
+                                      changed = true;
+                                      pathController.clear();
+                                    }
+                                    if (sheetContext.mounted) {
+                                      setSheetState(() {});
+                                    }
+                                  },
+                                  child: Text(l10n.addButton),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
                       ),
-                    ],
+                    ),
                   ),
-                ),
-              ),
-            );
-          },
+                );
+              },
         ),
       );
     } finally {
@@ -825,12 +821,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
   /// no provider; item 5.1: formatado na UI com as localizações.
   static String _minDurationLabel(AppLocalizations l10n, int seconds) {
     if (seconds == 0) return l10n.offOption;
-    if (seconds >= 60 && seconds % 60 == 0) return l10n.minutesShort(seconds ~/ 60);
+    if (seconds >= 60 && seconds % 60 == 0) {
+      return l10n.minutesShort(seconds ~/ 60);
+    }
     return l10n.secondsShort(seconds);
   }
 
   /// Rótulo do crossfade (0 = desligado).
-  static String _crossfadeLabel(AppLocalizations l10n, SettingsProvider settings) {
+  static String _crossfadeLabel(
+    AppLocalizations l10n,
+    SettingsProvider settings,
+  ) {
     final int seconds = settings.crossfadeSeconds;
     return seconds == 0 ? l10n.offOption : l10n.secondsShort(seconds);
   }

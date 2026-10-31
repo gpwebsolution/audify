@@ -168,9 +168,9 @@ class _MusicScreenState extends State<MusicScreen> with MediaSelection<String> {
     if (deletable.isEmpty) {
       clearSelection();
       final AppLocalizations l10n = l10nOf(context);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(l10n.assetLockedMessage)),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(l10n.assetLockedMessage)));
       return;
     }
 
@@ -197,9 +197,9 @@ class _MusicScreenState extends State<MusicScreen> with MediaSelection<String> {
         if (!context.mounted) return;
         if (skipped > 0) {
           final AppLocalizations l10n = l10nOf(context);
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(l10n.skippedKept(skipped))),
-          );
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text(l10n.skippedKept(skipped))));
         }
       },
     );
@@ -383,43 +383,51 @@ class _MusicScreenState extends State<MusicScreen> with MediaSelection<String> {
                 // marcado) + sentido, junto com os chips de agrupamento.
                 Padding(
                   padding: const EdgeInsets.only(right: 8),
-                  child: PopupMenuButton<({SongSortKey? key, bool? toggleDirection})>(
-                    tooltip: l10n.sortTooltip,
-                    icon: const Icon(Icons.sort),
-                    itemBuilder: (BuildContext menuContext) => <PopupMenuEntry<
-                        ({SongSortKey? key, bool? toggleDirection})>>[
-                      for (final SongSortKey key in SongSortKey.values)
-                        CheckedPopupMenuItem(
-                          value: (key: key, toggleDirection: null),
-                          checked: view.sortKey == key,
-                          child: Text(_sortKeyLabel(l10n, key)),
-                        ),
-                      const PopupMenuDivider(),
-                      PopupMenuItem(
-                        value: (key: null, toggleDirection: true),
-                        child: Text(
-                          view.sortAscending
-                              ? l10n.sortDescendingOption
-                              : l10n.sortAscendingOption,
-                        ),
+                  child:
+                      PopupMenuButton<
+                        ({SongSortKey? key, bool? toggleDirection})
+                      >(
+                        tooltip: l10n.sortTooltip,
+                        icon: const Icon(Icons.sort),
+                        itemBuilder: (BuildContext menuContext) =>
+                            <
+                              PopupMenuEntry<
+                                ({SongSortKey? key, bool? toggleDirection})
+                              >
+                            >[
+                              for (final SongSortKey key in SongSortKey.values)
+                                CheckedPopupMenuItem(
+                                  value: (key: key, toggleDirection: null),
+                                  checked: view.sortKey == key,
+                                  child: Text(_sortKeyLabel(l10n, key)),
+                                ),
+                              const PopupMenuDivider(),
+                              PopupMenuItem(
+                                value: (key: null, toggleDirection: true),
+                                child: Text(
+                                  view.sortAscending
+                                      ? l10n.sortDescendingOption
+                                      : l10n.sortAscendingOption,
+                                ),
+                              ),
+                            ],
+                        onSelected:
+                            (
+                              ({SongSortKey? key, bool? toggleDirection}) value,
+                            ) {
+                              if (value.toggleDirection == true) {
+                                provider.setSort(
+                                  key: view.sortKey,
+                                  ascending: !view.sortAscending,
+                                );
+                              } else if (value.key != null) {
+                                provider.setSort(
+                                  key: value.key!,
+                                  ascending: view.sortAscending,
+                                );
+                              }
+                            },
                       ),
-                    ],
-                    onSelected: (
-                      ({SongSortKey? key, bool? toggleDirection}) value,
-                    ) {
-                      if (value.toggleDirection == true) {
-                        provider.setSort(
-                          key: view.sortKey,
-                          ascending: !view.sortAscending,
-                        );
-                      } else if (value.key != null) {
-                        provider.setSort(
-                          key: value.key!,
-                          ascending: view.sortAscending,
-                        );
-                      }
-                    },
-                  ),
                 ),
               ],
             ),
@@ -541,8 +549,7 @@ class _MusicScreenState extends State<MusicScreen> with MediaSelection<String> {
               selected: marked,
               selectionMode: isSelectionMode,
               isFavorite: FavoritesProvider.instance.isFavorite(song.id),
-              onFavoriteToggle: () =>
-                  FavoritesProvider.instance.toggle(song),
+              onFavoriteToggle: () => FavoritesProvider.instance.toggle(song),
               onTap: () => _onSongTap(provider, index, song),
               onLongPress: () => _onSongLongPress(song),
               onMenuTap: () => _showSongMenu(context, provider, song),
@@ -603,8 +610,7 @@ class _MusicScreenState extends State<MusicScreen> with MediaSelection<String> {
             selected: isSelected(song.id),
             selectionMode: isSelectionMode,
             isFavorite: FavoritesProvider.instance.isFavorite(song.id),
-            onFavoriteToggle: () =>
-                FavoritesProvider.instance.toggle(song),
+            onFavoriteToggle: () => FavoritesProvider.instance.toggle(song),
             // O grupo vira a fila: próxima/anterior navega dentro dele.
             onTap: () => isSelectionMode
                 ? toggleSelect(song.id)
@@ -673,9 +679,7 @@ class _MusicScreenState extends State<MusicScreen> with MediaSelection<String> {
               ListTile(
                 leading: Icon(
                   isFav ? Icons.favorite : Icons.favorite_border,
-                  color: isFav
-                      ? Theme.of(context).colorScheme.error
-                      : null,
+                  color: isFav ? Theme.of(context).colorScheme.error : null,
                 ),
                 title: Text(isFav ? l10n.unfavorite : l10n.favorite),
                 subtitle: isFav
@@ -713,7 +717,9 @@ class _MusicScreenState extends State<MusicScreen> with MediaSelection<String> {
                   ),
                   title: Text(
                     l10n.deleteFromDevice,
-                    style: TextStyle(color: Theme.of(context).colorScheme.error),
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.error,
+                    ),
                   ),
                   subtitle: Text(
                     l10n.deleteSubtitle(song.title),
@@ -741,9 +747,7 @@ class _MusicScreenState extends State<MusicScreen> with MediaSelection<String> {
                   subtitle: Text(l10n.assetLockedMessage),
                   onTap: () {
                     ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text(l10n.assetLockedMessage),
-                      ),
+                      SnackBar(content: Text(l10n.assetLockedMessage)),
                     );
                   },
                 ),
@@ -824,9 +828,9 @@ class _MusicScreenState extends State<MusicScreen> with MediaSelection<String> {
           ),
         );
       },
-        subtitleOf: (Playlist playlist) =>
-            l10nOf(context).tracksCount(playlist.songCount),
-      );
+      subtitleOf: (Playlist playlist) =>
+          l10nOf(context).tracksCount(playlist.songCount),
+    );
   }
 
   Widget _buildEmptyState(
@@ -883,10 +887,7 @@ class _MusicScreenState extends State<MusicScreen> with MediaSelection<String> {
               textAlign: TextAlign.center,
               style: Theme.of(context).textTheme.bodyMedium,
             ),
-            if (action != null) ...<Widget>[
-              const SizedBox(height: 16),
-              action,
-            ],
+            if (action != null) ...<Widget>[const SizedBox(height: 16), action],
           ],
         ),
       ),

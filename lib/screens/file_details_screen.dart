@@ -37,17 +37,23 @@ class _FileDetailsScreenState extends State<FileDetailsScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(widget.item.name, maxLines: 1, overflow: TextOverflow.ellipsis),
+        title: Text(
+          widget.item.name,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
         actions: [
           IconButton(
             tooltip: 'Abrir',
             icon: const Icon(Icons.open_in_new),
             onPressed: () async {
-              final bool ok =
-                  await FileQueryService.openFile(widget.item.path);
+              final bool ok = await FileQueryService.openFile(widget.item.path);
               if (!ok && mounted) {
-                ScaffoldMessenger.of(this.context).showSnackBar(const SnackBar(
-                    content: Text('Nenhum app abre este tipo de arquivo.')));
+                ScaffoldMessenger.of(this.context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Nenhum app abre este tipo de arquivo.'),
+                  ),
+                );
               }
             },
           ),
@@ -71,7 +77,9 @@ class _FileDetailsScreenState extends State<FileDetailsScreen> {
           }
           final details = snapshot.data;
           if (details == null) {
-            return const Center(child: Text('Não foi possível ler os detalhes.'));
+            return const Center(
+              child: Text('Não foi possível ler os detalhes.'),
+            );
           }
 
           return ListView(
@@ -84,7 +92,12 @@ class _FileDetailsScreenState extends State<FileDetailsScreen> {
                 children: [
                   _InfoRow('Nome', widget.item.name),
                   _InfoRow('Tipo', _typeLabel()),
-                  _InfoRow('Extensão', widget.item.extension.isEmpty ? '—' : '.${widget.item.extension}'),
+                  _InfoRow(
+                    'Extensão',
+                    widget.item.extension.isEmpty
+                        ? '—'
+                        : '.${widget.item.extension}',
+                  ),
                   _InfoRow('Tamanho', formatBytes(details.size)),
                 ],
               ),
@@ -92,8 +105,12 @@ class _FileDetailsScreenState extends State<FileDetailsScreen> {
               _Section(
                 title: 'Localização e datas',
                 children: [
-                  SelectableText(widget.item.path,
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(fontFamily: 'monospace')),
+                  SelectableText(
+                    widget.item.path,
+                    style: Theme.of(
+                      context,
+                    ).textTheme.bodySmall?.copyWith(fontFamily: 'monospace'),
+                  ),
                   const SizedBox(height: 8),
                   _InfoRow('Criado', _fmtDate(details.dateCreated)),
                   _InfoRow('Modificado', _fmtDate(details.dateModified)),
@@ -104,15 +121,24 @@ class _FileDetailsScreenState extends State<FileDetailsScreen> {
               _Section(
                 title: 'Permissões (POSIX)',
                 children: [
-                  _InfoRow('Modo', details.permissions.isEmpty ? '—' : details.permissions,
-                      mono: true),
+                  _InfoRow(
+                    'Modo',
+                    details.permissions.isEmpty ? '—' : details.permissions,
+                    mono: true,
+                  ),
                   _InfoRow('Oculto', details.isHidden ? 'Sim' : 'Não'),
-                  _InfoRow('Somente leitura', details.isReadOnly ? 'Sim' : 'Não'),
+                  _InfoRow(
+                    'Somente leitura',
+                    details.isReadOnly ? 'Sim' : 'Não',
+                  ),
                 ],
               ),
               // ---- EXIF (imagens): câmera, GPS, dados técnicos ----
               if (widget.item.type == FileType.image)
-                _ExifSection(exif: details.exifData ?? const {}, item: widget.item),
+                _ExifSection(
+                  exif: details.exifData ?? const {},
+                  item: widget.item,
+                ),
               const SizedBox(height: 32),
             ],
           );
@@ -134,10 +160,17 @@ class _FileDetailsScreenState extends State<FileDetailsScreen> {
         child: ClipRRect(
           borderRadius: BorderRadius.circular(14),
           child: widget.item.type == FileType.image
-              ? Image.file(File(widget.item.path), fit: BoxFit.contain,
+              ? Image.file(
+                  File(widget.item.path),
+                  fit: BoxFit.contain,
                   cacheWidth: 800,
-                  errorBuilder: (_, _, _) => Icon(widget.item.icon, size: 56))
-              : Icon(widget.item.icon, size: 64, color: colors.onSurfaceVariant),
+                  errorBuilder: (_, _, _) => Icon(widget.item.icon, size: 56),
+                )
+              : Icon(
+                  widget.item.icon,
+                  size: 64,
+                  color: colors.onSurfaceVariant,
+                ),
         ),
       ),
     );
@@ -190,10 +223,15 @@ class _FileDetailsScreenState extends State<FileDetailsScreen> {
         title: const Text('Excluir arquivo?'),
         content: Text('"${widget.item.name}" vai para a lixeira.'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('Cancelar')),
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Cancelar'),
+          ),
           FilledButton(
             onPressed: () => Navigator.pop(dialogContext, true),
-            style: FilledButton.styleFrom(backgroundColor: Theme.of(context).colorScheme.error),
+            style: FilledButton.styleFrom(
+              backgroundColor: Theme.of(context).colorScheme.error,
+            ),
             child: const Text('Excluir'),
           ),
         ],
@@ -222,14 +260,18 @@ class _ExifSection extends StatelessWidget {
   static double? _dmsToDecimal(List<num>? parts, String ref) {
     if (parts == null || parts.length < 3) return null;
     final double value =
-        parts[0].toDouble() + parts[1].toDouble() / 60 + parts[2].toDouble() / 3600;
+        parts[0].toDouble() +
+        parts[1].toDouble() / 60 +
+        parts[2].toDouble() / 3600;
     return (ref == 'S' || ref == 'W') ? -value : value;
   }
 
   static List<num>? _parseRationals(String raw) {
     try {
-      final List<String> pieces =
-          raw.replaceAll('[', '').replaceAll(']', '').split(',');
+      final List<String> pieces = raw
+          .replaceAll('[', '')
+          .replaceAll(']', '')
+          .split(',');
       if (pieces.length < 3) return null;
       num parseOne(String s) {
         s = s.trim();
@@ -239,6 +281,7 @@ class _ExifSection extends StatelessWidget {
         }
         return num.parse(s);
       }
+
       return [parseOne(pieces[0]), parseOne(pieces[1]), parseOne(pieces[2])];
     } catch (_) {
       return null;
@@ -251,8 +294,14 @@ class _ExifSection extends StatelessWidget {
 
     final String? lat = exif['GPSLatitude']?.toString();
     final String? lon = exif['GPSLongitude']?.toString();
-    final double? latitude = _dmsToDecimal(_parseRationals(lat ?? ''), exif['GPSLatitudeRef']?.toString() ?? '');
-    final double? longitude = _dmsToDecimal(_parseRationals(lon ?? ''), exif['GPSLongitudeRef']?.toString() ?? '');
+    final double? latitude = _dmsToDecimal(
+      _parseRationals(lat ?? ''),
+      exif['GPSLatitudeRef']?.toString() ?? '',
+    );
+    final double? longitude = _dmsToDecimal(
+      _parseRationals(lon ?? ''),
+      exif['GPSLongitudeRef']?.toString() ?? '',
+    );
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -270,11 +319,13 @@ class _ExifSection extends StatelessWidget {
                   icon: const Icon(Icons.copy, size: 18),
                   label: const Text('Copiar coordenadas'),
                   onPressed: () async {
-                    await Clipboard.setData(ClipboardData(
-                        text: '$latitude, $longitude'));
+                    await Clipboard.setData(
+                      ClipboardData(text: '$latitude, $longitude'),
+                    );
                     if (context.mounted) {
                       ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('Coordenadas copiadas.')));
+                        const SnackBar(content: Text('Coordenadas copiadas.')),
+                      );
                     }
                   },
                 ),
@@ -302,19 +353,26 @@ class _ExifSection extends StatelessWidget {
   Future<void> _stripMetadata(BuildContext context) async {
     final messenger = ScaffoldMessenger.of(context);
     try {
-      final result =
-          await ImageMetadataService.saveCopyWithoutMetadata(item.path);
-      messenger.showSnackBar(SnackBar(
-        content: Text(result == null
-            ? 'Falha ao re-encodar imagem.'
-            : 'Cópia limpa salva: ${result.split('/').last}'),
-      ));
+      final result = await ImageMetadataService.saveCopyWithoutMetadata(
+        item.path,
+      );
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(
+            result == null
+                ? 'Falha ao re-encodar imagem.'
+                : 'Cópia limpa salva: ${result.split('/').last}',
+          ),
+        ),
+      );
     } catch (e) {
       // Ação do usuário falhou: feedback obrigatório + log local.
       debugPrint('[FileDetails] stripMetadata(${item.path}): $e');
-      messenger.showSnackBar(const SnackBar(
-        content: Text('Não foi possível gerar a cópia sem metadados.'),
-      ));
+      messenger.showSnackBar(
+        const SnackBar(
+          content: Text('Não foi possível gerar a cópia sem metadados.'),
+        ),
+      );
     }
   }
 }
@@ -364,16 +422,20 @@ class _InfoRow extends StatelessWidget {
         children: [
           SizedBox(
             width: 118,
-            child: Text(label,
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: Theme.of(context).colorScheme.onSurfaceVariant,
-                    )),
+            child: Text(
+              label,
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
+            ),
           ),
           Expanded(
-            child: SelectableText(value,
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      fontFamily: mono ? 'monospace' : null,
-                    )),
+            child: SelectableText(
+              value,
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                fontFamily: mono ? 'monospace' : null,
+              ),
+            ),
           ),
         ],
       ),

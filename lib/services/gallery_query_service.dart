@@ -29,8 +29,9 @@ class GalleryQueryService {
   static Future<List<ImageAlbum>> loadAlbums() async {
     if (!isSupported) return const [];
     try {
-      final List<dynamic>? raw =
-          await _channel.invokeMethod<List<dynamic>>('getAlbums');
+      final List<dynamic>? raw = await _channel.invokeMethod<List<dynamic>>(
+        'getAlbums',
+      );
       if (raw == null) return const [];
       return raw
           .map((e) => ImageAlbum.fromChannel(e as Map<dynamic, dynamic>))
@@ -55,15 +56,13 @@ class GalleryQueryService {
     if (!isSupported) return const [];
 
     try {
-      final List<dynamic>? raw = await _channel.invokeMethod<List<dynamic>>(
-        'getImages',
-        {
-          'beforeDateAdded': beforeDateAdded,
-          'beforeId': beforeId,
-          'limit': limit,
-          'albumId': albumId,
-        },
-      );
+      final List<dynamic>? raw = await _channel
+          .invokeMethod<List<dynamic>>('getImages', {
+            'beforeDateAdded': beforeDateAdded,
+            'beforeId': beforeId,
+            'limit': limit,
+            'albumId': albumId,
+          });
       if (raw == null) return const [];
       return raw
           .map((e) => GalleryImage.fromChannel(e as Map<dynamic, dynamic>))
@@ -88,8 +87,10 @@ class GalleryQueryService {
     }
 
     try {
-      final Uint8List? bytes = await _channel
-          .invokeMethod<Uint8List>('getThumbnail', {'id': id, 'width': width});
+      final Uint8List? bytes = await _channel.invokeMethod<Uint8List>(
+        'getThumbnail',
+        {'id': id, 'width': width},
+      );
       if (bytes != null && bytes.isNotEmpty) {
         _thumbCache[id] = bytes;
         await ThumbnailDiskCache.put('gallery_$id', bytes);

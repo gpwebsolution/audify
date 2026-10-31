@@ -38,20 +38,19 @@ import 'support/playable_audio_service.dart';
 /// no-op para scheme file — sem passar pelo carregamento de asset do
 /// bundle (que usaria path_provider/rootBundle).
 Song _fileSong(int n) => Song.fromMediaStore(
-      SongModel(<dynamic, dynamic>{
-        '_id': n,
-        '_data': '/storage/emulated/0/Music/faixa_$n.mp3',
-        '_display_name': 'Faixa$n.mp3',
-        '_display_name_wo_ext': 'Faixa$n',
-        'title': 'Faixa $n',
-        'artist': 'Artista',
-        'album': 'Album',
-        'duration': 60000,
-      }),
-    );
+  SongModel(<dynamic, dynamic>{
+    '_id': n,
+    '_data': '/storage/emulated/0/Music/faixa_$n.mp3',
+    '_display_name': 'Faixa$n.mp3',
+    '_display_name_wo_ext': 'Faixa$n',
+    'title': 'Faixa $n',
+    'artist': 'Artista',
+    'album': 'Album',
+    'duration': 60000,
+  }),
+);
 
-Song _track(String name) =>
-    Song.fromAsset(assetPath: 'assets/songs/$name.mp3');
+Song _track(String name) => Song.fromAsset(assetPath: 'assets/songs/$name.mp3');
 
 List<Song> _queueOf3() => <Song>[_fileSong(1), _fileSong(2), _fileSong(3)];
 
@@ -91,29 +90,31 @@ void main() {
   // ------------------------------------------------------------------
 
   group('gapless: playSong posiciona/carrega a fila', () {
-    test('primeira carga carrega a FILA INTEIRA (children + initialIndex)',
-        () async {
-      final JustAudioMock mock = mockJustAudio();
-      final AudioService svc = AudioService();
-      addTearDown(svc.dispose);
-      final List<Song> songs = _queueOf3();
+    test(
+      'primeira carga carrega a FILA INTEIRA (children + initialIndex)',
+      () async {
+        final JustAudioMock mock = mockJustAudio();
+        final AudioService svc = AudioService();
+        addTearDown(svc.dispose);
+        final List<Song> songs = _queueOf3();
 
-      svc.publishQueue(songs, 1);
-      await svc.playSong(songs[1]);
+        svc.publishQueue(songs, 1);
+        await svc.playSong(songs[1]);
 
-      final List<MethodCall> loads = mock.callsWhere('load');
-      expect(loads, hasLength(1));
-      final Map<Object?, Object?> args =
-          loads.single.arguments as Map<Object?, Object?>;
-      expect(args['initialIndex'], 1);
-      final Map<Object?, Object?> source =
-          args['audioSource'] as Map<Object?, Object?>;
-      expect(source['type'], 'concatenating');
-      expect((source['children'] as List<Object?>).length, 3);
-      expect(svc.status.value, PlayerStatus.playing);
-      expect(svc.errorMessage.value, isNull);
-      expect(svc.mediaItem.value?.id, songs[1].id);
-    });
+        final List<MethodCall> loads = mock.callsWhere('load');
+        expect(loads, hasLength(1));
+        final Map<Object?, Object?> args =
+            loads.single.arguments as Map<Object?, Object?>;
+        expect(args['initialIndex'], 1);
+        final Map<Object?, Object?> source =
+            args['audioSource'] as Map<Object?, Object?>;
+        expect(source['type'], 'concatenating');
+        expect((source['children'] as List<Object?>).length, 3);
+        expect(svc.status.value, PlayerStatus.playing);
+        expect(svc.errorMessage.value, isNull);
+        expect(svc.mediaItem.value?.id, songs[1].id);
+      },
+    );
 
     test('mesma fila → seek, sem novo load (skip gapless)', () async {
       final JustAudioMock mock = mockJustAudio();
@@ -228,33 +229,35 @@ void main() {
       expect(svc.mediaItem.value?.id, songs[0].id);
     });
 
-    test('errorCode em runtime dispara onPlaybackFailed com a faixa morta',
-        () async {
-      final JustAudioMock mock = mockJustAudio();
-      final AudioService svc = AudioService();
-      addTearDown(svc.dispose);
-      final List<Song> songs = _queueOf3();
-      svc.publishQueue(songs, 0);
-      await svc.playSong(songs[0]);
+    test(
+      'errorCode em runtime dispara onPlaybackFailed com a faixa morta',
+      () async {
+        final JustAudioMock mock = mockJustAudio();
+        final AudioService svc = AudioService();
+        addTearDown(svc.dispose);
+        final List<Song> songs = _queueOf3();
+        svc.publishQueue(songs, 0);
+        await svc.playSong(songs[0]);
 
-      final List<Song> failures = <Song>[];
-      svc.onPlaybackFailed = (Song s) async => failures.add(s);
+        final List<Song> failures = <Song>[];
+        svc.onPlaybackFailed = (Song s) async => failures.add(s);
 
-      mock.eventSink!.success(
-        mock.playbackEvent(
-          currentIndex: 1,
-          processingState: 3,
-          errorCode: 4,
-          errorMessage: 'boom',
-        ),
-      );
-      await pumpEventQueue();
+        mock.eventSink!.success(
+          mock.playbackEvent(
+            currentIndex: 1,
+            processingState: 3,
+            errorCode: 4,
+            errorMessage: 'boom',
+          ),
+        );
+        await pumpEventQueue();
 
-      expect(failures, hasLength(1));
-      expect(failures.single.id, songs[1].id);
-      expect(svc.status.value, PlayerStatus.idle);
-      expect(svc.errorMessage.value, isNotNull);
-    });
+        expect(failures, hasLength(1));
+        expect(failures.single.id, songs[1].id);
+        expect(svc.status.value, PlayerStatus.idle);
+        expect(svc.errorMessage.value, isNotNull);
+      },
+    );
 
     test('syncModes espelha repeat no LoopMode nativo', () async {
       final JustAudioMock mock = mockJustAudio();
@@ -295,23 +298,30 @@ void main() {
       Duration d(int s) => Duration(seconds: s);
       // Desligado / duração desconhecida: sem efeito.
       expect(AudioService.crossfadeVolumeFactor(d(10), d(60), 0), 1.0);
-      expect(AudioService.crossfadeVolumeFactor(d(10), Duration.zero, 4),
-          1.0);
+      expect(AudioService.crossfadeVolumeFactor(d(10), Duration.zero, 4), 1.0);
       // Fade-in: 0 s mudo, meio da janela 0.5, depois a 1.0.
       expect(AudioService.crossfadeVolumeFactor(d(0), d(60), 4), 0.0);
-      expect(AudioService.crossfadeVolumeFactor(d(2), d(60), 4),
-          closeTo(0.5, 1e-9));
+      expect(
+        AudioService.crossfadeVolumeFactor(d(2), d(60), 4),
+        closeTo(0.5, 1e-9),
+      );
       expect(AudioService.crossfadeVolumeFactor(d(30), d(60), 4), 1.0);
       // Fade-out: últimos 4 s descem até 0.
-      expect(AudioService.crossfadeVolumeFactor(d(58), d(60), 4),
-          closeTo(0.5, 1e-9));
+      expect(
+        AudioService.crossfadeVolumeFactor(d(58), d(60), 4),
+        closeTo(0.5, 1e-9),
+      );
       expect(AudioService.crossfadeVolumeFactor(d(60), d(60), 4), 0.0);
       expect(AudioService.crossfadeVolumeFactor(d(65), d(60), 4), 0.0);
       // Faixa mais curta que a janela: triângulo suave (menor manda).
-      expect(AudioService.crossfadeVolumeFactor(d(1), d(3), 4),
-          closeTo(0.25, 1e-9));
-      expect(AudioService.crossfadeVolumeFactor(d(2), d(3), 4),
-          closeTo(0.25, 1e-9));
+      expect(
+        AudioService.crossfadeVolumeFactor(d(1), d(3), 4),
+        closeTo(0.25, 1e-9),
+      );
+      expect(
+        AudioService.crossfadeVolumeFactor(d(2), d(3), 4),
+        closeTo(0.25, 1e-9),
+      );
     });
 
     test('tickCrossfade aplica o volume pela posição', () async {
@@ -472,24 +482,26 @@ void main() {
       expect(svc.status.value, PlayerStatus.playing);
     });
 
-    test('com repeat off o ε não dispara (eventos normais cuidam disso)',
-        () async {
-      mockJustAudio();
-      final AudioService svc = AudioService();
-      addTearDown(svc.dispose);
-      svc.syncModes(repeat: RepeatMode.off, shuffle: false);
-      svc.status.value = PlayerStatus.playing;
-      svc.duration.value = const Duration(seconds: 60);
-      svc.position.value = const Duration(milliseconds: 59700);
-      svc.startSleepAtTrackEnd();
+    test(
+      'com repeat off o ε não dispara (eventos normais cuidam disso)',
+      () async {
+        mockJustAudio();
+        final AudioService svc = AudioService();
+        addTearDown(svc.dispose);
+        svc.syncModes(repeat: RepeatMode.off, shuffle: false);
+        svc.status.value = PlayerStatus.playing;
+        svc.duration.value = const Duration(seconds: 60);
+        svc.position.value = const Duration(milliseconds: 59700);
+        svc.startSleepAtTrackEnd();
 
-      expect(await svc.checkSleepTimer(), isFalse);
-      expect(svc.sleepTimerActive, isTrue);
-      // Consumo normal (papel do provider via completed/transição).
-      expect(svc.consumeSleepAtTrackEnd(), isTrue);
-      await pumpEventQueue();
-      expect(svc.sleepTimerActive, isFalse);
-    });
+        expect(await svc.checkSleepTimer(), isFalse);
+        expect(svc.sleepTimerActive, isTrue);
+        // Consumo normal (papel do provider via completed/transição).
+        expect(svc.consumeSleepAtTrackEnd(), isTrue);
+        await pumpEventQueue();
+        expect(svc.sleepTimerActive, isFalse);
+      },
+    );
   });
 
   // ------------------------------------------------------------------
@@ -517,19 +529,21 @@ void main() {
       await provider.playVisibleAt(0);
     });
 
-    test('evento do player muda a faixa sem playSong novo (sem reload)',
-        () async {
-      expect(provider.currentSong!.title, 'Alpha');
-      final int playedBefore = audio.played.length;
+    test(
+      'evento do player muda a faixa sem playSong novo (sem reload)',
+      () async {
+        expect(provider.currentSong!.title, 'Alpha');
+        final int playedBefore = audio.played.length;
 
-      audio.onQueueIndexChanged!(2, tracks[2]);
-      await pumpEventQueue();
+        audio.onQueueIndexChanged!(2, tracks[2]);
+        await pumpEventQueue();
 
-      expect(provider.currentSong!.title, 'Gamma');
-      expect(provider.isPlaying, isTrue);
-      // Gapless: NENHUM playSong extra (o player já carregou a fila).
-      expect(audio.played.length, playedBefore);
-    });
+        expect(provider.currentSong!.title, 'Gamma');
+        expect(provider.isPlaying, isTrue);
+        // Gapless: NENHUM playSong extra (o player já carregou a fila).
+        expect(audio.played.length, playedBefore);
+      },
+    );
 
     test('evento com id divergente é ignorado (espúrio)', () async {
       audio.onQueueIndexChanged!(1, _track('delta')); // queue[1] é Beta

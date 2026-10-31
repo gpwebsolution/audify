@@ -40,9 +40,16 @@ class _StorageAnalyzerScreenState extends State<StorageAnalyzerScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Analisador de Armazenamento'), actions: [
-        IconButton(icon: const Icon(Icons.refresh), onPressed: _loadData, tooltip: 'Atualizar'),
-      ]),
+      appBar: AppBar(
+        title: const Text('Analisador de Armazenamento'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            onPressed: _loadData,
+            tooltip: 'Atualizar',
+          ),
+        ],
+      ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : RefreshIndicator(
@@ -87,8 +94,16 @@ class _StorageAnalyzerScreenState extends State<StorageAnalyzerScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text('Espaço total', style: Theme.of(context).textTheme.bodySmall?.copyWith(color: colors.onSurfaceVariant)),
-                      Text(_usage!.displayTotalSpace, style: Theme.of(context).textTheme.headlineMedium),
+                      Text(
+                        'Espaço total',
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: colors.onSurfaceVariant,
+                        ),
+                      ),
+                      Text(
+                        _usage!.displayTotalSpace,
+                        style: Theme.of(context).textTheme.headlineMedium,
+                      ),
                     ],
                   ),
                 ),
@@ -96,8 +111,17 @@ class _StorageAnalyzerScreenState extends State<StorageAnalyzerScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text('Espaço livre', style: Theme.of(context).textTheme.bodySmall?.copyWith(color: colors.onSurfaceVariant)),
-                      Text(_usage!.displayFreeSpace, style: Theme.of(context).textTheme.headlineMedium?.copyWith(color: colors.primary)),
+                      Text(
+                        'Espaço livre',
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: colors.onSurfaceVariant,
+                        ),
+                      ),
+                      Text(
+                        _usage!.displayFreeSpace,
+                        style: Theme.of(context).textTheme.headlineMedium
+                            ?.copyWith(color: colors.primary),
+                      ),
                     ],
                   ),
                 ),
@@ -105,8 +129,17 @@ class _StorageAnalyzerScreenState extends State<StorageAnalyzerScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text('Espaço usado', style: Theme.of(context).textTheme.bodySmall?.copyWith(color: colors.onSurfaceVariant)),
-                      Text(_usage!.displayUsedSpace, style: Theme.of(context).textTheme.headlineMedium?.copyWith(color: colors.error)),
+                      Text(
+                        'Espaço usado',
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: colors.onSurfaceVariant,
+                        ),
+                      ),
+                      Text(
+                        _usage!.displayUsedSpace,
+                        style: Theme.of(context).textTheme.headlineMedium
+                            ?.copyWith(color: colors.error),
+                      ),
                     ],
                   ),
                 ),
@@ -120,13 +153,20 @@ class _StorageAnalyzerScreenState extends State<StorageAnalyzerScreen> {
                 child: LinearProgressIndicator(
                   value: usagePercent.clamp(0.0, 1.0),
                   backgroundColor: colors.surfaceContainerHighest,
-                  valueColor: AlwaysStoppedAnimation<Color>(usagePercent > 0.9 ? colors.error : colors.primary),
+                  valueColor: AlwaysStoppedAnimation<Color>(
+                    usagePercent > 0.9 ? colors.error : colors.primary,
+                  ),
                   minHeight: 12,
                 ),
               ),
             ),
             const SizedBox(height: 8),
-            Text('${(usagePercent * 100).toStringAsFixed(1)}% usado', style: Theme.of(context).textTheme.bodySmall?.copyWith(color: colors.onSurfaceVariant)),
+            Text(
+              '${(usagePercent * 100).toStringAsFixed(1)}% usado',
+              style: Theme.of(
+                context,
+              ).textTheme.bodySmall?.copyWith(color: colors.onSurfaceVariant),
+            ),
           ],
         ),
       ),
@@ -146,10 +186,15 @@ class _StorageAnalyzerScreenState extends State<StorageAnalyzerScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Uso por categoria', style: Theme.of(context).textTheme.titleLarge),
+            Text(
+              'Uso por categoria',
+              style: Theme.of(context).textTheme.titleLarge,
+            ),
             const SizedBox(height: 16),
             ...categories.map((entry) {
-              final double percent = _usage!.usedSpace > 0 ? entry.value / _usage!.usedSpace : 0;
+              final double percent = _usage!.usedSpace > 0
+                  ? entry.value / _usage!.usedSpace
+                  : 0;
               final Color color = _categoryColor(entry.key);
               return Padding(
                 padding: const EdgeInsets.only(bottom: 12),
@@ -158,10 +203,26 @@ class _StorageAnalyzerScreenState extends State<StorageAnalyzerScreen> {
                   children: [
                     Row(
                       children: [
-                        Container(width: 12, height: 12, decoration: BoxDecoration(color: color, shape: BoxShape.circle)),
+                        Container(
+                          width: 12,
+                          height: 12,
+                          decoration: BoxDecoration(
+                            color: color,
+                            shape: BoxShape.circle,
+                          ),
+                        ),
                         const SizedBox(width: 8),
-                        Expanded(child: Text(_categoryLabel(entry.key), style: Theme.of(context).textTheme.bodyMedium)),
-                        Text(_formatBytes(entry.value), style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600)),
+                        Expanded(
+                          child: Text(
+                            _categoryLabel(entry.key),
+                            style: Theme.of(context).textTheme.bodyMedium,
+                          ),
+                        ),
+                        Text(
+                          _formatBytes(entry.value),
+                          style: Theme.of(context).textTheme.bodyMedium
+                              ?.copyWith(fontWeight: FontWeight.w600),
+                        ),
                       ],
                     ),
                     const SizedBox(height: 4),
@@ -194,13 +255,19 @@ class _StorageAnalyzerScreenState extends State<StorageAnalyzerScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Top 20 maiores arquivos', style: Theme.of(context).textTheme.titleLarge),
+            Text(
+              'Top 20 maiores arquivos',
+              style: Theme.of(context).textTheme.titleLarge,
+            ),
             const SizedBox(height: 16),
             if (_largestFiles.isEmpty)
               Center(
                 child: Padding(
                   padding: const EdgeInsets.all(32),
-                  child: Text('Nenhum arquivo encontrado', style: Theme.of(context).textTheme.bodyMedium),
+                  child: Text(
+                    'Nenhum arquivo encontrado',
+                    style: Theme.of(context).textTheme.bodyMedium,
+                  ),
                 ),
               )
             else
@@ -212,13 +279,32 @@ class _StorageAnalyzerScreenState extends State<StorageAnalyzerScreen> {
                 itemBuilder: (context, index) {
                   final item = _largestFiles[index];
                   return ListTile(
-                    leading: Icon(item.icon, color: Theme.of(context).colorScheme.primary),
-                    title: Text(item.name, maxLines: 1, overflow: TextOverflow.ellipsis),
-                    subtitle: Text(item.path, maxLines: 1, overflow: TextOverflow.ellipsis, style: Theme.of(context).textTheme.bodySmall),
-                    trailing: Text(item.displaySize, style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600)),
+                    leading: Icon(
+                      item.icon,
+                      color: Theme.of(context).colorScheme.primary,
+                    ),
+                    title: Text(
+                      item.name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    subtitle: Text(
+                      item.path,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                    trailing: Text(
+                      item.displaySize,
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
                     onTap: () {
                       Navigator.of(context).push(
-                        MaterialPageRoute(builder: (_) => FileDetailsScreen(item: item)),
+                        MaterialPageRoute(
+                          builder: (_) => FileDetailsScreen(item: item),
+                        ),
                       );
                     },
                   );
@@ -275,7 +361,9 @@ class _StorageAnalyzerScreenState extends State<StorageAnalyzerScreen> {
   String _formatBytes(int bytes) {
     if (bytes < 1024) return '$bytes B';
     if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)} KB';
-    if (bytes < 1024 * 1024 * 1024) return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
+    if (bytes < 1024 * 1024 * 1024) {
+      return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
+    }
     return '${(bytes / (1024 * 1024 * 1024)).toStringAsFixed(1)} GB';
   }
 }

@@ -143,7 +143,6 @@ class DuplicateGroup {
   String get displaySize => formatBytes(size);
 }
 
-
 int _dirSizeJob(String path) {
   int total = 0;
   final List<String> stack = <String>[path];

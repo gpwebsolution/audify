@@ -33,26 +33,25 @@ Song _song(
   int? durationMs,
   int? dateAdded,
   int? track,
-}) =>
-    Song.fromStored(<String, Object?>{
-          'song_id': id,
-          'title': title,
-          'artist': artist,
-          'album': album,
-          'duration_ms': durationMs,
-          'date_added': dateAdded,
-          'track_number': track,
-          'is_asset': 1,
-        })!;
+}) => Song.fromStored(<String, Object?>{
+  'song_id': id,
+  'title': title,
+  'artist': artist,
+  'album': album,
+  'duration_ms': durationMs,
+  'date_added': dateAdded,
+  'track_number': track,
+  'is_asset': 1,
+})!;
 
 /// Catálogo conhecido: A(30s, art. Alpha, álbum X, track 3),
 /// B(10s, art. Beta, álbum X, track 1), C(20s, art. Alpha, álbum X,
 /// track 2).
 List<Song> _catalog() => <Song>[
-      _song('1', 'A', artist: 'Alpha', album: 'X', durationMs: 30000, track: 3),
-      _song('2', 'B', artist: 'Beta', album: 'X', durationMs: 10000, track: 1),
-      _song('3', 'C', artist: 'Alpha', album: 'X', durationMs: 20000, track: 2),
-    ];
+  _song('1', 'A', artist: 'Alpha', album: 'X', durationMs: 30000, track: 3),
+  _song('2', 'B', artist: 'Beta', album: 'X', durationMs: 10000, track: 1),
+  _song('3', 'C', artist: 'Alpha', album: 'X', durationMs: 20000, track: 2),
+];
 
 class _FakeSongRepository extends SongRepository {
   final List<Song> assets;
@@ -82,10 +81,7 @@ class _FakeSessionRepository extends SessionRepository {
   Future<(List<String>, int)> loadQueue() async => (const <String>[], -1);
 }
 
-PlayerProvider _provider({
-  SettingsProvider? settings,
-  List<Song>? catalog,
-}) =>
+PlayerProvider _provider({SettingsProvider? settings, List<Song>? catalog}) =>
     PlayerProvider(
       PlayableAudioService(),
       songRepository: _FakeSongRepository(catalog ?? _catalog()),
@@ -93,11 +89,13 @@ PlayerProvider _provider({
       settings: settings,
     );
 
-List<String> _visibleTitles(PlayerProvider provider) =>
-    [for (final Song s in provider.visibleSongs) s.title];
+List<String> _visibleTitles(PlayerProvider provider) => [
+  for (final Song s in provider.visibleSongs) s.title,
+];
 
-List<String> _titlesOf(Iterable<Song> songs) =>
-    [for (final Song s in songs) s.title];
+List<String> _titlesOf(Iterable<Song> songs) => [
+  for (final Song s in songs) s.title,
+];
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -139,10 +137,7 @@ void main() {
       await provider.playVisibleAt(0); // fila = visível inteira, na A
       expect(_titlesOf(provider.queue), <String>['A', 'B', 'C']);
 
-      await provider.setSort(
-        key: SongSortKey.duration,
-        ascending: false,
-      );
+      await provider.setSort(key: SongSortKey.duration, ascending: false);
       // Mais longa primeiro (A=30s, C=20s, B=10s) — mas a fila montada
       // na escuta NÃO acompanha: mesma ordem de sempre.
       expect(_visibleTitles(provider), <String>['A', 'C', 'B']);
@@ -154,8 +149,7 @@ void main() {
       expect(_titlesOf(provider.queue), <String>['A', 'B', 'C']);
     });
 
-    test('busca e ordenação coexistem (só o recorte sai ordenado)',
-        () async {
+    test('busca e ordenação coexistem (só o recorte sai ordenado)', () async {
       final PlayerProvider provider = _provider();
       addTearDown(provider.dispose);
       await provider.init();
@@ -225,8 +219,9 @@ void main() {
       addTearDown(provider.dispose);
       await provider.init();
       // Ordem de catálogo é por título (A, B, C) com tracks 3, 1, 2.
-      final List<SongGroup> groups =
-          provider.visibleGroups(MusicGroupMode.album);
+      final List<SongGroup> groups = provider.visibleGroups(
+        MusicGroupMode.album,
+      );
       expect(groups.single.key, 'X');
       expect(
         [for (final Song s in groups.single.songs) s.title],
@@ -238,15 +233,14 @@ void main() {
       final PlayerProvider provider = _provider();
       addTearDown(provider.dispose);
       await provider.init();
-      final List<SongGroup> groups =
-          provider.visibleGroups(MusicGroupMode.artist);
-      final SongGroup alpha = groups
-          .firstWhere((SongGroup g) => g.key == 'Alpha');
-      // Alpha tem A(track 3) e C(track 2): ordem TÍTULO, não track.
-      expect(
-        [for (final Song s in alpha.songs) s.title],
-        <String>['A', 'C'],
+      final List<SongGroup> groups = provider.visibleGroups(
+        MusicGroupMode.artist,
       );
+      final SongGroup alpha = groups.firstWhere(
+        (SongGroup g) => g.key == 'Alpha',
+      );
+      // Alpha tem A(track 3) e C(track 2): ordem TÍTULO, não track.
+      expect([for (final Song s in alpha.songs) s.title], <String>['A', 'C']);
     });
   });
 

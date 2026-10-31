@@ -21,14 +21,13 @@ import 'package:audify/widgets/lyrics_sheet.dart';
 
 import 'support/playable_audio_service.dart';
 
-Song _track(String name) =>
-    Song.fromAsset(assetPath: 'assets/songs/$name.mp3');
+Song _track(String name) => Song.fromAsset(assetPath: 'assets/songs/$name.mp3');
 
 List<Song> _threeTracks() => <Song>[
-      _track('alpha'),
-      _track('beta'),
-      _track('gamma'),
-    ];
+  _track('alpha'),
+  _track('beta'),
+  _track('gamma'),
+];
 
 class _FakeSongRepository extends SongRepository {
   final List<Song> assets;
@@ -94,8 +93,9 @@ void main() {
       await tester.pumpAndSettle();
     }
 
-    testWidgets('abre a folha e destaca a linha da posição atual',
-        (WidgetTester tester) async {
+    testWidgets('abre a folha e destaca a linha da posição atual', (
+      WidgetTester tester,
+    ) async {
       LyricsService.debugLoader = (Song _) async => LrcLyrics.parse(
         '[00:01.00]primeira\n'
         '[00:02.00]segunda\n'
@@ -146,28 +146,27 @@ void main() {
       await tester.pumpWidget(const SizedBox());
     });
 
-    testWidgets('sem letra: orienta a colocar um .lrc ao lado do áudio',
-        (WidgetTester tester) async {
+    testWidgets('sem letra: orienta a colocar um .lrc ao lado do áudio', (
+      WidgetTester tester,
+    ) async {
       LyricsService.debugLoader = (Song _) async => null;
 
       await pumpPlayer(tester);
       await tester.tap(find.byTooltip('Letras'));
       await tester.pumpAndSettle();
 
-      expect(
-        find.textContaining('Nenhuma letra encontrada'),
-        findsOneWidget,
-      );
+      expect(find.textContaining('Nenhuma letra encontrada'), findsOneWidget);
       expect(find.textContaining('.lrc'), findsOneWidget);
       expect(find.byType(LyricsSheet), findsOneWidget);
 
       await tester.pumpWidget(const SizedBox());
     });
 
-    testWidgets('texto corrido (sem timestamps) aparece sem destaque',
-        (WidgetTester tester) async {
-      LyricsService.debugLoader =
-          (Song _) async => LrcLyrics.unsynced('linha um\nlinha dois');
+    testWidgets('texto corrido (sem timestamps) aparece sem destaque', (
+      WidgetTester tester,
+    ) async {
+      LyricsService.debugLoader = (Song _) async =>
+          LrcLyrics.unsynced('linha um\nlinha dois');
 
       await pumpPlayer(tester);
       await tester.tap(find.byTooltip('Letras'));
@@ -184,8 +183,9 @@ void main() {
       await tester.pumpWidget(const SizedBox());
     });
 
-    testWidgets('lista longa: rola até a linha corrente (sincronia)',
-        (WidgetTester tester) async {
+    testWidgets('lista longa: rola até a linha corrente (sincronia)', (
+      WidgetTester tester,
+    ) async {
       LyricsService.debugLoader = (Song _) async => LrcLyrics.parse(
         <String>[
           for (int i = 1; i <= 40; i++)

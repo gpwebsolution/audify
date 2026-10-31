@@ -20,8 +20,7 @@ import 'package:audify/widgets/player_controls.dart';
 
 import 'support/playable_audio_service.dart';
 
-Song _track(String name) =>
-    Song.fromAsset(assetPath: 'assets/songs/$name.mp3');
+Song _track(String name) => Song.fromAsset(assetPath: 'assets/songs/$name.mp3');
 
 class _FakeSongRepository extends SongRepository {
   final List<Song> assets;
@@ -94,8 +93,9 @@ void main() {
       await tester.pumpAndSettle();
     }
 
-    testWidgets('retrato 400×900: capa 320×320 e ações fora do AppBar',
-        (WidgetTester tester) async {
+    testWidgets('retrato 400×900: capa 320×320 e ações fora do AppBar', (
+      WidgetTester tester,
+    ) async {
       view(tester, 400, 900);
       await pumpPlayer(tester);
       expect(tester.takeException(), isNull);
@@ -183,8 +183,9 @@ void main() {
 
     tearDown(() => provider.dispose());
 
-    testWidgets('botão Anterior volta para a faixa anterior',
-        (WidgetTester tester) async {
+    testWidgets('botão Anterior volta para a faixa anterior', (
+      WidgetTester tester,
+    ) async {
       await tester.pumpWidget(
         MaterialApp(
           home: ChangeNotifierProvider<PlayerProvider>.value(

@@ -25,8 +25,7 @@ import 'package:audify/services/playlist_database.dart';
 
 import 'support/playable_audio_service.dart';
 
-Song _track(String name) =>
-    Song.fromAsset(assetPath: 'assets/songs/$name.mp3');
+Song _track(String name) => Song.fromAsset(assetPath: 'assets/songs/$name.mp3');
 
 class _FakeSongRepository extends SongRepository {
   final List<Song> assets;
@@ -57,14 +56,14 @@ class _FakeSessionRepository extends SessionRepository {
 }
 
 PlayerProvider _player(PlayableAudioService svc) => PlayerProvider(
-      svc,
-      songRepository: _FakeSongRepository(<Song>[
-        _track('alpha'),
-        _track('beta'),
-        _track('gamma'),
-      ]),
-      sessionRepository: _FakeSessionRepository(),
-    );
+  svc,
+  songRepository: _FakeSongRepository(<Song>[
+    _track('alpha'),
+    _track('beta'),
+    _track('gamma'),
+  ]),
+  sessionRepository: _FakeSessionRepository(),
+);
 
 /// Fecha/apaga o banco na zona real e zera os singletons em memória.
 Future<void> _freshDb(WidgetTester tester) async {
@@ -83,10 +82,7 @@ Future<void> _warmDb(WidgetTester tester) =>
     tester.runAsync(() => PlaylistDatabase.getStats());
 
 /// Semeia plays e carrega o singleton, tudo em zona real.
-Future<void> _seedHistory(
-  WidgetTester tester,
-  List<(String, int)> plays,
-) =>
+Future<void> _seedHistory(WidgetTester tester, List<(String, int)> plays) =>
     tester.runAsync(() async {
       for (final (String songId, int ms) in plays) {
         await PlaylistDatabase.recordPlay(songId, playedAtMs: ms);
@@ -126,8 +122,9 @@ void main() {
   });
 
   group('histórico na UI (4.2)', () {
-    testWidgets('aba Playlists: automáticas entre Favoritas e as reais',
-        (WidgetTester tester) async {
+    testWidgets('aba Playlists: automáticas entre Favoritas e as reais', (
+      WidgetTester tester,
+    ) async {
       await _freshDb(tester);
       final PlayableAudioService audio = PlayableAudioService();
       final PlayerProvider player = _player(audio);
@@ -169,70 +166,70 @@ void main() {
     });
 
     testWidgets(
-        'detalhes: recentes por último toque, mais tocadas por contagem, '
-        'play-all na ordem da tela',
-        (WidgetTester tester) async {
+      'detalhes: recentes por último toque, mais tocadas por contagem, '
+      'play-all na ordem da tela',
+      (WidgetTester tester) async {
+        await _freshDb(tester);
+        final PlayableAudioService audio = PlayableAudioService();
+        final PlayerProvider player = _player(audio);
+        addTearDown(player.dispose);
+        await player.init();
+        await _warmDb(tester);
+        // Alpha: 2 plays (último 600) | Beta: 1 play (último 900).
+        await _seedHistory(tester, <(String, int)>[
+          (_track('alpha').id, 500),
+          (_track('alpha').id, 600),
+          (_track('beta').id, 900),
+        ]);
+        final PlaylistProvider playlists = PlaylistProvider(player);
+        addTearDown(playlists.dispose);
+
+        await tester.pumpWidget(_appTree(player, playlists));
+        await tester.pump();
+        await _drainDb(tester);
+
+        // --- Tocadas recentemente: último toque primeiro (Beta > Alpha).
+        await tester.tap(find.text('Tocadas recentemente'));
+        await tester.pumpAndSettle();
+        expect(find.byType(AutoPlaylistDetailScreen), findsOneWidget);
+        expect(
+          tester.getTopLeft(find.text('Beta')).dy,
+          lessThan(tester.getTopLeft(find.text('Alpha')).dy),
+        );
+
+        await tester.tap(find.byTooltip('Tocar tudo'));
+        await tester.pumpAndSettle();
+        expect(audio.played.last.title, 'Beta');
+        expect(player.queue.map((Song s) => s.title).toList(), <String>[
+          'Beta',
+          'Alpha',
+        ]);
+
+        await tester.pageBack();
+        await tester.pumpAndSettle();
+
+        // --- Mais tocadas: contagem primeiro (Alpha com 2 > Beta com 1).
+        await tester.tap(find.text('Mais tocadas'));
+        await tester.pumpAndSettle();
+        expect(
+          tester.getTopLeft(find.text('Alpha')).dy,
+          lessThan(tester.getTopLeft(find.text('Beta')).dy),
+        );
+
+        await tester.pumpWidget(const SizedBox());
+      },
+    );
+
+    testWidgets('Limpar histórico: confirma, esvazia tela, banco e tiles', (
+      WidgetTester tester,
+    ) async {
       await _freshDb(tester);
       final PlayableAudioService audio = PlayableAudioService();
       final PlayerProvider player = _player(audio);
       addTearDown(player.dispose);
       await player.init();
       await _warmDb(tester);
-      // Alpha: 2 plays (último 600) | Beta: 1 play (último 900).
-      await _seedHistory(tester, <(String, int)>[
-        (_track('alpha').id, 500),
-        (_track('alpha').id, 600),
-        (_track('beta').id, 900),
-      ]);
-      final PlaylistProvider playlists = PlaylistProvider(player);
-      addTearDown(playlists.dispose);
-
-      await tester.pumpWidget(_appTree(player, playlists));
-      await tester.pump();
-      await _drainDb(tester);
-
-      // --- Tocadas recentemente: último toque primeiro (Beta > Alpha).
-      await tester.tap(find.text('Tocadas recentemente'));
-      await tester.pumpAndSettle();
-      expect(find.byType(AutoPlaylistDetailScreen), findsOneWidget);
-      expect(
-        tester.getTopLeft(find.text('Beta')).dy,
-        lessThan(tester.getTopLeft(find.text('Alpha')).dy),
-      );
-
-      await tester.tap(find.byTooltip('Tocar tudo'));
-      await tester.pumpAndSettle();
-      expect(audio.played.last.title, 'Beta');
-      expect(
-        player.queue.map((Song s) => s.title).toList(),
-        <String>['Beta', 'Alpha'],
-      );
-
-      await tester.pageBack();
-      await tester.pumpAndSettle();
-
-      // --- Mais tocadas: contagem primeiro (Alpha com 2 > Beta com 1).
-      await tester.tap(find.text('Mais tocadas'));
-      await tester.pumpAndSettle();
-      expect(
-        tester.getTopLeft(find.text('Alpha')).dy,
-        lessThan(tester.getTopLeft(find.text('Beta')).dy),
-      );
-
-      await tester.pumpWidget(const SizedBox());
-    });
-
-    testWidgets('Limpar histórico: confirma, esvazia tela, banco e tiles',
-        (WidgetTester tester) async {
-      await _freshDb(tester);
-      final PlayableAudioService audio = PlayableAudioService();
-      final PlayerProvider player = _player(audio);
-      addTearDown(player.dispose);
-      await player.init();
-      await _warmDb(tester);
-      await _seedHistory(tester, <(String, int)>[
-        (_track('alpha').id, 100),
-      ]);
+      await _seedHistory(tester, <(String, int)>[(_track('alpha').id, 100)]);
       final PlaylistProvider playlists = PlaylistProvider(player);
       addTearDown(playlists.dispose);
 
@@ -270,8 +267,9 @@ void main() {
       await tester.pumpWidget(const SizedBox());
     });
 
-    testWidgets('histórico vazio: estado vazio sem play-all',
-        (WidgetTester tester) async {
+    testWidgets('histórico vazio: estado vazio sem play-all', (
+      WidgetTester tester,
+    ) async {
       await _freshDb(tester);
       final PlayableAudioService audio = PlayableAudioService();
       final PlayerProvider player = _player(audio);

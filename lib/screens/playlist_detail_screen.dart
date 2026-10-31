@@ -118,101 +118,89 @@ class _PlaylistDetailScreenState extends State<PlaylistDetailScreen> {
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : songs.isEmpty && videos.isEmpty && missing.isEmpty
-              ? Center(
-                  child: Padding(
-                    padding: const EdgeInsets.all(24),
-                    child: Text(
-                      'Playlist vazia.\nToque e segure uma música na aba '
-                      'Música (ou um vídeo na aba Vídeos) e escolha '
-                      '"Adicionar à playlist".',
-                      textAlign: TextAlign.center,
-                      style: Theme.of(context).textTheme.bodyMedium,
+          ? Center(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Text(
+                  'Playlist vazia.\nToque e segure uma música na aba '
+                  'Música (ou um vídeo na aba Vídeos) e escolha '
+                  '"Adicionar à playlist".',
+                  textAlign: TextAlign.center,
+                  style: Theme.of(context).textTheme.bodyMedium,
+                ),
+              ),
+            )
+          : ListView(
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              children: [
+                // ---- Item 2.6: fantasma primeiro (problema a resolver)
+                if (missing.isNotEmpty) ...[
+                  _SectionHeader(
+                    icon: Icons.warning_amber_outlined,
+                    title: 'Indisponíveis (${missing.length})',
+                  ),
+                  for (final Song song in missing)
+                    _MissingSongTile(
+                      song: song,
+                      onRemove: () =>
+                          _confirmRemoveSong(context, provider, song),
+                    ),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 4, 16, 4),
+                    child: Align(
+                      alignment: Alignment.centerRight,
+                      child: FilledButton.tonalIcon(
+                        icon: const Icon(Icons.delete_sweep_outlined),
+                        label: Text(
+                          'Remover indisponíveis (${missing.length})',
+                        ),
+                        onPressed: () =>
+                            _confirmRemoveMissing(context, provider),
+                      ),
                     ),
                   ),
-                )
-              : ListView(
-                  padding: const EdgeInsets.symmetric(vertical: 8),
-                  children: [
-                    // ---- Item 2.6: fantasma primeiro (problema a resolver)
-                    if (missing.isNotEmpty) ...[
-                      _SectionHeader(
-                        icon: Icons.warning_amber_outlined,
-                        title: 'Indisponíveis (${missing.length})',
-                      ),
-                      for (final Song song in missing)
-                        _MissingSongTile(
-                          song: song,
-                          onRemove: () => _confirmRemoveSong(
-                            context,
-                            provider,
-                            song,
-                          ),
-                        ),
-                      Padding(
-                        padding: const EdgeInsets.fromLTRB(16, 4, 16, 4),
-                        child: Align(
-                          alignment: Alignment.centerRight,
-                          child: FilledButton.tonalIcon(
-                            icon: const Icon(Icons.delete_sweep_outlined),
-                            label: Text(
-                              'Remover indisponíveis (${missing.length})',
-                            ),
-                            onPressed: () =>
-                                _confirmRemoveMissing(context, provider),
-                          ),
-                        ),
-                      ),
-                    ],
-                    if (songs.isNotEmpty) ...[
-                      _SectionHeader(
-                        icon: Icons.music_note_outlined,
-                        title: 'Músicas (${songs.length})',
-                        onPlay: () => provider.playPlaylist(
-                          widget.playlistId,
-                          songs.first,
-                        ),
-                      ),
-                      _ReorderableSongs(
-                        songs: songs,
-                        currentSongId: currentSongId,
-                        isPlaying: isPlaying,
-                        onTap: (song) =>
-                            provider.playPlaylist(widget.playlistId, song),
-                        onRemove: (song) => _confirmRemoveSong(
-                          context,
-                          provider,
-                          song,
-                        ),
-                        onReorder: (reordered) {
-                          setState(() => _songs = reordered);
-                          provider.reorder(widget.playlistId, reordered);
-                        },
-                      ),
-                    ],
-                    if (videos.isNotEmpty) ...[
-                      _SectionHeader(
-                        icon: Icons.movie_outlined,
-                        title: 'Vídeos (${videos.length})',
-                        onPlay: () => _openVideoPlayer(context, videos, 0),
-                      ),
-                      _ReorderableVideos(
-                        videos: videos,
-                        colors: colors,
-                        onTap: (index) =>
-                            _openVideoPlayer(context, videos, index),
-                        onRemove: (video) => _confirmRemoveVideo(
-                          context,
-                          provider,
-                          video,
-                        ),
-                        onReorder: (reordered) {
-                          setState(() => _videos = reordered);
-                          provider.reorderVideos(widget.playlistId, reordered);
-                        },
-                      ),
-                    ],
-                  ],
-                ),
+                ],
+                if (songs.isNotEmpty) ...[
+                  _SectionHeader(
+                    icon: Icons.music_note_outlined,
+                    title: 'Músicas (${songs.length})',
+                    onPlay: () =>
+                        provider.playPlaylist(widget.playlistId, songs.first),
+                  ),
+                  _ReorderableSongs(
+                    songs: songs,
+                    currentSongId: currentSongId,
+                    isPlaying: isPlaying,
+                    onTap: (song) =>
+                        provider.playPlaylist(widget.playlistId, song),
+                    onRemove: (song) =>
+                        _confirmRemoveSong(context, provider, song),
+                    onReorder: (reordered) {
+                      setState(() => _songs = reordered);
+                      provider.reorder(widget.playlistId, reordered);
+                    },
+                  ),
+                ],
+                if (videos.isNotEmpty) ...[
+                  _SectionHeader(
+                    icon: Icons.movie_outlined,
+                    title: 'Vídeos (${videos.length})',
+                    onPlay: () => _openVideoPlayer(context, videos, 0),
+                  ),
+                  _ReorderableVideos(
+                    videos: videos,
+                    colors: colors,
+                    onTap: (index) => _openVideoPlayer(context, videos, index),
+                    onRemove: (video) =>
+                        _confirmRemoveVideo(context, provider, video),
+                    onReorder: (reordered) {
+                      setState(() => _videos = reordered);
+                      provider.reorderVideos(widget.playlistId, reordered);
+                    },
+                  ),
+                ],
+              ],
+            ),
     );
   }
 
@@ -224,12 +212,10 @@ class _PlaylistDetailScreenState extends State<PlaylistDetailScreen> {
     );
   }
 
-  Future<void> _rename(
-    BuildContext context,
-    PlaylistProvider provider,
-  ) async {
-    final TextEditingController controller =
-        TextEditingController(text: widget.playlistName);
+  Future<void> _rename(BuildContext context, PlaylistProvider provider) async {
+    final TextEditingController controller = TextEditingController(
+      text: widget.playlistName,
+    );
     final String? newName = await showDialog<String>(
       context: context,
       builder: (dialogContext) => AlertDialog(
@@ -351,9 +337,9 @@ class _PlaylistDetailScreenState extends State<PlaylistDetailScreen> {
   ) async {
     final String? name = await provider.duplicate(widget.playlistId);
     if (name == null || !context.mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Playlist duplicada como "$name"')),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text('Playlist duplicada como "$name"')));
   }
 
   /// Item 4.5 — exporta em JSON ou .m3u8 e abre a folha de
@@ -362,8 +348,9 @@ class _PlaylistDetailScreenState extends State<PlaylistDetailScreen> {
     final PlaylistProvider provider = context.read<PlaylistProvider>();
     final ScaffoldMessengerState messenger = ScaffoldMessenger.of(context);
     final ColorScheme colors = Theme.of(context).colorScheme;
-    final List<PlaylistTransferEntry>? entries = await provider
-        .exportEntries(widget.playlistId);
+    final List<PlaylistTransferEntry>? entries = await provider.exportEntries(
+      widget.playlistId,
+    );
     if (entries == null || !context.mounted) return;
     try {
       final String content = json
@@ -404,11 +391,7 @@ class _SectionHeader extends StatelessWidget {
   /// Nulo na seção "Indisponíveis" (2.6) — não há o que tocar lá.
   final VoidCallback? onPlay;
 
-  const _SectionHeader({
-    required this.icon,
-    required this.title,
-    this.onPlay,
-  });
+  const _SectionHeader({required this.icon, required this.title, this.onPlay});
 
   @override
   Widget build(BuildContext context) {
@@ -421,10 +404,9 @@ class _SectionHeader extends StatelessWidget {
           Expanded(
             child: Text(
               title,
-              style: Theme.of(context)
-                  .textTheme
-                  .titleSmall
-                  ?.copyWith(fontWeight: FontWeight.w700),
+              style: Theme.of(
+                context,
+              ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700),
             ),
           ),
           if (onPlay != null)
@@ -465,10 +447,7 @@ class _MissingSongTile extends StatelessWidget {
       ),
       trailing: IconButton(
         tooltip: 'Remover da playlist',
-        icon: Icon(
-          Icons.remove_circle_outline,
-          color: colors.onSurfaceVariant,
-        ),
+        icon: Icon(Icons.remove_circle_outline, color: colors.onSurfaceVariant),
         onPressed: onRemove,
       ),
     );
@@ -526,8 +505,7 @@ class _ReorderableSongs extends StatelessWidget {
               isCurrent: isCurrent,
               isPlaying: isCurrent && isPlaying,
               isFavorite: FavoritesProvider.instance.isFavorite(song.id),
-              onFavoriteToggle: () =>
-                  FavoritesProvider.instance.toggle(song),
+              onFavoriteToggle: () => FavoritesProvider.instance.toggle(song),
               onTap: () => onTap(song),
               onLongPress: () => onRemove(song),
               trailing: Row(

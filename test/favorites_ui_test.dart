@@ -31,8 +31,7 @@ import 'package:audify/widgets/song_list_tile.dart';
 
 import 'support/playable_audio_service.dart';
 
-Song _track(String name) =>
-    Song.fromAsset(assetPath: 'assets/songs/$name.mp3');
+Song _track(String name) => Song.fromAsset(assetPath: 'assets/songs/$name.mp3');
 
 class _FakeSongRepository extends SongRepository {
   final List<Song> assets;
@@ -63,23 +62,20 @@ class _FakeSessionRepository extends SessionRepository {
 }
 
 PlayerProvider _player(PlayableAudioService svc) => PlayerProvider(
-      svc,
-      songRepository: _FakeSongRepository(<Song>[
-        _track('alpha'),
-        _track('beta'),
-        _track('gamma'),
-      ]),
-      sessionRepository: _FakeSessionRepository(),
-    );
+  svc,
+  songRepository: _FakeSongRepository(<Song>[
+    _track('alpha'),
+    _track('beta'),
+    _track('gamma'),
+  ]),
+  sessionRepository: _FakeSessionRepository(),
+);
 
 /// Coração NÃO cheio na linha da faixa [title].
 Finder _heartOf(String title) => find.descendant(
-      of: find.ancestor(
-        of: find.text(title),
-        matching: find.byType(SongListTile),
-      ),
-      matching: find.byTooltip('Favoritar'),
-    );
+  of: find.ancestor(of: find.text(title), matching: find.byType(SongListTile)),
+  matching: find.byTooltip('Favoritar'),
+);
 
 /// Fecha/apaga o banco na zona real e zera o singleton em memória.
 Future<void> _freshDb(WidgetTester tester) async {
@@ -95,9 +91,8 @@ Future<void> _freshDb(WidgetTester tester) async {
 /// Abre o singleton do PlaylistsDatabase DENTRO da zona real — sem isso,
 /// qualquer await posterior (mesmo em runAsync) encadeia num Completer
 /// preso na zona fake e o teste trava.
-Future<void> _warmDb(WidgetTester tester) => tester.runAsync(
-      () => PlaylistDatabase.getFavorites(),
-    );
+Future<void> _warmDb(WidgetTester tester) =>
+    tester.runAsync(() => PlaylistDatabase.getFavorites());
 
 /// Aterrissa a gravação disparada na zona fake: p/ pump drena a
 /// microtarefa que envia, janela real traz a resposta do isolate, pump
@@ -130,8 +125,9 @@ void main() {
   });
 
   group('coração na UI (4.1)', () {
-    testWidgets('player: ações rápidas favoritam e desfavoritam',
-        (WidgetTester tester) async {
+    testWidgets('player: ações rápidas favoritam e desfavoritam', (
+      WidgetTester tester,
+    ) async {
       await _freshDb(tester);
       final PlayableAudioService audio = PlayableAudioService();
       final PlayerProvider provider = _player(audio);
@@ -175,8 +171,9 @@ void main() {
       await tester.pumpWidget(const SizedBox());
     });
 
-    testWidgets('tile da biblioteca: coração marca só a faixa escolhida',
-        (WidgetTester tester) async {
+    testWidgets('tile da biblioteca: coração marca só a faixa escolhida', (
+      WidgetTester tester,
+    ) async {
       await _freshDb(tester);
       final PlayableAudioService audio = PlayableAudioService();
       final PlayerProvider provider = _player(audio);
@@ -223,8 +220,9 @@ void main() {
       await tester.pumpWidget(const SizedBox());
     });
 
-    testWidgets('aba Playlists: Favoritas fixa no topo e abre o detalhe',
-        (WidgetTester tester) async {
+    testWidgets('aba Playlists: Favoritas fixa no topo e abre o detalhe', (
+      WidgetTester tester,
+    ) async {
       await _freshDb(tester);
       final PlayableAudioService audio = PlayableAudioService();
       final PlayerProvider provider = _player(audio);
@@ -254,9 +252,7 @@ void main() {
           // A tela é uma aba: no app ela vive sob o Scaffold do
           // HomeScreen (daí o Scaffold aqui também — o ListTile da
           // entrada fixa exige Material ancestor).
-          child: MaterialApp(
-            home: Scaffold(body: const PlaylistsScreen()),
-          ),
+          child: MaterialApp(home: Scaffold(body: const PlaylistsScreen())),
         ),
       );
       await tester.pump();
@@ -287,8 +283,9 @@ void main() {
       await tester.pumpWidget(const SizedBox());
     });
 
-    testWidgets('detalhe: "Tocar tudo" monta a fila na ordem alfabética',
-        (WidgetTester tester) async {
+    testWidgets('detalhe: "Tocar tudo" monta a fila na ordem alfabética', (
+      WidgetTester tester,
+    ) async {
       await _freshDb(tester);
       final PlayableAudioService audio = PlayableAudioService();
       final PlayerProvider provider = _player(audio);
@@ -316,10 +313,10 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(audio.played.last.title, 'Alpha');
-      expect(
-        provider.queue.map((Song s) => s.title).toList(),
-        <String>['Alpha', 'Gamma'],
-      );
+      expect(provider.queue.map((Song s) => s.title).toList(), <String>[
+        'Alpha',
+        'Gamma',
+      ]);
 
       await tester.pumpWidget(const SizedBox());
     });

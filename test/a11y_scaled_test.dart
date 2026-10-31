@@ -85,9 +85,8 @@ void main() {
         ChangeNotifierProvider<SettingsProvider>.value(
           value: settings,
           child: Builder(
-            builder: (BuildContext context) => _scaledApp(
-              const Scaffold(body: SettingsScreen()),
-            ),
+            builder: (BuildContext context) =>
+                _scaledApp(const Scaffold(body: SettingsScreen())),
           ),
         ),
       );
@@ -159,8 +158,9 @@ void main() {
   });
 
   group('Motion.scale — animações reduzidas (5.3)', () {
-    testWidgets('zera a duração quando o sistema reduz animações',
-        (WidgetTester tester) async {
+    testWidgets('zera a duração quando o sistema reduz animações', (
+      WidgetTester tester,
+    ) async {
       late BuildContext ctx;
       await tester.pumpWidget(
         MediaQuery(
@@ -177,8 +177,9 @@ void main() {
       expect(Motion.scale(ctx, Motion.fast), Duration.zero);
     });
 
-    testWidgets('mantém a duração normal quando animações estão ligadas',
-        (WidgetTester tester) async {
+    testWidgets('mantém a duração normal quando animações estão ligadas', (
+      WidgetTester tester,
+    ) async {
       late BuildContext ctx;
       await tester.pumpWidget(
         Builder(

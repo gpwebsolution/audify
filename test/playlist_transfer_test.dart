@@ -28,29 +28,27 @@ Song _song(
   String? album,
   String? filePath,
   int? durationMs,
-}) =>
-    Song.fromStored(<String, Object?>{
-          'song_id': id,
-          'title': title,
-          'artist': artist,
-          'album': album,
-          'file_path': filePath,
-          'duration_ms': durationMs,
-          'is_asset': 0,
-        })!;
+}) => Song.fromStored(<String, Object?>{
+  'song_id': id,
+  'title': title,
+  'artist': artist,
+  'album': album,
+  'file_path': filePath,
+  'duration_ms': durationMs,
+  'is_asset': 0,
+})!;
 
 PlaylistTransferEntry _entry(
   String title, {
   String? artist,
   String? filePath,
   int? durationMs,
-}) =>
-    PlaylistTransferEntry(
-      title: title,
-      artist: artist,
-      filePath: filePath,
-      durationMs: durationMs,
-    );
+}) => PlaylistTransferEntry(
+  title: title,
+  artist: artist,
+  filePath: filePath,
+  durationMs: durationMs,
+);
 
 class _FakePlaylistRepository extends PlaylistRepository {
   final Map<int, String> names = <int, String>{};
@@ -58,7 +56,11 @@ class _FakePlaylistRepository extends PlaylistRepository {
   final Map<int, List<Video>> videosById = <int, List<Video>>{};
   int _nextId = 1;
 
-  int seed(String name, {List<Song> songs = const [], List<Video> videos = const []}) {
+  int seed(
+    String name, {
+    List<Song> songs = const [],
+    List<Video> videos = const [],
+  }) {
     final int id = _nextId++;
     names[id] = name;
     songsById[id] = List<Song>.of(songs);
@@ -116,10 +118,7 @@ class _FakePlaylistRepository extends PlaylistRepository {
 PlaylistProvider _provider(_FakePlaylistRepository repo) {
   final PlayerProvider player = PlayerProvider(PlayableAudioService());
   addTearDown(player.dispose);
-  final PlaylistProvider provider = PlaylistProvider(
-    player,
-    repository: repo,
-  );
+  final PlaylistProvider provider = PlaylistProvider(player, repository: repo);
   addTearDown(provider.dispose);
   return provider;
 }
@@ -155,10 +154,7 @@ void main() {
     });
 
     test('JSON inválido (sem name, sem título) é FormatException', () {
-      expect(
-        () => decodePlaylistJson('{"songs": []}'),
-        throwsFormatException,
-      );
+      expect(() => decodePlaylistJson('{"songs": []}'), throwsFormatException);
       expect(
         () => decodePlaylistJson('{"name": "X", "songs": [{"artist": "A"}]}'),
         throwsFormatException,
@@ -166,8 +162,7 @@ void main() {
       expect(() => decodePlaylistJson('não é json'), throwsFormatException);
     });
 
-    test('m3u8 preserva artista, título e caminho; pula faixa sem path',
-        () {
+    test('m3u8 preserva artista, título e caminho; pula faixa sem path', () {
       final List<PlaylistTransferEntry> entries = <PlaylistTransferEntry>[
         _entry(
           'Tema',
@@ -194,16 +189,18 @@ void main() {
       expect(back.entries.single.durationMs, 90_000);
     });
 
-    test('m3u8: título com " - " não vira artista (parte na 1ª ocorrência)',
-        () {
-      final PlaylistTransferFile back = decodePlaylistM3u8(
-        '#EXTM3U\n'
-        '#EXTINF:10,AC DC - Highway - Ao Vivo\n'
-        '/m/acdc.mp3\n',
-      );
-      expect(back.entries.single.artist, 'AC DC');
-      expect(back.entries.single.title, 'Highway - Ao Vivo');
-    });
+    test(
+      'm3u8: título com " - " não vira artista (parte na 1ª ocorrência)',
+      () {
+        final PlaylistTransferFile back = decodePlaylistM3u8(
+          '#EXTM3U\n'
+          '#EXTINF:10,AC DC - Highway - Ao Vivo\n'
+          '/m/acdc.mp3\n',
+        );
+        expect(back.entries.single.artist, 'AC DC');
+        expect(back.entries.single.title, 'Highway - Ao Vivo');
+      },
+    );
 
     test('m3u8 sem artista: o título sai inteiro', () {
       final PlaylistTransferFile back = decodePlaylistM3u8(
@@ -245,9 +242,7 @@ void main() {
     });
 
     test('artista divergente não casa nem pelo título igual', () {
-      final List<Song> catalog = <Song>[
-        _song('1', 'Tema', artist: 'Banda A'),
-      ];
+      final List<Song> catalog = <Song>[_song('1', 'Tema', artist: 'Banda A')];
       final ({List<Song> songs, int notFound}) result = matchPlaylistEntries(
         <PlaylistTransferEntry>[_entry('Tema', artist: 'Banda B')],
         catalog,
@@ -271,8 +266,7 @@ void main() {
   });
 
   group('PlaylistProvider — importar/duplicar (4.5)', () {
-    test('import: nome colidido vira " (2)" e o relatório é honesto',
-        () async {
+    test('import: nome colidido vira " (2)" e o relatório é honesto', () async {
       final _FakePlaylistRepository repo = _FakePlaylistRepository()
         ..seed('Viagens');
       final PlaylistProvider provider = _provider(repo);
@@ -284,18 +278,11 @@ void main() {
         _song('3', 'Só Aqui', artist: 'Ninguém', filePath: '/m/aqui.mp3'),
       ];
       final PlaylistTransferFile file = decodePlaylistJson(
-        encodePlaylistJson(
-          'Viagens',
-          <PlaylistTransferEntry>[
-            _entry('Qualquer', artist: 'X', filePath: '/m/estrada.mp3'),
-            _entry(
-              'PRAIA',
-              artist: 'sol',
-              filePath: '/m/nao_existe.mp3',
-            ),
-            _entry('Fantasma', artist: 'Nada', filePath: '/m/404.mp3'),
-          ],
-        ),
+        encodePlaylistJson('Viagens', <PlaylistTransferEntry>[
+          _entry('Qualquer', artist: 'X', filePath: '/m/estrada.mp3'),
+          _entry('PRAIA', artist: 'sol', filePath: '/m/nao_existe.mp3'),
+          _entry('Fantasma', artist: 'Nada', filePath: '/m/404.mp3'),
+        ]),
       );
 
       final PlaylistImportReport report = await provider.importPlaylist(
@@ -313,10 +300,7 @@ void main() {
       final int newId = provider.playlists
           .firstWhere((Playlist p) => p.name == 'Viagens (2)')
           .id;
-      expect(
-        repo.songsOf(newId).map((Song s) => s.id),
-        <String>['1', '2'],
-      );
+      expect(repo.songsOf(newId).map((Song s) => s.id), <String>['1', '2']);
     });
 
     test('import sem nenhuma faixa encontrada não cria playlist', () async {

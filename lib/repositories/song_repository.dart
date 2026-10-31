@@ -52,8 +52,9 @@ class SongRepository {
     final songs = <Song>[];
     for (final assetKey in manifest) {
       final isInSongsFolder = assetKey.startsWith(songsFolder);
-      final isAcceptedFormat =
-          assetKey.toLowerCase().endsWith(acceptedExtension);
+      final isAcceptedFormat = assetKey.toLowerCase().endsWith(
+        acceptedExtension,
+      );
       if (isInSongsFolder && isAcceptedFormat) {
         songs.add(Song.fromAsset(assetPath: assetKey));
       }
@@ -63,8 +64,9 @@ class SongRepository {
 
   /// Carrega a lista de assets do bundle (isolado para testes).
   Future<List<String>> _assetManifestLoader() async {
-    final AssetManifest manifest =
-        await AssetManifest.loadFromAssetBundle(rootBundle);
+    final AssetManifest manifest = await AssetManifest.loadFromAssetBundle(
+      rootBundle,
+    );
     return manifest.listAssets();
   }
 }

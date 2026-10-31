@@ -26,8 +26,7 @@ import 'package:audify/services/audio_service.dart';
 
 import 'support/playable_audio_service.dart';
 
-Song _track(String name) =>
-    Song.fromAsset(assetPath: 'assets/songs/$name.mp3');
+Song _track(String name) => Song.fromAsset(assetPath: 'assets/songs/$name.mp3');
 
 class _FakeSongRepository extends SongRepository {
   final List<Song> assets;
@@ -73,59 +72,87 @@ PlayerProvider _provider(PlayableAudioService svc, SettingsProvider prefs) {
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-
   setUp(() {
     SharedPreferences.setMockInitialValues({});
   });
 
   group('mapeamentos puros (app ↔ audio_service)', () {
     test('RepeatMode → AudioServiceRepeatMode', () {
-      expect(AudioService.systemRepeatMode(RepeatMode.off),
-          asvc.AudioServiceRepeatMode.none);
-      expect(AudioService.systemRepeatMode(RepeatMode.all),
-          asvc.AudioServiceRepeatMode.all);
-      expect(AudioService.systemRepeatMode(RepeatMode.one),
-          asvc.AudioServiceRepeatMode.one);
+      expect(
+        AudioService.systemRepeatMode(RepeatMode.off),
+        asvc.AudioServiceRepeatMode.none,
+      );
+      expect(
+        AudioService.systemRepeatMode(RepeatMode.all),
+        asvc.AudioServiceRepeatMode.all,
+      );
+      expect(
+        AudioService.systemRepeatMode(RepeatMode.one),
+        asvc.AudioServiceRepeatMode.one,
+      );
     });
 
     test('AudioServiceRepeatMode → RepeatMode (ida e volta)', () {
-      expect(AudioService.appRepeatMode(asvc.AudioServiceRepeatMode.none),
-          RepeatMode.off);
-      expect(AudioService.appRepeatMode(asvc.AudioServiceRepeatMode.all),
-          RepeatMode.all);
-      expect(AudioService.appRepeatMode(asvc.AudioServiceRepeatMode.one),
-          RepeatMode.one);
+      expect(
+        AudioService.appRepeatMode(asvc.AudioServiceRepeatMode.none),
+        RepeatMode.off,
+      );
+      expect(
+        AudioService.appRepeatMode(asvc.AudioServiceRepeatMode.all),
+        RepeatMode.all,
+      );
+      expect(
+        AudioService.appRepeatMode(asvc.AudioServiceRepeatMode.one),
+        RepeatMode.one,
+      );
       // group não é implementado pelo audio_service: cai em off.
-      expect(AudioService.appRepeatMode(asvc.AudioServiceRepeatMode.group),
-          RepeatMode.off);
+      expect(
+        AudioService.appRepeatMode(asvc.AudioServiceRepeatMode.group),
+        RepeatMode.off,
+      );
 
-      for (final RepeatMode mode
-          in <RepeatMode>[RepeatMode.off, RepeatMode.all, RepeatMode.one]) {
-        expect(AudioService.appRepeatMode(AudioService.systemRepeatMode(mode)),
-            mode);
+      for (final RepeatMode mode in <RepeatMode>[
+        RepeatMode.off,
+        RepeatMode.all,
+        RepeatMode.one,
+      ]) {
+        expect(
+          AudioService.appRepeatMode(AudioService.systemRepeatMode(mode)),
+          mode,
+        );
       }
     });
 
     test('shuffle → AudioServiceShuffleMode', () {
-      expect(AudioService.systemShuffleMode(false),
-          asvc.AudioServiceShuffleMode.none);
-      expect(AudioService.systemShuffleMode(true),
-          asvc.AudioServiceShuffleMode.all);
+      expect(
+        AudioService.systemShuffleMode(false),
+        asvc.AudioServiceShuffleMode.none,
+      );
+      expect(
+        AudioService.systemShuffleMode(true),
+        asvc.AudioServiceShuffleMode.all,
+      );
     });
 
     test('processingState: idle/completed/ready', () {
-      expect(AudioService.systemProcessingState(PlayerStatus.idle),
-          asvc.AudioProcessingState.idle);
-      expect(AudioService.systemProcessingState(PlayerStatus.completed),
-          asvc.AudioProcessingState.completed);
+      expect(
+        AudioService.systemProcessingState(PlayerStatus.idle),
+        asvc.AudioProcessingState.idle,
+      );
+      expect(
+        AudioService.systemProcessingState(PlayerStatus.completed),
+        asvc.AudioProcessingState.completed,
+      );
       // playing/paused/stopped todos publicam "ready" (há conteúdo carregado).
       for (final PlayerStatus status in <PlayerStatus>[
         PlayerStatus.playing,
         PlayerStatus.paused,
         PlayerStatus.stopped,
       ]) {
-        expect(AudioService.systemProcessingState(status),
-            asvc.AudioProcessingState.ready);
+        expect(
+          AudioService.systemProcessingState(status),
+          asvc.AudioProcessingState.ready,
+        );
       }
     });
   });
@@ -154,8 +181,10 @@ void main() {
       expect(svc.queue.value, hasLength(3));
       expect(published.title, 'Banana'); // _humanize capitaliza
       expect(svc.playbackState.value.queueIndex, 1);
-      expect(svc.playbackState.value.processingState,
-          asvc.AudioProcessingState.idle);
+      expect(
+        svc.playbackState.value.processingState,
+        asvc.AudioProcessingState.idle,
+      );
 
       // Índice fora da fila = nada selecionado (null), não estoura.
       svc.publishQueue(songs, -1);
@@ -164,41 +193,52 @@ void main() {
 
     test('syncModes publica repeat/shuffle aplicados', () async {
       svc.syncModes(repeat: RepeatMode.one, shuffle: true);
-      expect(svc.playbackState.value.repeatMode,
-          asvc.AudioServiceRepeatMode.one);
-      expect(svc.playbackState.value.shuffleMode,
-          asvc.AudioServiceShuffleMode.all);
+      expect(
+        svc.playbackState.value.repeatMode,
+        asvc.AudioServiceRepeatMode.one,
+      );
+      expect(
+        svc.playbackState.value.shuffleMode,
+        asvc.AudioServiceShuffleMode.all,
+      );
 
       svc.syncModes(repeat: RepeatMode.off, shuffle: false);
-      expect(svc.playbackState.value.repeatMode,
-          asvc.AudioServiceRepeatMode.none);
-      expect(svc.playbackState.value.shuffleMode,
-          asvc.AudioServiceShuffleMode.none);
+      expect(
+        svc.playbackState.value.repeatMode,
+        asvc.AudioServiceRepeatMode.none,
+      );
+      expect(
+        svc.playbackState.value.shuffleMode,
+        asvc.AudioServiceShuffleMode.none,
+      );
     });
 
-    test('processingState completed é publicado ao final da faixa',
-        () async {
+    test('processingState completed é publicado ao final da faixa', () async {
       svc.status.value = PlayerStatus.completed;
       svc.syncModes(repeat: RepeatMode.off, shuffle: false);
-      expect(svc.playbackState.value.processingState,
-          asvc.AudioProcessingState.completed);
+      expect(
+        svc.playbackState.value.processingState,
+        asvc.AudioProcessingState.completed,
+      );
       expect(svc.playbackState.value.playing, isFalse);
     });
 
-    test('posições publicadas: updatePosition + updateTime coerentes',
-        () async {
-      svc.position.value = const Duration(seconds: 42);
-      svc.syncModes(repeat: RepeatMode.off, shuffle: false);
+    test(
+      'posições publicadas: updatePosition + updateTime coerentes',
+      () async {
+        svc.position.value = const Duration(seconds: 42);
+        svc.syncModes(repeat: RepeatMode.off, shuffle: false);
 
-      final asvc.PlaybackState state = svc.playbackState.value;
-      expect(state.updatePosition, const Duration(seconds: 42));
-      // updateTime = agora → o sistema projeta o avanço em tempo real.
-      expect(
-        state.updateTime.difference(DateTime.now()).inSeconds.abs(),
-        lessThan(5),
-      );
-      expect(state.speed, 1.0);
-    });
+        final asvc.PlaybackState state = svc.playbackState.value;
+        expect(state.updatePosition, const Duration(seconds: 42));
+        // updateTime = agora → o sistema projeta o avanço em tempo real.
+        expect(
+          state.updateTime.difference(DateTime.now()).inSeconds.abs(),
+          lessThan(5),
+        );
+        expect(state.speed, 1.0);
+      },
+    );
 
     test('comandos do SISTEMA chegam aos callbacks do provider', () async {
       RepeatMode? repeatSeen;
@@ -218,10 +258,14 @@ void main() {
     });
 
     test('callbacks nulos (sem provider) não lançam', () async {
-      expect(() => svc.setRepeatMode(asvc.AudioServiceRepeatMode.all),
-          returnsNormally);
-      expect(() => svc.setShuffleMode(asvc.AudioServiceShuffleMode.none),
-          returnsNormally);
+      expect(
+        () => svc.setRepeatMode(asvc.AudioServiceRepeatMode.all),
+        returnsNormally,
+      );
+      expect(
+        () => svc.setShuffleMode(asvc.AudioServiceShuffleMode.none),
+        returnsNormally,
+      );
       expect(() => svc.skipToQueueItem(0), returnsNormally);
     });
   });
@@ -240,8 +284,7 @@ void main() {
       prefs.dispose();
     });
 
-    test('setRepeatMode do sistema muda a fila, persiste e reemite',
-        () async {
+    test('setRepeatMode do sistema muda a fila, persiste e reemite', () async {
       final PlayerProvider provider = _provider(svc, prefs);
       addTearDown(provider.dispose);
 
@@ -254,8 +297,10 @@ void main() {
       expect(provider.repeat, RepeatMode.all);
       expect(prefs.repeatMode, RepeatMode.all, reason: 'deve persistir');
       // Reemitido: o lock screen não pode ficar mostrando repeat antigo.
-      expect(svc.playbackState.value.repeatMode,
-          asvc.AudioServiceRepeatMode.all);
+      expect(
+        svc.playbackState.value.repeatMode,
+        asvc.AudioServiceRepeatMode.all,
+      );
     });
 
     test('setShuffleMode do sistema liga/desliga e persiste', () async {
@@ -269,40 +314,46 @@ void main() {
       await svc.setShuffleMode(asvc.AudioServiceShuffleMode.all);
       expect(provider.shuffle, isTrue);
       expect(prefs.shuffleEnabled, isTrue);
-      expect(svc.playbackState.value.shuffleMode,
-          asvc.AudioServiceShuffleMode.all);
+      expect(
+        svc.playbackState.value.shuffleMode,
+        asvc.AudioServiceShuffleMode.all,
+      );
 
       // Desligar pelo sistema deve restaurar a ordem e reemitir.
       await svc.setShuffleMode(asvc.AudioServiceShuffleMode.none);
       expect(provider.shuffle, isFalse);
       expect(prefs.shuffleEnabled, isFalse);
-      expect(svc.playbackState.value.shuffleMode,
-          asvc.AudioServiceShuffleMode.none);
-    });
-
-    test('skipToQueueItem do sistema toca o índice da fila publicada',
-        () async {
-      final PlayerProvider provider = _provider(svc, prefs);
-      addTearDown(provider.dispose);
-
-      await provider.init();
-      await provider.playVisibleAt(0);
-      final List<Song> queue = List<Song>.of(
-        svc.queue.value.map(
-          (asvc.MediaItem item) =>
-              provider.songs.firstWhere((Song s) => s.id == item.id),
-        ),
+      expect(
+        svc.playbackState.value.shuffleMode,
+        asvc.AudioServiceShuffleMode.none,
       );
-      expect(queue, hasLength(3));
-
-      await svc.skipToQueueItem(2);
-      expect(provider.currentSong?.id, queue[2].id);
-
-      // Índice fora do intervalo é ignorado (fila encurtou no sistema).
-      final Song? before = provider.currentSong;
-      await svc.skipToQueueItem(99);
-      await svc.skipToQueueItem(-1);
-      expect(provider.currentSong?.id, before?.id);
     });
+
+    test(
+      'skipToQueueItem do sistema toca o índice da fila publicada',
+      () async {
+        final PlayerProvider provider = _provider(svc, prefs);
+        addTearDown(provider.dispose);
+
+        await provider.init();
+        await provider.playVisibleAt(0);
+        final List<Song> queue = List<Song>.of(
+          svc.queue.value.map(
+            (asvc.MediaItem item) =>
+                provider.songs.firstWhere((Song s) => s.id == item.id),
+          ),
+        );
+        expect(queue, hasLength(3));
+
+        await svc.skipToQueueItem(2);
+        expect(provider.currentSong?.id, queue[2].id);
+
+        // Índice fora do intervalo é ignorado (fila encurtou no sistema).
+        final Song? before = provider.currentSong;
+        await svc.skipToQueueItem(99);
+        await svc.skipToQueueItem(-1);
+        expect(provider.currentSong?.id, before?.id);
+      },
+    );
   });
 }

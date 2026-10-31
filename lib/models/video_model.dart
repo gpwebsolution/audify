@@ -62,14 +62,14 @@ class Video {
   /// estável entre sessões — basta guardar os campos de exibição para
   /// reconstruir offline.
   Map<String, Object?> toStored() => {
-        'video_id': id,
-        'title': title,
-        'display_name': displayName,
-        'duration_ms': duration.inMilliseconds,
-        'file_path': path,
-        'size': size,
-        'date_added': dateAdded,
-      };
+    'video_id': id,
+    'title': title,
+    'display_name': displayName,
+    'duration_ms': duration.inMilliseconds,
+    'file_path': path,
+    'size': size,
+    'date_added': dateAdded,
+  };
 
   /// Reconstrói um [Video] a partir do mapa do banco (colunas snake_case).
   /// Retorna null se o registro estiver corrompido (defensivo — nunca
@@ -82,8 +82,7 @@ class Video {
       id: id,
       title: (map['title'] as String?) ?? '',
       displayName: (map['display_name'] as String?) ?? '',
-      duration:
-          Duration(milliseconds: ((map['duration_ms'] as int?) ?? 0)),
+      duration: Duration(milliseconds: ((map['duration_ms'] as int?) ?? 0)),
       path: path,
       size: ((map['size'] as int?) ?? 0),
       dateAdded: ((map['date_added'] as int?) ?? 0),

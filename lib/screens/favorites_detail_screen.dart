@@ -32,10 +32,8 @@ class FavoritesDetailScreen extends StatelessWidget {
               return IconButton(
                 tooltip: 'Tocar tudo',
                 icon: const Icon(Icons.playlist_play),
-                onPressed: () => player.playQueue(
-                  FavoritesProvider.instance.songs,
-                  0,
-                ),
+                onPressed: () =>
+                    player.playQueue(FavoritesProvider.instance.songs, 0),
               );
             },
           ),
@@ -84,8 +82,7 @@ class FavoritesDetailScreen extends StatelessWidget {
                 // e o toque remove (a linha some via ListenableBuilder
                 // do build acima).
                 isFavorite: true,
-                onFavoriteToggle: () =>
-                    FavoritesProvider.instance.toggle(song),
+                onFavoriteToggle: () => FavoritesProvider.instance.toggle(song),
                 onTap: () => player.playQueue(songs, index),
               );
             },

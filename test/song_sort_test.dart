@@ -20,20 +20,18 @@ Song _song(
   int? durationMs,
   int? dateAdded,
   int? track,
-}) =>
-    Song.fromStored(<String, Object?>{
-          'song_id': id,
-          'title': title,
-          'artist': artist,
-          'album': album,
-          'duration_ms': durationMs,
-          'date_added': dateAdded,
-          'track_number': track,
-          'is_asset': 1,
-        })!;
+}) => Song.fromStored(<String, Object?>{
+  'song_id': id,
+  'title': title,
+  'artist': artist,
+  'album': album,
+  'duration_ms': durationMs,
+  'date_added': dateAdded,
+  'track_number': track,
+  'is_asset': 1,
+})!;
 
-List<String> _titles(List<Song> songs) =>
-    [for (final Song s in songs) s.title];
+List<String> _titles(List<Song> songs) => [for (final Song s in songs) s.title];
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -45,40 +43,27 @@ void main() {
         _song('1', 'Faixa 2'),
       ];
       songs.sort(
-        (Song a, Song b) => compareSongs(
-          a,
-          b,
-          key: SongSortKey.title,
-          ascending: true,
-        ),
+        (Song a, Song b) =>
+            compareSongs(a, b, key: SongSortKey.title, ascending: true),
       );
       expect(_titles(songs), <String>['Faixa 2', 'Faixa 10']);
     });
 
-    test('artista: com desempate por título; descendente inverte os dois',
-        () {
+    test('artista: com desempate por título; descendente inverte os dois', () {
       final List<Song> songs = <Song>[
         _song('1', 'Zebra', artist: 'Beta'),
         _song('2', 'Alfa', artist: 'Alfa'),
         _song('3', 'Yoga', artist: 'Alfa'),
       ];
       songs.sort(
-        (Song a, Song b) => compareSongs(
-          a,
-          b,
-          key: SongSortKey.artist,
-          ascending: true,
-        ),
+        (Song a, Song b) =>
+            compareSongs(a, b, key: SongSortKey.artist, ascending: true),
       );
       expect(_titles(songs), <String>['Alfa', 'Yoga', 'Zebra']);
 
       songs.sort(
-        (Song a, Song b) => compareSongs(
-          a,
-          b,
-          key: SongSortKey.artist,
-          ascending: false,
-        ),
+        (Song a, Song b) =>
+            compareSongs(a, b, key: SongSortKey.artist, ascending: false),
       );
       expect(_titles(songs), <String>['Zebra', 'Yoga', 'Alfa']);
     });
@@ -91,22 +76,14 @@ void main() {
       ];
 
       songs.sort(
-        (Song a, Song b) => compareSongs(
-          a,
-          b,
-          key: SongSortKey.duration,
-          ascending: true,
-        ),
+        (Song a, Song b) =>
+            compareSongs(a, b, key: SongSortKey.duration, ascending: true),
       );
       expect(_titles(songs), <String>['Curta', 'Longa', 'Sem']);
 
       songs.sort(
-        (Song a, Song b) => compareSongs(
-          a,
-          b,
-          key: SongSortKey.duration,
-          ascending: false,
-        ),
+        (Song a, Song b) =>
+            compareSongs(a, b, key: SongSortKey.duration, ascending: false),
       );
       expect(_titles(songs), <String>['Longa', 'Curta', 'Sem']);
     });
@@ -118,12 +95,8 @@ void main() {
         _song('3', 'Velha', dateAdded: 100),
       ];
       songs.sort(
-        (Song a, Song b) => compareSongs(
-          a,
-          b,
-          key: SongSortKey.dateAdded,
-          ascending: true,
-        ),
+        (Song a, Song b) =>
+            compareSongs(a, b, key: SongSortKey.dateAdded, ascending: true),
       );
       expect(_titles(songs), <String>['Velha', 'Nova', 'Sem data']);
     });
@@ -188,15 +161,15 @@ void main() {
   });
 
   group('banco — migração 5 → 6 (4.3)', () {
-  setUpAll(() async {
-    sqfliteFfiInit();
-    databaseFactory = databaseFactoryFfi;
-    // Diretório exclusivo desta suíte: outras suítes rodam em paralelo
-    // e apagam o audify.db compartilhado do cwd (corrida de arquivo).
-    await databaseFactory.setDatabasesPath(
-      Directory.systemTemp.createTempSync('audify_song_sort_').path,
-    );
-  });
+    setUpAll(() async {
+      sqfliteFfiInit();
+      databaseFactory = databaseFactoryFfi;
+      // Diretório exclusivo desta suíte: outras suítes rodam em paralelo
+      // e apagam o audify.db compartilhado do cwd (corrida de arquivo).
+      await databaseFactory.setDatabasesPath(
+        Directory.systemTemp.createTempSync('audify_song_sort_').path,
+      );
+    });
 
     setUp(() async {
       await PlaylistDatabase.close();
@@ -283,15 +256,12 @@ void main() {
         ),
       );
       // Linha antiga: SEM date_added/track_number (não existiam).
-      await dbV5.insert(
-        'favorite_songs',
-        <String, Object?>{
-          'song_id': 'velha',
-          'title': 'Velha',
-          'is_asset': 0,
-          'added_at': 1,
-        },
-      );
+      await dbV5.insert('favorite_songs', <String, Object?>{
+        'song_id': 'velha',
+        'title': 'Velha',
+        'is_asset': 0,
+        'added_at': 1,
+      });
       await dbV5.close();
 
       // Reabre pelo caminho do app (5 → 6 roda o ALTER).

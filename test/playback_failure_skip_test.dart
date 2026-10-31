@@ -17,7 +17,6 @@ import 'package:audify/repositories/session_repository.dart';
 import 'package:audify/repositories/song_repository.dart';
 import 'package:audify/services/audio_service.dart';
 
-
 class _FakeSongRepository extends SongRepository {
   final List<Song> assets;
   _FakeSongRepository(this.assets);
@@ -57,8 +56,7 @@ class _ScriptedAudioService extends AudioService {
   /// Quantas vezes playSong foi chamado (para o teste do limite).
   int playCalls = 0;
 
-  static final Object _fileError =
-      Exception('Unable to load asset: "x.mp3"');
+  static final Object _fileError = Exception('Unable to load asset: "x.mp3"');
 
   @override
   Future<void> playSong(Song song, {Duration startAt = Duration.zero}) async {
@@ -88,12 +86,12 @@ Song _track(String name) => Song.fromAsset(assetPath: 'assets/songs/$name.mp3');
 /// Catálogo na ordem que o provider entrega (alfabética):
 /// Apple, Banana, Cherry, Mango, Pear.
 List<Song> _fiveTracks() => [
-      _track('apple'),
-      _track('banana'),
-      _track('cherry'),
-      _track('mango'),
-      _track('pear'),
-    ];
+  _track('apple'),
+  _track('banana'),
+  _track('cherry'),
+  _track('mango'),
+  _track('pear'),
+];
 
 PlayerProvider _provider(AudioService audio) {
   return PlayerProvider(
@@ -105,7 +103,6 @@ PlayerProvider _provider(AudioService audio) {
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
-
 
   group('mensagens amigáveis (funções puras)', () {
     test('userMessage cita a ação e o motivo, nunca o objeto cru', () {
@@ -136,8 +133,7 @@ void main() {
       );
     });
 
-    test('shouldSkipOnOpenFailure: falha de arquivo sim, plataforma não',
-        () {
+    test('shouldSkipOnOpenFailure: falha de arquivo sim, plataforma não', () {
       expect(
         AudioService.shouldSkipOnOpenFailure(
           Exception('Unable to load asset: "a.mp3"'),
@@ -171,11 +167,12 @@ void main() {
       // a 4ª nem entrou em loop pela fila inteira.
       await provider.playVisibleAt(0);
 
-      expect(audio.playCalls,
-          PlayerProvider.maxConsecutivePlayFailures);
+      expect(audio.playCalls, PlayerProvider.maxConsecutivePlayFailures);
       expect(provider.errorMessage, contains('Reprodução parada'));
-      expect(provider.errorMessage,
-          contains('${PlayerProvider.maxConsecutivePlayFailures} faixas'));
+      expect(
+        provider.errorMessage,
+        contains('${PlayerProvider.maxConsecutivePlayFailures} faixas'),
+      );
       expect(provider.status, PlayerStatus.idle);
 
       // Nada mais é tentado sozinho depois do teto.
@@ -184,8 +181,7 @@ void main() {
       expect(audio.playCalls, afterLimit + 1); // só o next manual
     });
 
-    test('sucesso no meio zera o contador (não acumula falhas)',
-        () async {
+    test('sucesso no meio zera o contador (não acumula falhas)', () async {
       final _ScriptedAudioService audio = _ScriptedAudioService(
         // Apple e Banana falham; Cherry toca (zera); Mango e Pear
         // voltam a falhar — mas sem chegar a 3 seguidas.
@@ -213,8 +209,7 @@ void main() {
       expect(provider.errorMessage, contains('tocar "Pear"'));
     });
 
-    test('escolha manual do usuário zera o teto (nova chance)',
-        () async {
+    test('escolha manual do usuário zera o teto (nova chance)', () async {
       final _ScriptedAudioService audio = _ScriptedAudioService(
         failTitles: {'Apple', 'Banana', 'Cherry', 'Mango', 'Pear'},
       );
@@ -255,14 +250,17 @@ void main() {
 class _PlatformFailAudioService extends AudioService {
   int playCalls = 0;
 
-  static final Object _platformError =
-      Exception('MissingPluginException: No implementation found');
+  static final Object _platformError = Exception(
+    'MissingPluginException: No implementation found',
+  );
 
   @override
   Future<void> playSong(Song song, {Duration startAt = Duration.zero}) async {
     playCalls++;
-    errorMessage.value =
-        AudioService.userMessage('tocar "${song.title}"', _platformError);
+    errorMessage.value = AudioService.userMessage(
+      'tocar "${song.title}"',
+      _platformError,
+    );
     status.value = PlayerStatus.idle;
     if (AudioService.shouldSkipOnOpenFailure(_platformError)) {
       await onPlaybackFailed?.call(song);

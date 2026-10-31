@@ -235,11 +235,7 @@ class MediaDeleteService {
       // Todo item volta como `failed`: sem confirmação do SO, a UI não pode
       // limpar lista, fila, playlist nem sessão. O usuário recebe o motivo.
       debugPrint('[MediaDelete] timeout: $e');
-      ErrorLogService.logSync(
-        'media/delete',
-        e,
-        StackTrace.current,
-      );
+      ErrorLogService.logSync('media/delete', e, StackTrace.current);
       return DeleteResult(
         deleted: const [],
         failed: resolvable

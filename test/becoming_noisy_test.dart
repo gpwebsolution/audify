@@ -10,30 +10,21 @@ void main() {
   group('shouldPauseOnNoisy (decisão pura)', () {
     test('pausa quando está tocando e a preferência está ligada', () {
       expect(
-        AudioService.shouldPauseOnNoisy(
-          isPlaying: true,
-          settingEnabled: true,
-        ),
+        AudioService.shouldPauseOnNoisy(isPlaying: true, settingEnabled: true),
         isTrue,
       );
     });
 
     test('não pausa quando está pausado (nada tocando)', () {
       expect(
-        AudioService.shouldPauseOnNoisy(
-          isPlaying: false,
-          settingEnabled: true,
-        ),
+        AudioService.shouldPauseOnNoisy(isPlaying: false, settingEnabled: true),
         isFalse,
       );
     });
 
     test('não pausa quando o usuário desligou a preferência', () {
       expect(
-        AudioService.shouldPauseOnNoisy(
-          isPlaying: true,
-          settingEnabled: false,
-        ),
+        AudioService.shouldPauseOnNoisy(isPlaying: true, settingEnabled: false),
         isFalse,
       );
     });

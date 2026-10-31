@@ -29,9 +29,11 @@ class VideoProvider extends ChangeNotifier {
     final String q = _searchQuery.toLowerCase();
     if (q.isEmpty) return _videos;
     return _videos
-        .where((v) =>
-            v.displayTitle.toLowerCase().contains(q) ||
-            v.displayName.toLowerCase().contains(q))
+        .where(
+          (v) =>
+              v.displayTitle.toLowerCase().contains(q) ||
+              v.displayName.toLowerCase().contains(q),
+        )
         .toList();
   }
 

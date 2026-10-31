@@ -48,8 +48,9 @@ void main() {
     await settings.load();
     addTearDown(settings.dispose);
     final PathProviderPlatform previous = PathProviderPlatform.instance;
-    final Directory support =
-        Directory.systemTemp.createTempSync('audify_files_ui');
+    final Directory support = Directory.systemTemp.createTempSync(
+      'audify_files_ui',
+    );
     addTearDown(() {
       support.deleteSync(recursive: true);
       PathProviderPlatform.instance = previous;
@@ -76,10 +77,7 @@ void main() {
     await pumpScreen(tester);
 
     expect(find.byType(TextField), findsOneWidget);
-    expect(
-      find.text('Buscar nesta pasta e subpastas…'),
-      findsOneWidget,
-    );
+    expect(find.text('Buscar nesta pasta e subpastas…'), findsOneWidget);
     expect(
       find.text('Gerenciador disponível apenas no Android.'),
       findsOneWidget,
@@ -190,8 +188,10 @@ void main() {
     await tester.tap(find.text('Criar e editar'));
     await tester.pumpAndSettle();
     expect(
-      find.text('O nome não pode conter "/" — crie uma pasta se quiser '
-          'organizar.'),
+      find.text(
+        'O nome não pode conter "/" — crie uma pasta se quiser '
+        'organizar.',
+      ),
       findsOneWidget,
     );
     expect(find.text('Criar e editar'), findsOneWidget);
@@ -231,7 +231,9 @@ void main() {
       dateModified: 0,
       dateCreated: 0,
       isDirectory: isDirectory,
-      extension: isDirectory ? '' : (name.contains('.') ? name.split('.').last : ''),
+      extension: isDirectory
+          ? ''
+          : (name.contains('.') ? name.split('.').last : ''),
     );
 
     testWidgets('FileListTile: nome, seleção, toque e long-press', (t) async {
@@ -241,7 +243,11 @@ void main() {
         MaterialApp(
           home: Scaffold(
             body: FileListTile(
-              item: fileItem(name: 'relatorio.pdf', type: FileType.pdf, size: 2048),
+              item: fileItem(
+                name: 'relatorio.pdf',
+                type: FileType.pdf,
+                size: 2048,
+              ),
               isSelected: true,
               selectionMode: true,
               onTap: () => taps++,
@@ -297,17 +303,23 @@ void main() {
                 SizedBox(
                   width: 44,
                   height: 44,
-                  child: FileThumbnail(item: fileItem(name: 'Docs', isDirectory: true)),
+                  child: FileThumbnail(
+                    item: fileItem(name: 'Docs', isDirectory: true),
+                  ),
                 ),
                 SizedBox(
                   width: 44,
                   height: 44,
-                  child: FileThumbnail(item: fileItem(name: 'musica.mp3', type: FileType.audio)),
+                  child: FileThumbnail(
+                    item: fileItem(name: 'musica.mp3', type: FileType.audio),
+                  ),
                 ),
                 SizedBox(
                   width: 44,
                   height: 44,
-                  child: FileThumbnail(item: fileItem(name: 'clipe.mp4', type: FileType.video)),
+                  child: FileThumbnail(
+                    item: fileItem(name: 'clipe.mp4', type: FileType.video),
+                  ),
                 ),
               ],
             ),
@@ -317,17 +329,25 @@ void main() {
       await t.pumpAndSettle();
 
       expect(find.byIcon(Icons.folder), findsOneWidget);
-      expect(find.byIcon(FileTypeMap.iconForType(FileType.audio)), findsOneWidget);
+      expect(
+        find.byIcon(FileTypeMap.iconForType(FileType.audio)),
+        findsOneWidget,
+      );
       // Vídeo: canal nativo inexistente em host → getThumbnail devolve null
       // → o FutureBuilder cai no ícone por extensão.
-      expect(find.byIcon(FileTypeMap.iconForType(FileType.video)), findsOneWidget);
+      expect(
+        find.byIcon(FileTypeMap.iconForType(FileType.video)),
+        findsOneWidget,
+      );
       expect(find.byType(Image), findsNothing);
     });
 
     testWidgets('DestinationPicker: lista subpastas e fecha Selecionar', (
       t,
     ) async {
-      final Directory root = Directory.systemTemp.createTempSync('audify_picker');
+      final Directory root = Directory.systemTemp.createTempSync(
+        'audify_picker',
+      );
       addTearDown(() => root.deleteSync(recursive: true));
       Directory('${root.path}/Trabalho').createSync();
 
@@ -358,7 +378,9 @@ void main() {
       expect(find.byType(CircularProgressIndicator), findsOneWidget);
 
       // O load usa compute (isolate) — só termina fora da zona fake.
-      await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 400)));
+      await t.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 400)),
+      );
       await t.pump();
       await t.pump(const Duration(milliseconds: 50));
 
@@ -389,7 +411,9 @@ void main() {
     testWidgets('EmptyState: ícone e mensagem', (t) async {
       await t.pumpWidget(
         const MaterialApp(
-          home: Scaffold(body: EmptyState(icon: Icons.folder_off, message: 'Nada por aqui.')),
+          home: Scaffold(
+            body: EmptyState(icon: Icons.folder_off, message: 'Nada por aqui.'),
+          ),
         ),
       );
       expect(find.byIcon(Icons.folder_off), findsOneWidget);

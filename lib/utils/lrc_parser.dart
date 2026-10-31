@@ -41,13 +41,10 @@ class LrcLyrics {
   LrcLyrics(this.lines, {required this.synced});
 
   /// Texto sem timestamps (fallback da letra embutida USLT).
-  factory LrcLyrics.unsynced(String text) => LrcLyrics(
-        <LrcLine>[
-          for (final String line in text.split(RegExp(r'\r?\n')))
-            LrcLine(Duration.zero, line),
-        ],
-        synced: false,
-      );
+  factory LrcLyrics.unsynced(String text) => LrcLyrics(<LrcLine>[
+    for (final String line in text.split(RegExp(r'\r?\n')))
+      LrcLine(Duration.zero, line),
+  ], synced: false);
 
   bool get isEmpty => lines.isEmpty;
 
@@ -102,10 +99,9 @@ class LrcLyrics {
       final int cmp = a.$1.time.compareTo(b.$1.time);
       return cmp != 0 ? cmp : a.$2.compareTo(b.$2);
     });
-    return LrcLyrics(
-      <LrcLine>[for (final (LrcLine line, int _) in tagged) line],
-      synced: true,
-    );
+    return LrcLyrics(<LrcLine>[
+      for (final (LrcLine line, int _) in tagged) line,
+    ], synced: true);
   }
 
   /// Fração do timestamp em ms: 1..3 dígitos preenchidos à direita

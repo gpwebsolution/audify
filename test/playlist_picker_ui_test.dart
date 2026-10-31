@@ -75,8 +75,8 @@ class _FakeSongRepository extends SongRepository {
 
   @override
   Future<List<Song>> loadAssetSongs() async => <Song>[
-        Song.fromAsset(assetPath: 'assets/songs/alpha.mp3'),
-      ];
+    Song.fromAsset(assetPath: 'assets/songs/alpha.mp3'),
+  ];
 }
 
 class _FakeSessionRepository extends SessionRepository {
@@ -126,11 +126,11 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   group('seletor "Nova playlist" (4.4)', () {
-    testWidgets('vazio: cria no lugar e entrega a nova playlist',
-        (WidgetTester tester) async {
+    testWidgets('vazio: cria no lugar e entrega a nova playlist', (
+      WidgetTester tester,
+    ) async {
       final _FakePlaylistRepository repo = _FakePlaylistRepository();
-      final PlayerProvider player =
-          PlayerProvider(PlayableAudioService());
+      final PlayerProvider player = PlayerProvider(PlayableAudioService());
       addTearDown(player.dispose);
       final PlaylistProvider playlists = PlaylistProvider(
         player,
@@ -151,10 +151,13 @@ void main() {
       await tester.tap(find.text('Nova playlist'));
       await tester.pumpAndSettle();
       // Dialog de nome no lugar (mesmo formato do FAB da aba Playlists).
-      await tester.enterText(find.descendant(
-        of: find.byType(AlertDialog),
-        matching: find.byType(TextField),
-      ), 'Viagens');
+      await tester.enterText(
+        find.descendant(
+          of: find.byType(AlertDialog),
+          matching: find.byType(TextField),
+        ),
+        'Viagens',
+      );
       await tester.tap(find.text('Criar'));
       await tester.pumpAndSettle();
 
@@ -168,13 +171,13 @@ void main() {
       await tester.pumpWidget(const SizedBox());
     });
 
-    testWidgets('com lista: mostra contagens e escolhe na hora',
-        (WidgetTester tester) async {
+    testWidgets('com lista: mostra contagens e escolhe na hora', (
+      WidgetTester tester,
+    ) async {
       final _FakePlaylistRepository repo = _FakePlaylistRepository()
         ..seed('Trilha', songCount: 3)
         ..seed('Festa');
-      final PlayerProvider player =
-          PlayerProvider(PlayableAudioService());
+      final PlayerProvider player = PlayerProvider(PlayableAudioService());
       addTearDown(player.dispose);
       final PlaylistProvider playlists = PlaylistProvider(
         player,
@@ -205,12 +208,12 @@ void main() {
       await tester.pumpWidget(const SizedBox());
     });
 
-    testWidgets('nome duplicado: avisa e não escolhe nada',
-        (WidgetTester tester) async {
+    testWidgets('nome duplicado: avisa e não escolhe nada', (
+      WidgetTester tester,
+    ) async {
       final _FakePlaylistRepository repo = _FakePlaylistRepository()
         ..seed('Viagens');
-      final PlayerProvider player =
-          PlayerProvider(PlayableAudioService());
+      final PlayerProvider player = PlayerProvider(PlayableAudioService());
       addTearDown(player.dispose);
       final PlaylistProvider playlists = PlaylistProvider(
         player,
@@ -226,10 +229,13 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.text('Nova playlist'));
       await tester.pumpAndSettle();
-      await tester.enterText(find.descendant(
-        of: find.byType(AlertDialog),
-        matching: find.byType(TextField),
-      ), 'Viagens');
+      await tester.enterText(
+        find.descendant(
+          of: find.byType(AlertDialog),
+          matching: find.byType(TextField),
+        ),
+        'Viagens',
+      );
       await tester.tap(find.text('Criar'));
       await tester.pumpAndSettle();
 
@@ -246,75 +252,77 @@ void main() {
   });
 
   group('wire-up na tela Música (4.4)', () {
-    testWidgets(
-      'menu ⋮ → Adicionar à playlist → cria e adiciona a faixa',
-      (WidgetTester tester) async {
-        final PlayerProvider provider = PlayerProvider(
-          PlayableAudioService(),
-          songRepository: _FakeSongRepository(),
-          sessionRepository: _FakeSessionRepository(),
-        );
-        addTearDown(provider.dispose);
-        await provider.init();
+    testWidgets('menu ⋮ → Adicionar à playlist → cria e adiciona a faixa', (
+      WidgetTester tester,
+    ) async {
+      final PlayerProvider provider = PlayerProvider(
+        PlayableAudioService(),
+        songRepository: _FakeSongRepository(),
+        sessionRepository: _FakeSessionRepository(),
+      );
+      addTearDown(provider.dispose);
+      await provider.init();
 
-        final _FakePlaylistRepository repo = _FakePlaylistRepository()
-          ..seed('Trilha');
-        final PlaylistProvider playlists = PlaylistProvider(
-          provider,
-          repository: repo,
-        );
-        addTearDown(playlists.dispose);
+      final _FakePlaylistRepository repo = _FakePlaylistRepository()
+        ..seed('Trilha');
+      final PlaylistProvider playlists = PlaylistProvider(
+        provider,
+        repository: repo,
+      );
+      addTearDown(playlists.dispose);
 
-        await tester.pumpWidget(
-          MaterialApp(
-            home: Scaffold(
-              body: ChangeNotifierProvider<PlayerProvider>.value(
-                value: provider,
-                child: ChangeNotifierProvider<PlaylistProvider>.value(
-                  value: playlists,
-                  child: const MusicScreen(),
-                ),
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: ChangeNotifierProvider<PlayerProvider>.value(
+              value: provider,
+              child: ChangeNotifierProvider<PlaylistProvider>.value(
+                value: playlists,
+                child: const MusicScreen(),
               ),
             ),
           ),
-        );
-        await tester.pumpAndSettle();
+        ),
+      );
+      await tester.pumpAndSettle();
 
-        // ⋮ da faixa → "Adicionar à playlist" (seletor, não outra aba).
-        await tester.tap(
-          find.descendant(
-            of: find.ancestor(
-              of: find.text('Alpha'),
-              matching: find.byType(SongListTile),
-            ),
-            matching: find.byTooltip('Ações da faixa'),
+      // ⋮ da faixa → "Adicionar à playlist" (seletor, não outra aba).
+      await tester.tap(
+        find.descendant(
+          of: find.ancestor(
+            of: find.text('Alpha'),
+            matching: find.byType(SongListTile),
           ),
-        );
-        await tester.pumpAndSettle();
-        await tester.tap(find.text('Adicionar à playlist'));
-        await tester.pumpAndSettle();
+          matching: find.byTooltip('Ações da faixa'),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Adicionar à playlist'));
+      await tester.pumpAndSettle();
 
-        expect(find.text('Nova playlist'), findsOneWidget);
-        expect(find.text('Trilha'), findsOneWidget);
+      expect(find.text('Nova playlist'), findsOneWidget);
+      expect(find.text('Trilha'), findsOneWidget);
 
-        await tester.tap(find.text('Nova playlist'));
-        await tester.pumpAndSettle();
-        await tester.enterText(find.descendant(
-        of: find.byType(AlertDialog),
-        matching: find.byType(TextField),
-      ), 'Viagens');
-        await tester.tap(find.text('Criar'));
-        await tester.pumpAndSettle();
+      await tester.tap(find.text('Nova playlist'));
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.descendant(
+          of: find.byType(AlertDialog),
+          matching: find.byType(TextField),
+        ),
+        'Viagens',
+      );
+      await tester.tap(find.text('Criar'));
+      await tester.pumpAndSettle();
 
-        // A recém-criada recebeu a faixa e o aviso sai na tela chamadora.
-        expect(repo.added, hasLength(1));
-        // 'Viagens' é a SEGUNDA do fake (a semeada 'Trilha' é a 1).
-        expect(repo.names[repo.added.single.playlistId], 'Viagens');
-        expect(repo.added.single.song.title, 'Alpha');
-        expect(find.text('Adicionada a "Viagens"'), findsOneWidget);
+      // A recém-criada recebeu a faixa e o aviso sai na tela chamadora.
+      expect(repo.added, hasLength(1));
+      // 'Viagens' é a SEGUNDA do fake (a semeada 'Trilha' é a 1).
+      expect(repo.names[repo.added.single.playlistId], 'Viagens');
+      expect(repo.added.single.song.title, 'Alpha');
+      expect(find.text('Adicionada a "Viagens"'), findsOneWidget);
 
-        await tester.pumpWidget(const SizedBox());
-      },
-    );
+      await tester.pumpWidget(const SizedBox());
+    });
   });
 }

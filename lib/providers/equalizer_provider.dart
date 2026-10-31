@@ -14,17 +14,15 @@ import 'settings_provider.dart';
 /// Padrão igual ao do PlayerProvider com velocidade/sono: a mutação
 /// notifica a UI, aplica no serviço (nunca propaga exceção) e persiste.
 class EqualizerProvider extends ChangeNotifier {
-  EqualizerProvider({
-    required this._audio,
-    required this._settings,
-  }) {
+  EqualizerProvider({required this._audio, required this._settings}) {
     _audio.onEqualizerSupportChanged = _onSupportChanged;
     final SettingsProvider? prefs = _settings;
     _enabled = prefs?.equalizerEnabled ?? false;
     _bands = List<double>.of(prefs?.equalizerBands ?? _defaults());
     _preset = prefs?.equalizerPreset ?? SettingsProvider.equalizerDefaultPreset;
     _bassEnabled = prefs?.equalizerBassEnabled ?? false;
-    _bassStrength = prefs?.equalizerBassStrength ??
+    _bassStrength =
+        prefs?.equalizerBassStrength ??
         SettingsProvider.defaultEqualizerBassStrength;
     // Restaura o estado da sessão anterior (só quando ligado: com o
     // equalizador desligado o efeito já nasce bypassado no serviço).
@@ -68,8 +66,7 @@ class EqualizerProvider extends ChangeNotifier {
   // ---- Estado lido pela UI ----
 
   /// Suporte do aparelho (checado em runtime pelo serviço).
-  EqualizerSupport get support =>
-      _supportOverride ?? _audio.equalizerSupport;
+  EqualizerSupport get support => _supportOverride ?? _audio.equalizerSupport;
 
   bool get enabled => _enabled;
 
@@ -87,8 +84,7 @@ class EqualizerProvider extends ChangeNotifier {
   }
 
   /// Ganho da banda `index` (0 quando o índice ainda não foi editado).
-  double bandValue(int index) =>
-      index < _bands.length ? _bands[index] : 0;
+  double bandValue(int index) => index < _bands.length ? _bands[index] : 0;
 
   /// Frequência central da banda `index` (null quando desconhecida).
   double? bandFrequency(int index) {
@@ -139,11 +135,11 @@ class EqualizerProvider extends ChangeNotifier {
 
   /// Zera bandas/preset/graves (o mestre permanece como está).
   Future<void> reset() => _update(
-        bands: _defaults(),
-        preset: SettingsProvider.equalizerDefaultPreset,
-        bassEnabled: false,
-        bassStrength: SettingsProvider.defaultEqualizerBassStrength,
-      );
+    bands: _defaults(),
+    preset: SettingsProvider.equalizerDefaultPreset,
+    bassEnabled: false,
+    bassStrength: SettingsProvider.defaultEqualizerBassStrength,
+  );
 
   Future<void> _update({
     bool? enabled,

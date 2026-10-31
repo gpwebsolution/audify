@@ -66,9 +66,8 @@ class FavoritesProvider extends ChangeNotifier {
       // para a lista ao vivo não pular de posição após um reload.
       _songs = [..._songs, song]
         ..sort(
-          (Song a, Song b) => a.title.toLowerCase().compareTo(
-            b.title.toLowerCase(),
-          ),
+          (Song a, Song b) =>
+              a.title.toLowerCase().compareTo(b.title.toLowerCase()),
         );
     } else {
       _ids.remove(song.id);

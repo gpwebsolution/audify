@@ -73,206 +73,202 @@ PlayerProvider _provider(PlayableAudioService svc) => PlayerProvider(
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
+  test(
+    'tick de posição não emite notifyListeners; busca notifica (2.1)',
+    () async {
+      final PlayableAudioService svc = PlayableAudioService();
+      final PlayerProvider provider = _provider(svc);
+      addTearDown(provider.dispose);
+      await provider.init();
+      // Deixa o init do construtor (disparado junto) terminar antes de
+      // contar notificações.
+      await pumpEventQueue();
 
-  test('tick de posição não emite notifyListeners; busca notifica (2.1)',
-      () async {
+      int notifications = 0;
+      provider.addListener(() => notifications++);
+
+      // 5 ticks — o que acontece em ~1s de reprodução.
+      for (int i = 1; i <= 5; i++) {
+        svc.position.value = Duration(seconds: i);
+      }
+      expect(
+        notifications,
+        0,
+        reason: 'tick só move o notifier de progresso, não a UI da lista',
+      );
+      expect(provider.position, const Duration(seconds: 5));
+      expect(provider.positionListenable.value, const Duration(seconds: 5));
+
+      // A busca notifica de propósito (sem isso, digitar não atualizava a
+      // tela pausada — dependia do rebuild acidental do tick).
+      provider.setSearchQuery('a');
+      expect(notifications, 1);
+      expect(provider.visibleSongs, hasLength(2));
+    },
+  );
+
+  testWidgets('aba Música: lista não reconstrói quando só a posição muda', (
+    tester,
+  ) async {
     final PlayableAudioService svc = PlayableAudioService();
     final PlayerProvider provider = _provider(svc);
     addTearDown(provider.dispose);
     await provider.init();
-    // Deixa o init do construtor (disparado junto) terminar antes de
-    // contar notificações.
-    await pumpEventQueue();
 
-    int notifications = 0;
-    provider.addListener(() => notifications++);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: ChangeNotifierProvider<PlayerProvider>.value(
+            value: provider,
+            child: const MusicScreen(),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
 
-    // 5 ticks — o que acontece em ~1s de reprodução.
+    expect(find.byType(SongListTile), findsNWidgets(3));
+    final SongListTile tile0 = tester.widget<SongListTile>(
+      find.byType(SongListTile).first,
+    );
+    final TextField field0 = tester.widget<TextField>(find.byType(TextField));
+
+    // Ticks de posição — o cenário real de ~1s tocando.
     for (int i = 1; i <= 5; i++) {
       svc.position.value = Duration(seconds: i);
+      await tester.pump();
     }
-    expect(
-      notifications,
-      0,
-      reason: 'tick só move o notifier de progresso, não a UI da lista',
-    );
-    expect(provider.position, const Duration(seconds: 5));
-    expect(provider.positionListenable.value, const Duration(seconds: 5));
 
-    // A busca notifica de propósito (sem isso, digitar não atualizava a
-    // tela pausada — dependia do rebuild acidental do tick).
+    expect(
+      tester.widget<SongListTile>(find.byType(SongListTile).first),
+      same(tile0),
+      reason: 'tick de posição não pode reconstruir os itens da lista',
+    );
+    expect(
+      tester.widget<TextField>(find.byType(TextField)),
+      same(field0),
+      reason: 'nem a tela inteira (campo de busca incluso)',
+    );
+
+    // Controle: mudança REAL da fatia reconstrói — prova que a técnica
+    // de identidade enxergaria um rebuild indevido.
     provider.setSearchQuery('a');
-    expect(notifications, 1);
-    expect(provider.visibleSongs, hasLength(2));
+    await tester.pump();
+    expect(find.byType(SongListTile), findsNWidgets(2));
+    final SongListTile tileSearch = tester.widget<SongListTile>(
+      find.byType(SongListTile).first,
+    );
+    expect(tileSearch, isNot(same(tile0)));
+
+    // Controle 2: tocar uma faixa reconstrói (destaque muda) — o
+    // select continua reativo ao que importa para a lista.
+    await provider.playVisibleAt(0);
+    await tester.pump();
+    final SongListTile tilePlaying = tester.widget<SongListTile>(
+      find.byType(SongListTile).first,
+    );
+    expect(tilePlaying, isNot(same(tileSearch)));
+    expect(tilePlaying.isCurrent, isTrue);
+
+    // Desmonta antes do dispose do provider (notifier não pode ser
+    // dispensado com ouvintes de widget ainda ligados).
+    await tester.pumpWidget(const SizedBox());
   });
 
-  testWidgets(
-    'aba Música: lista não reconstrói quando só a posição muda',
-    (tester) async {
-      final PlayableAudioService svc = PlayableAudioService();
-      final PlayerProvider provider = _provider(svc);
-      addTearDown(provider.dispose);
-      await provider.init();
+  testWidgets('mini player: a barra segue o tick; o resto não reconstrói', (
+    tester,
+  ) async {
+    final PlayableAudioService svc = PlayableAudioService();
+    final PlayerProvider provider = _provider(svc);
+    addTearDown(provider.dispose);
+    await provider.init();
+    await provider.playVisibleAt(0);
+    svc.duration.value = const Duration(minutes: 3);
 
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: ChangeNotifierProvider<PlayerProvider>.value(
-              value: provider,
-              child: const MusicScreen(),
-            ),
-          ),
-        ),
-      );
-      await tester.pumpAndSettle();
-
-      expect(find.byType(SongListTile), findsNWidgets(3));
-      final SongListTile tile0 = tester.widget<SongListTile>(
-        find.byType(SongListTile).first,
-      );
-      final TextField field0 = tester.widget<TextField>(
-        find.byType(TextField),
-      );
-
-      // Ticks de posição — o cenário real de ~1s tocando.
-      for (int i = 1; i <= 5; i++) {
-        svc.position.value = Duration(seconds: i);
-        await tester.pump();
-      }
-
-      expect(
-        tester.widget<SongListTile>(find.byType(SongListTile).first),
-        same(tile0),
-        reason: 'tick de posição não pode reconstruir os itens da lista',
-      );
-      expect(
-        tester.widget<TextField>(find.byType(TextField)),
-        same(field0),
-        reason: 'nem a tela inteira (campo de busca incluso)',
-      );
-
-      // Controle: mudança REAL da fatia reconstrói — prova que a técnica
-      // de identidade enxergaria um rebuild indevido.
-      provider.setSearchQuery('a');
-      await tester.pump();
-      expect(find.byType(SongListTile), findsNWidgets(2));
-      final SongListTile tileSearch = tester.widget<SongListTile>(
-        find.byType(SongListTile).first,
-      );
-      expect(tileSearch, isNot(same(tile0)));
-
-      // Controle 2: tocar uma faixa reconstrói (destaque muda) — o
-      // select continua reativo ao que importa para a lista.
-      await provider.playVisibleAt(0);
-      await tester.pump();
-      final SongListTile tilePlaying = tester.widget<SongListTile>(
-        find.byType(SongListTile).first,
-      );
-      expect(tilePlaying, isNot(same(tileSearch)));
-      expect(tilePlaying.isCurrent, isTrue);
-
-      // Desmonta antes do dispose do provider (notifier não pode ser
-      // dispensado com ouvintes de widget ainda ligados).
-      await tester.pumpWidget(const SizedBox());
-    },
-  );
-
-  testWidgets(
-    'mini player: a barra segue o tick; o resto não reconstrói',
-    (tester) async {
-      final PlayableAudioService svc = PlayableAudioService();
-      final PlayerProvider provider = _provider(svc);
-      addTearDown(provider.dispose);
-      await provider.init();
-      await provider.playVisibleAt(0);
-      svc.duration.value = const Duration(minutes: 3);
-
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            bottomNavigationBar: ChangeNotifierProvider<PlayerProvider>.value(
-              value: provider,
-              child: const PlayerControls(),
-            ),
-          ),
-        ),
-      );
-      await tester.pumpAndSettle();
-
-      expect(
-        tester.widget<LinearProgressIndicator>(
-          find.byType(LinearProgressIndicator),
-        ).value,
-        0.0,
-      );
-      final Text title = tester.widget<Text>(find.text('Apple'));
-
-      // 1 de 3 minutos tocados → barra em ~0.33.
-      svc.position.value = const Duration(minutes: 1);
-      await tester.pump();
-
-      expect(
-        tester.widget<LinearProgressIndicator>(
-          find.byType(LinearProgressIndicator),
-        ).value,
-        closeTo(1 / 3, 0.001),
-        reason: 'a barra de progresso deve reagir ao tick',
-      );
-      expect(
-        tester.widget<Text>(find.text('Apple')),
-        same(title),
-        reason: 'o restante do mini player não reconstrói no tick',
-      );
-
-      await tester.pumpWidget(const SizedBox());
-    },
-  );
-
-  testWidgets(
-    'player em tela cheia: slider e tempos seguem o tick',
-    (tester) async {
-      final PlayableAudioService svc = PlayableAudioService();
-      final PlayerProvider provider = _provider(svc);
-      addTearDown(provider.dispose);
-      await provider.init();
-      await provider.playVisibleAt(0);
-      svc.duration.value = const Duration(minutes: 3);
-
-      await tester.pumpWidget(
-        MaterialApp(
-          home: ChangeNotifierProvider<PlayerProvider>.value(
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          bottomNavigationBar: ChangeNotifierProvider<PlayerProvider>.value(
             value: provider,
-            child: const PlayerScreen(),
+            child: const PlayerControls(),
           ),
         ),
-      );
-      await tester.pumpAndSettle();
+      ),
+    );
+    await tester.pumpAndSettle();
 
-      expect(tester.widget<Slider>(find.byType(Slider)).value, 0.0);
-      expect(find.text('00:00'), findsOneWidget);
-      expect(find.text('03:00'), findsOneWidget);
+    expect(
+      tester
+          .widget<LinearProgressIndicator>(find.byType(LinearProgressIndicator))
+          .value,
+      0.0,
+    );
+    final Text title = tester.widget<Text>(find.text('Apple'));
 
-      svc.position.value = const Duration(seconds: 10);
-      await tester.pump();
+    // 1 de 3 minutos tocados → barra em ~0.33.
+    svc.position.value = const Duration(minutes: 1);
+    await tester.pump();
 
-      expect(tester.widget<Slider>(find.byType(Slider)).value, 10000.0);
-      expect(
-        find.text('00:10'),
-        findsOneWidget,
-        reason: 'tempo decorrido reage ao tick',
-      );
+    expect(
+      tester
+          .widget<LinearProgressIndicator>(find.byType(LinearProgressIndicator))
+          .value,
+      closeTo(1 / 3, 0.001),
+      reason: 'a barra de progresso deve reagir ao tick',
+    );
+    expect(
+      tester.widget<Text>(find.text('Apple')),
+      same(title),
+      reason: 'o restante do mini player não reconstrói no tick',
+    );
 
-      final Text title = tester.widget<Text>(find.text('Apple'));
-      svc.position.value = const Duration(seconds: 20);
-      await tester.pump();
-      expect(tester.widget<Slider>(find.byType(Slider)).value, 20000.0);
-      expect(
-        tester.widget<Text>(find.text('Apple')),
-        same(title),
-        reason: 'capa/título/controles não reconstruem no tick',
-      );
+    await tester.pumpWidget(const SizedBox());
+  });
 
-      await tester.pumpWidget(const SizedBox());
-    },
-  );
+  testWidgets('player em tela cheia: slider e tempos seguem o tick', (
+    tester,
+  ) async {
+    final PlayableAudioService svc = PlayableAudioService();
+    final PlayerProvider provider = _provider(svc);
+    addTearDown(provider.dispose);
+    await provider.init();
+    await provider.playVisibleAt(0);
+    svc.duration.value = const Duration(minutes: 3);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: ChangeNotifierProvider<PlayerProvider>.value(
+          value: provider,
+          child: const PlayerScreen(),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(tester.widget<Slider>(find.byType(Slider)).value, 0.0);
+    expect(find.text('00:00'), findsOneWidget);
+    expect(find.text('03:00'), findsOneWidget);
+
+    svc.position.value = const Duration(seconds: 10);
+    await tester.pump();
+
+    expect(tester.widget<Slider>(find.byType(Slider)).value, 10000.0);
+    expect(
+      find.text('00:10'),
+      findsOneWidget,
+      reason: 'tempo decorrido reage ao tick',
+    );
+
+    final Text title = tester.widget<Text>(find.text('Apple'));
+    svc.position.value = const Duration(seconds: 20);
+    await tester.pump();
+    expect(tester.widget<Slider>(find.byType(Slider)).value, 20000.0);
+    expect(
+      tester.widget<Text>(find.text('Apple')),
+      same(title),
+      reason: 'capa/título/controles não reconstruem no tick',
+    );
+
+    await tester.pumpWidget(const SizedBox());
+  });
 }

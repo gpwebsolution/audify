@@ -89,13 +89,12 @@ PlayerProvider _provider(
   PlayableAudioService svc,
   List<Song> catalog, {
   int catalogComputeThreshold = PlayerProvider.defaultCatalogComputeThreshold,
-}) =>
-    PlayerProvider(
-      svc,
-      songRepository: _FakeSongRepository(catalog),
-      sessionRepository: _FakeSessionRepository(),
-      catalogComputeThreshold: catalogComputeThreshold,
-    );
+}) => PlayerProvider(
+  svc,
+  songRepository: _FakeSongRepository(catalog),
+  sessionRepository: _FakeSessionRepository(),
+  catalogComputeThreshold: catalogComputeThreshold,
+);
 
 List<Song> _smallCatalog() => <Song>[
   _song(id: 's1', title: 'Faixa Um', album: 'Zeta', artist: 'Boa'),
@@ -106,7 +105,6 @@ List<Song> _smallCatalog() => <Song>[
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
-
 
   group('visibleGroups: agrupamento correto (2.2)', () {
     late PlayerProvider provider;
@@ -148,8 +146,7 @@ void main() {
       expect(byFolder.single.songs, hasLength(4));
     });
 
-    test('memo: mesma instância; invalida só em modo, busca ou catálogo',
-        () {
+    test('memo: mesma instância; invalida só em modo, busca ou catálogo', () {
       final List<SongGroup> first = provider.visibleGroups(
         MusicGroupMode.album,
       );
@@ -170,16 +167,13 @@ void main() {
       );
       expect(filtered, isNot(same(first)), reason: 'busca invalida');
       expect(filtered.map((SongGroup g) => g.key).toList(), <String>['Zeta']);
-      expect(filtered.single.songs.map((Song s) => s.id), <String>[
-        's3',
-        's1',
-      ]);
+      expect(filtered.single.songs.map((Song s) => s.id), <String>['s3', 's1']);
 
       provider.setSearchQuery('');
       expect(
-        provider.visibleGroups(MusicGroupMode.album).map(
-          (SongGroup g) => g.key,
-        ),
+        provider
+            .visibleGroups(MusicGroupMode.album)
+            .map((SongGroup g) => g.key),
         <String>['Alfa', 'Zeta'],
       );
     });
@@ -225,7 +219,8 @@ void main() {
       expect(
         builtInitially,
         lessThan(100),
-        reason: 'ListView.builder só constrói a viewport — o '
+        reason:
+            'ListView.builder só constrói a viewport — o '
             'ListView(children:) antigo materializava ~5.000+ tiles',
       );
       expect(sw.elapsedMilliseconds, lessThan(5000));

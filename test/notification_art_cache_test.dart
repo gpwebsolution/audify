@@ -13,21 +13,21 @@ import 'package:audify/services/notification_art_cache.dart';
 import 'package:on_audio_query/on_audio_query.dart';
 
 Song _deviceSong({int? albumId, int? mediaId}) => Song.fromMediaStore(
-      SongModel(<dynamic, dynamic>{
-        '_id': mediaId ?? 7,
-        '_data': '/storage/emulated/0/Music/f.mp3',
-        '_display_name': 'f.mp3',
-        '_display_name_wo_ext': 'f',
-        'title': 'Faixa',
-        'artist': 'Artista',
-        'album': 'Album',
-        'duration': 1000,
-        'artist_id': 1,
-        'album_id': albumId,
-        'album_key': 'k',
-        'is_music': 1,
-      }),
-    );
+  SongModel(<dynamic, dynamic>{
+    '_id': mediaId ?? 7,
+    '_data': '/storage/emulated/0/Music/f.mp3',
+    '_display_name': 'f.mp3',
+    '_display_name_wo_ext': 'f',
+    'title': 'Faixa',
+    'artist': 'Artista',
+    'album': 'Album',
+    'duration': 1000,
+    'artist_id': 1,
+    'album_id': albumId,
+    'album_key': 'k',
+    'is_music': 1,
+  }),
+);
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -67,22 +67,25 @@ void main() {
       );
     });
 
-    test('chaves de faixas do mesmo álbum são idênticas (cache compartilhado)',
-        () {
-      final String a = NotificationArtCache.artKeyFor(
-        _deviceSong(albumId: 5, mediaId: 1),
-      )!;
-      final String b = NotificationArtCache.artKeyFor(
-        _deviceSong(albumId: 5, mediaId: 2),
-      )!;
-      expect(a, b);
-    });
+    test(
+      'chaves de faixas do mesmo álbum são idênticas (cache compartilhado)',
+      () {
+        final String a = NotificationArtCache.artKeyFor(
+          _deviceSong(albumId: 5, mediaId: 1),
+        )!;
+        final String b = NotificationArtCache.artKeyFor(
+          _deviceSong(albumId: 5, mediaId: 2),
+        )!;
+        expect(a, b);
+      },
+    );
   });
 
   group('NotificationArtCache.uriFromPath (pura)', () {
     test('gera Uri file:// absoluto', () {
-      final Uri uri =
-          NotificationArtCache.uriFromPath('/data/user/0/app/cache/art_album_5.jpg');
+      final Uri uri = NotificationArtCache.uriFromPath(
+        '/data/user/0/app/cache/art_album_5.jpg',
+      );
       expect(uri.scheme, 'file');
       expect(uri.path, '/data/user/0/app/cache/art_album_5.jpg');
       expect(uri.toString(), startsWith('file:///'));
@@ -100,16 +103,18 @@ void main() {
       expect(uri, isNull);
     });
 
-    test('sem canal nativo (path_provider) não lança e degrada pra null',
-        () async {
-      // Caminho da logo (asset): os bytes vêm do bundle (funciona em
-      // teste), mas o ThumbnailDiskCache não tem canal nativo em VM —
-      // a gravação falha graciosamente e uriFor devolve null. Capa é
-      // enfeite, não requisito: nunca exceção para cima.
-      final Uri? uri = await NotificationArtCache.uriFor(
-        Song.fromAsset(assetPath: 'assets/songs/x.mp3'),
-      );
-      expect(uri, isNull);
-    });
+    test(
+      'sem canal nativo (path_provider) não lança e degrada pra null',
+      () async {
+        // Caminho da logo (asset): os bytes vêm do bundle (funciona em
+        // teste), mas o ThumbnailDiskCache não tem canal nativo em VM —
+        // a gravação falha graciosamente e uriFor devolve null. Capa é
+        // enfeite, não requisito: nunca exceção para cima.
+        final Uri? uri = await NotificationArtCache.uriFor(
+          Song.fromAsset(assetPath: 'assets/songs/x.mp3'),
+        );
+        expect(uri, isNull);
+      },
+    );
   });
 }

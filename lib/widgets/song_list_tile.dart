@@ -67,9 +67,7 @@ class SongListTile extends StatelessWidget {
         : trailing ??
               (isCurrent
                   ? Icon(
-                      isPlaying
-                          ? Icons.graphic_eq
-                          : Icons.pause_circle_outline,
+                      isPlaying ? Icons.graphic_eq : Icons.pause_circle_outline,
                       color: colors.primary,
                     )
                   : onMenuTap == null
@@ -89,9 +87,7 @@ class SongListTile extends StatelessWidget {
                 tooltip: isFavorite ? 'Desfavoritar' : 'Favoritar',
                 icon: Icon(
                   isFavorite ? Icons.favorite : Icons.favorite_border,
-                  color: isFavorite
-                      ? colors.error
-                      : colors.onSurfaceVariant,
+                  color: isFavorite ? colors.error : colors.onSurfaceVariant,
                   size: 22,
                 ),
                 onPressed: onFavoriteToggle,
@@ -104,10 +100,7 @@ class SongListTile extends StatelessWidget {
       onTap: onTap,
       onLongPress: onLongPress,
       leading: selectionMode
-          ? Checkbox(
-              value: selected,
-              onChanged: (_) => onLongPress?.call(),
-            )
+          ? Checkbox(value: selected, onChanged: (_) => onLongPress?.call())
           : _SongArtwork(song: song, isCurrent: isCurrent, size: 48),
       title: Text(
         song.title,

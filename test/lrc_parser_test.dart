@@ -61,8 +61,7 @@ void main() {
       expect(LrcLyrics.parse('apenas texto\n[ar:y]'), isNull);
     });
 
-    test('formatos de fração: centésimos, milissegundos, sem e com ":"',
-        () {
+    test('formatos de fração: centésimos, milissegundos, sem e com ":"', () {
       expect(
         _parse('[00:01.5]a').lines.single.time,
         const Duration(milliseconds: 1500),
@@ -92,18 +91,17 @@ void main() {
         '[00:05.00]A\n'
         '[00:01.00]C',
       );
-      expect(
-        lyrics.lines.map((LrcLine l) => l.text).toList(),
-        <String>['C', 'B', 'A'],
-      );
+      expect(lyrics.lines.map((LrcLine l) => l.text).toList(), <String>[
+        'C',
+        'B',
+        'A',
+      ]);
     });
   });
 
   group('indexAt — destaque da linha atual', () {
     test('bisseção: antes da primeira = -1, depois acompanha', () {
-      final LrcLyrics lyrics = _parse(
-        '[00:01.00]a\n[00:03.00]b\n[00:06.00]c',
-      );
+      final LrcLyrics lyrics = _parse('[00:01.00]a\n[00:03.00]b\n[00:06.00]c');
       expect(lyrics.indexAt(Duration.zero), -1);
       expect(lyrics.indexAt(const Duration(milliseconds: 999)), -1);
       expect(lyrics.indexAt(const Duration(milliseconds: 1000)), 0);

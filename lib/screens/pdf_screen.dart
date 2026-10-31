@@ -109,7 +109,8 @@ class _PdfScreenState extends State<PdfScreen> with MediaSelection<String> {
               SelectionAction(
                 icon: Icons.swap_horiz,
                 label: 'Inverter seleção',
-                onPressed: () => invertSelection(sorted.map((PdfFile p) => p.path)),
+                onPressed: () =>
+                    invertSelection(sorted.map((PdfFile p) => p.path)),
               ),
             ],
           ),
@@ -166,7 +167,7 @@ class _PdfScreenState extends State<PdfScreen> with MediaSelection<String> {
               ? Checkbox(
                   value: isSelected(pdf.path),
                   onChanged: (_) => toggleSelect(pdf.path),
-                    )
+                )
               : _PdfThumbnail(pdf: pdf),
           title: Text(pdf.name, maxLines: 1, overflow: TextOverflow.ellipsis),
           subtitle: Row(

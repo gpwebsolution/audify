@@ -48,15 +48,16 @@ void main() {
     expect(restored.$2, const Duration(seconds: 20));
   });
 
-  test('dados corrompidos no storage retornam (null, zero) sem lançar',
-      () async {
-    SharedPreferences.setMockInitialValues({'last_song': '{json invalido'});
-    final SessionRepository repository = SessionRepository();
-    final (Song?, Duration) restored = await repository.load();
-    expect(restored.$1, isNull);
-    expect(restored.$2, Duration.zero);
-  });
-
+  test(
+    'dados corrompidos no storage retornam (null, zero) sem lançar',
+    () async {
+      SharedPreferences.setMockInitialValues({'last_song': '{json invalido'});
+      final SessionRepository repository = SessionRepository();
+      final (Song?, Duration) restored = await repository.load();
+      expect(restored.$1, isNull);
+      expect(restored.$2, Duration.zero);
+    },
+  );
 
   test('clear apaga a sessao salva (faixa excluida do aparelho)', () async {
     SharedPreferences.setMockInitialValues({});
@@ -110,11 +111,9 @@ void main() {
     expect(ids, isEmpty);
   });
 
-  test('fila maior que o teto guarda janela centrada na faixa atual',
-      () async {
+  test('fila maior que o teto guarda janela centrada na faixa atual', () async {
     final SessionRepository repository = SessionRepository();
-    final List<String> ids =
-        List<String>.generate(1000, (int i) => 'id-$i');
+    final List<String> ids = List<String>.generate(1000, (int i) => 'id-$i');
     await repository.saveQueue(ids, 500);
 
     final (List<String> saved, int index) = await repository.loadQueue();

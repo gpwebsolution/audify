@@ -15,10 +15,8 @@ import 'package:audio_service/audio_service.dart' as asvc;
 
 import 'package:audify/services/audio_service.dart';
 
-
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
-
 
   group('broadcastPlaybackState throttled', () {
     late DateTime now;
@@ -35,8 +33,9 @@ void main() {
 
     test('ticks dentro de 1s emitem no máximo 1x', () async {
       final List<asvc.PlaybackState> seen = <asvc.PlaybackState>[];
-      final StreamSubscription<asvc.PlaybackState> sub =
-          svc.playbackState.skip(1).listen(seen.add);
+      final StreamSubscription<asvc.PlaybackState> sub = svc.playbackState
+          .skip(1)
+          .listen(seen.add);
       addTearDown(sub.cancel);
 
       // 5 ticks de 200ms (cadência máxima do positionStream) em 1s.
@@ -48,14 +47,18 @@ void main() {
 
       await pumpEventQueue();
       expect(seen, hasLength(1));
-      expect(seen.first.updatePosition, Duration.zero,
-          reason: 'primeiro tick (t=0) é o emitido');
+      expect(
+        seen.first.updatePosition,
+        Duration.zero,
+        reason: 'primeiro tick (t=0) é o emitido',
+      );
     });
 
     test('passou do intervalo: emite de novo', () async {
       final List<asvc.PlaybackState> seen = <asvc.PlaybackState>[];
-      final StreamSubscription<asvc.PlaybackState> sub =
-          svc.playbackState.skip(1).listen(seen.add);
+      final StreamSubscription<asvc.PlaybackState> sub = svc.playbackState
+          .skip(1)
+          .listen(seen.add);
       addTearDown(sub.cancel);
 
       svc.broadcastPlaybackState(throttled: true);
@@ -75,11 +78,11 @@ void main() {
       expect(seen, hasLength(2));
     });
 
-    test('sem throttle (controles) passa mesmo dentro do intervalo',
-        () async {
+    test('sem throttle (controles) passa mesmo dentro do intervalo', () async {
       final List<asvc.PlaybackState> seen = <asvc.PlaybackState>[];
-      final StreamSubscription<asvc.PlaybackState> sub =
-          svc.playbackState.skip(1).listen(seen.add);
+      final StreamSubscription<asvc.PlaybackState> sub = svc.playbackState
+          .skip(1)
+          .listen(seen.add);
       addTearDown(sub.cancel);
 
       svc.broadcastPlaybackState(throttled: true);
@@ -94,8 +97,9 @@ void main() {
 
     test('broadcast imediato atualiza a janela do throttle', () async {
       final List<asvc.PlaybackState> seen = <asvc.PlaybackState>[];
-      final StreamSubscription<asvc.PlaybackState> sub =
-          svc.playbackState.skip(1).listen(seen.add);
+      final StreamSubscription<asvc.PlaybackState> sub = svc.playbackState
+          .skip(1)
+          .listen(seen.add);
       addTearDown(sub.cancel);
 
       svc.broadcastPlaybackState(throttled: true); // t=0: emitido

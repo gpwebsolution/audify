@@ -19,26 +19,26 @@ import 'package:audify/utils/lrc_parser.dart';
 // ---------------------------------------------------------------------------
 
 List<int> _synchsafe(int v) => <int>[
-      (v >> 21) & 0x7f,
-      (v >> 14) & 0x7f,
-      (v >> 7) & 0x7f,
-      v & 0x7f,
-    ];
+  (v >> 21) & 0x7f,
+  (v >> 14) & 0x7f,
+  (v >> 7) & 0x7f,
+  v & 0x7f,
+];
 
 List<int> _be32(int v) => <int>[
-      (v >> 24) & 0xff,
-      (v >> 16) & 0xff,
-      (v >> 8) & 0xff,
-      v & 0xff,
-    ];
+  (v >> 24) & 0xff,
+  (v >> 16) & 0xff,
+  (v >> 8) & 0xff,
+  v & 0xff,
+];
 
 List<int> _utf16Le(String s) => <int>[
-        for (final int u in s.codeUnits) ...<int>[u & 0xff, u >> 8],
-      ];
+  for (final int u in s.codeUnits) ...<int>[u & 0xff, u >> 8],
+];
 
 List<int> _utf16Be(String s) => <int>[
-        for (final int u in s.codeUnits) ...<int>[u >> 8, u & 0xff],
-      ];
+  for (final int u in s.codeUnits) ...<int>[u >> 8, u & 0xff],
+];
 
 /// Frame USLT: encoding(1) + idioma(3) + descritor terminado + texto.
 List<int> _usltFrame(
@@ -81,15 +81,14 @@ Uint8List _id3Tag({
   required List<int> frames,
   int major = 3,
   int tagFlags = 0,
-}) =>
-    Uint8List.fromList(<int>[
-      ...ascii.encode('ID3'),
-      major,
-      0,
-      tagFlags,
-      ..._synchsafe(frames.length),
-      ...frames,
-    ]);
+}) => Uint8List.fromList(<int>[
+  ...ascii.encode('ID3'),
+  major,
+  0,
+  tagFlags,
+  ..._synchsafe(frames.length),
+  ...frames,
+]);
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -118,9 +117,7 @@ void main() {
     });
 
     test('UTF-16BE sem BOM (encoding 2)', () {
-      final Uint8List tag = _id3Tag(
-        frames: _usltFrame('cantada', encoding: 2),
-      );
+      final Uint8List tag = _id3Tag(frames: _usltFrame('cantada', encoding: 2));
       expect(readId3v2Usult(tag), 'cantada');
     });
 
@@ -162,7 +159,11 @@ void main() {
           frames: _usltFrame('x', encoding: 0),
           tagFlags: flag,
         );
-        expect(readId3v2Usult(tag), isNull, reason: 'flag 0x${flag.toRadixString(16)}');
+        expect(
+          readId3v2Usult(tag),
+          isNull,
+          reason: 'flag 0x${flag.toRadixString(16)}',
+        );
       }
     });
 
@@ -185,15 +186,17 @@ void main() {
 
     test('descritor sem terminador: não arrisca leitura torta', () {
       // encoding 0, idioma + texto SEM byte nulo de fim do descritor.
-      final Uint8List tag = _id3Tag(frames: <int>[
-        ...ascii.encode('USLT'),
-        ..._be32(12), // encoding(1) + idioma(3) + 'semFim00'(8)
-        0,
-        0,
-        0,
-        ...ascii.encode('eng'),
-        ...ascii.encode('semFim00'),
-      ]);
+      final Uint8List tag = _id3Tag(
+        frames: <int>[
+          ...ascii.encode('USLT'),
+          ..._be32(12), // encoding(1) + idioma(3) + 'semFim00'(8)
+          0,
+          0,
+          0,
+          ...ascii.encode('eng'),
+          ...ascii.encode('semFim00'),
+        ],
+      );
       expect(readId3v2Usult(tag), isNull);
     });
 
@@ -201,10 +204,7 @@ void main() {
       final Uint8List tag = _id3Tag(
         frames: _usltFrame('uma letra qualquer', encoding: 0),
       );
-      expect(
-        () => readId3v2Usult(tag.sublist(0, 14)),
-        returnsNormally,
-      );
+      expect(() => readId3v2Usult(tag.sublist(0, 14)), returnsNormally);
       expect(readId3v2Usult(tag.sublist(0, 14)), isNull);
       // Ids com bytes ilegais param o loop sem estourar.
       final Uint8List junk = Uint8List.fromList(<int>[
@@ -233,14 +233,16 @@ void main() {
     });
 
     Song fileSong(String name) => Song.fromStored(<String, Object?>{
-          'song_id': '${dir.path}/$name',
-          'title': 'Faixa',
-          'file_path': '${dir.path}/$name',
-          'is_asset': 0,
-        })!;
+      'song_id': '${dir.path}/$name',
+      'title': 'Faixa',
+      'file_path': '${dir.path}/$name',
+      'is_asset': 0,
+    })!;
 
     test('lê o .lrc de mesmo nome na mesma pasta (sincronizado)', () async {
-      File('${dir.path}/song.mp3').writeAsBytesSync(<int>[1, 2, 3, 4]); // sem tag
+      File(
+        '${dir.path}/song.mp3',
+      ).writeAsBytesSync(<int>[1, 2, 3, 4]); // sem tag
       File('${dir.path}/song.lrc').writeAsStringSync(
         '[ti:Faixa]\n'
         '[00:01.00]linha um\n'
@@ -253,10 +255,10 @@ void main() {
 
       expect(lyrics, isNotNull);
       expect(lyrics!.synced, isTrue);
-      expect(
-        lyrics.lines.map((LrcLine l) => l.text).toList(),
-        <String>['linha um', 'linha dois'],
-      );
+      expect(lyrics.lines.map((LrcLine l) => l.text).toList(), <String>[
+        'linha um',
+        'linha dois',
+      ]);
     });
 
     test('sidecar VENCE a letra embutida', () async {
@@ -264,7 +266,9 @@ void main() {
       mp3.writeAsBytesSync(
         _id3Tag(frames: _usltFrame('embutida', encoding: 0)),
       );
-      File('${dir.path}/both.lrc').writeAsStringSync('[00:03.00]do arquivo lrc');
+      File(
+        '${dir.path}/both.lrc',
+      ).writeAsStringSync('[00:03.00]do arquivo lrc');
 
       final LrcLyrics? lyrics = await LyricsService.forSong(
         fileSong('both.mp3'),
@@ -274,8 +278,7 @@ void main() {
       expect(lyrics.lines.single.text, 'do arquivo lrc');
     });
 
-    test('sem sidecar: usa a embutida (texto corrido, sem destaque)',
-        () async {
+    test('sem sidecar: usa a embutida (texto corrido, sem destaque)', () async {
       final File mp3 = File('${dir.path}/plain.mp3');
       mp3.writeAsBytesSync(
         _id3Tag(frames: _usltFrame('primeira\nsegunda', encoding: 0)),
@@ -287,16 +290,15 @@ void main() {
 
       expect(lyrics, isNotNull);
       expect(lyrics!.synced, isFalse);
-      expect(lyrics.lines.map((LrcLine l) => l.text).toList(),
-          <String>['primeira', 'segunda']);
+      expect(lyrics.lines.map((LrcLine l) => l.text).toList(), <String>[
+        'primeira',
+        'segunda',
+      ]);
     });
 
-    test('sidecar SEM timestamps não bloqueia a tentativa embutida',
-        () async {
+    test('sidecar SEM timestamps não bloqueia a tentativa embutida', () async {
       final File mp3 = File('${dir.path}/mix.mp3');
-      mp3.writeAsBytesSync(
-        _id3Tag(frames: _usltFrame('da tag', encoding: 0)),
-      );
+      mp3.writeAsBytesSync(_id3Tag(frames: _usltFrame('da tag', encoding: 0)));
       // .lrc inválido: nenhuma linha com tempo.
       File('${dir.path}/mix.lrc').writeAsStringSync('só texto, sem marcação');
 

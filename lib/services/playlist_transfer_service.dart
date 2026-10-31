@@ -136,10 +136,7 @@ String encodePlaylistM3u8(List<PlaylistTransferEntry> entries) {
   return buffer.toString();
 }
 
-PlaylistTransferFile decodePlaylistM3u8(
-  String content, {
-  String name = '',
-}) {
+PlaylistTransferFile decodePlaylistM3u8(String content, {String name = ''}) {
   final List<PlaylistTransferEntry> entries = <PlaylistTransferEntry>[];
   String? artist;
   String? title;

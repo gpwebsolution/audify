@@ -103,8 +103,9 @@ class PermissionService {
   ];
 
   /// Lote do POST_NOTIFICATIONS: pedido UMA vez, no primeiro play.
-  static const List<Permission> firstPlayNotificationPermissions =
-      <Permission>[Permission.notification];
+  static const List<Permission> firstPlayNotificationPermissions = <Permission>[
+    Permission.notification,
+  ];
 
   /// True se o app pode LER as músicas do aparelho. Usa o mapeamento do
   /// permission_handler (READ_MEDIA_AUDIO no 13+, READ_EXTERNAL_STORAGE
@@ -155,8 +156,7 @@ class PermissionService {
     required bool isAndroid,
     required bool askedThisSession,
     required bool granted,
-  }) =>
-      isAndroid && !askedThisSession && !granted;
+  }) => isAndroid && !askedThisSession && !granted;
 
   /// Pede POST_NOTIFICATIONS — item 1.11: o PlayerProvider dispara no
   /// primeiro play; o boot nunca pede (a notificação de mídia só faz
@@ -166,8 +166,9 @@ class PermissionService {
     try {
       final bool isAndroid = Platform.isAndroid && !kIsWeb;
       // Fora do Android não há canal a tocar (e nada a pedir).
-      final bool granted =
-          isAndroid ? await Permission.notification.isGranted : true;
+      final bool granted = isAndroid
+          ? await Permission.notification.isGranted
+          : true;
       if (!shouldRequestNotification(
         isAndroid: isAndroid,
         askedThisSession: _notificationAsked,

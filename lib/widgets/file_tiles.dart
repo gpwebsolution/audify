@@ -20,7 +20,8 @@ class FileListTile extends StatelessWidget {
   final VoidCallback onTap;
   final VoidCallback onLongPress;
 
-  const FileListTile({super.key, 
+  const FileListTile({
+    super.key,
     required this.item,
     required this.isSelected,
     required this.selectionMode,
@@ -44,15 +45,8 @@ class FileListTile extends StatelessWidget {
           child: Row(
             children: [
               if (selectionMode)
-                Checkbox(
-                  value: isSelected,
-                  onChanged: (_) => onLongPress(),
-                    ),
-              SizedBox(
-                width: 44,
-                height: 44,
-                child: FileThumbnail(item: item),
-              ),
+                Checkbox(value: isSelected, onChanged: (_) => onLongPress()),
+              SizedBox(width: 44, height: 44, child: FileThumbnail(item: item)),
               const SizedBox(width: 12),
               Expanded(
                 child: Column(
@@ -96,7 +90,8 @@ class FileGridTile extends StatelessWidget {
   final VoidCallback onTap;
   final VoidCallback onLongPress;
 
-  const FileGridTile({super.key, 
+  const FileGridTile({
+    super.key,
     required this.item,
     required this.isSelected,
     required this.selectionMode,
@@ -162,7 +157,7 @@ class FileGridTile extends StatelessWidget {
                     child: Checkbox(
                       value: isSelected,
                       onChanged: (_) => onLongPress(),
-                            ),
+                    ),
                   ),
                 ),
               ),

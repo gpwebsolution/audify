@@ -103,8 +103,7 @@ Future<void> _bootstrap() async {
         crossfadeSeconds: () => settingsProvider.crossfadeSeconds,
         // Item 5.2: "parar o serviço após N min pausado" lido ao vivo
         // (0 = desativado; padrão 30 min — Configurações → Reprodução).
-        stopAfterPausedMinutes: () =>
-            settingsProvider.stopServicePausedMinutes,
+        stopAfterPausedMinutes: () => settingsProvider.stopServicePausedMinutes,
       ),
       config: const audio_service.AudioServiceConfig(
         androidNotificationChannelId: 'com.example.music_app.audio',

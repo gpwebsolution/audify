@@ -28,8 +28,9 @@ class VideoQueryService {
     if (!isSupported) return const [];
 
     try {
-      final List<dynamic>? raw = await _channel
-          .invokeMethod<List<dynamic>>('getVideos');
+      final List<dynamic>? raw = await _channel.invokeMethod<List<dynamic>>(
+        'getVideos',
+      );
       if (raw == null) return const [];
       return raw
           .map((e) => Video.fromChannel(e as Map<dynamic, dynamic>))
@@ -54,8 +55,10 @@ class VideoQueryService {
     }
 
     try {
-      final Uint8List? bytes = await _channel
-          .invokeMethod<Uint8List>('getThumbnail', {'id': id, 'width': width});
+      final Uint8List? bytes = await _channel.invokeMethod<Uint8List>(
+        'getThumbnail',
+        {'id': id, 'width': width},
+      );
       if (bytes != null && bytes.isNotEmpty) {
         _thumbCache[id] = bytes;
         await ThumbnailDiskCache.put('video_$id', bytes);

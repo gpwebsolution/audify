@@ -22,8 +22,9 @@ void main() {
     });
 
     test('normaliza hifens e underscores no titulo', () {
-      final song =
-          Song.fromAsset(assetPath: 'assets/songs/rock_clasico-ao-vivo.mp3');
+      final song = Song.fromAsset(
+        assetPath: 'assets/songs/rock_clasico-ao-vivo.mp3',
+      );
       expect(song.title, 'Rock Clasico Ao Vivo');
     });
 
@@ -153,8 +154,10 @@ void main() {
     });
 
     test('h:mm:ss para durações acima de 1h', () {
-      expect(formatDuration(const Duration(hours: 1, minutes: 2, seconds: 3)),
-          '1:02:03');
+      expect(
+        formatDuration(const Duration(hours: 1, minutes: 2, seconds: 3)),
+        '1:02:03',
+      );
     });
   });
 

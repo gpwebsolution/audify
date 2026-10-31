@@ -187,7 +187,9 @@ void main() {
   });
 
   group('UI do PlayerScreen (3.1)', () {
-    testWidgets('seletor agenda 15 min, chip aparece e cancela', (tester) async {
+    testWidgets('seletor agenda 15 min, chip aparece e cancela', (
+      tester,
+    ) async {
       final PlayableAudioService audio = PlayableAudioService();
       final PlayerProvider provider = PlayerProvider(
         audio,

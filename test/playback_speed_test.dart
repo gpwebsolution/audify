@@ -53,13 +53,12 @@ class _FakeSessionRepository extends SessionRepository {
 PlayerProvider _provider(
   PlayableAudioService svc,
   SettingsProvider? settings,
-) =>
-    PlayerProvider(
-      svc,
-      settings: settings,
-      songRepository: _FakeSongRepository(<Song>[_track('apple')]),
-      sessionRepository: _FakeSessionRepository(),
-    );
+) => PlayerProvider(
+  svc,
+  settings: settings,
+  songRepository: _FakeSongRepository(<Song>[_track('apple')]),
+  sessionRepository: _FakeSessionRepository(),
+);
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -158,22 +157,24 @@ void main() {
       expect(prefs.getDouble('playback_speed'), 1.25);
     });
 
-    test('velocidade salva volta no boot (construtor aplica no serviço)',
-        () async {
-      SharedPreferences.setMockInitialValues({'playback_speed': 1.5});
-      final SettingsProvider settings = SettingsProvider();
-      await settings.load();
-      expect(settings.playbackSpeed, 1.5);
+    test(
+      'velocidade salva volta no boot (construtor aplica no serviço)',
+      () async {
+        SharedPreferences.setMockInitialValues({'playback_speed': 1.5});
+        final SettingsProvider settings = SettingsProvider();
+        await settings.load();
+        expect(settings.playbackSpeed, 1.5);
 
-      final PlayableAudioService audio = PlayableAudioService();
-      final PlayerProvider provider = _provider(audio, settings);
-      addTearDown(provider.dispose);
-      await provider.init();
-      await pumpEventQueue();
+        final PlayableAudioService audio = PlayableAudioService();
+        final PlayerProvider provider = _provider(audio, settings);
+        addTearDown(provider.dispose);
+        await provider.init();
+        await pumpEventQueue();
 
-      expect(audio.playbackSpeed, 1.5);
-      expect(provider.playbackSpeed, 1.5);
-    });
+        expect(audio.playbackSpeed, 1.5);
+        expect(provider.playbackSpeed, 1.5);
+      },
+    );
   });
 
   group('seletor no PlayerScreen (3.2)', () {

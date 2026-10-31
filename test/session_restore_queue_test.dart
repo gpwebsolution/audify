@@ -68,16 +68,15 @@ class _FakeSessionRepository extends SessionRepository {
 Song _track(String name) => Song.fromAsset(assetPath: 'assets/songs/$name.mp3');
 
 List<Song> _fiveTracks() => [
-      _track('apple'),
-      _track('banana'),
-      _track('cherry'),
-      _track('mango'),
-      _track('pear'),
-    ];
+  _track('apple'),
+  _track('banana'),
+  _track('cherry'),
+  _track('mango'),
+  _track('pear'),
+];
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
-
 
   /// Cria o provider já com a sessão "gravada" (como se viesse do disco).
   Future<PlayerProvider> restoredProvider({
@@ -87,12 +86,10 @@ void main() {
     int queueIndex = -1,
     List<Song>? catalog,
   }) async {
-    final _FakeSessionRepository session = _FakeSessionRepository(
-      savedSong: savedSong,
-      position: position,
-    )
-      ..queueIds = queueIds
-      ..queueIndex = queueIndex;
+    final _FakeSessionRepository session =
+        _FakeSessionRepository(savedSong: savedSong, position: position)
+          ..queueIds = queueIds
+          ..queueIndex = queueIndex;
     final SettingsProvider settings = SettingsProvider();
     await settings.load();
 
@@ -113,8 +110,11 @@ void main() {
     final PlayerProvider provider = await restoredProvider(
       savedSong: _track('apple'),
       position: const Duration(seconds: 12),
-      queueIds: ['assets/songs/cherry.mp3', 'assets/songs/apple.mp3',
-          'assets/songs/mango.mp3'],
+      queueIds: [
+        'assets/songs/cherry.mp3',
+        'assets/songs/apple.mp3',
+        'assets/songs/mango.mp3',
+      ],
       queueIndex: 1,
     );
 
@@ -150,19 +150,21 @@ void main() {
     expect(provider.currentSong!.title, 'Pear');
   });
 
-  test('faixa corrente fora da fila salva volta ao catálogo (fallback)',
-      () async {
-    final PlayerProvider provider = await restoredProvider(
-      savedSong: _track('mango'),
-      queueIds: ['assets/songs/apple.mp3'], // mango ficou de fora
-      queueIndex: 0,
-    );
+  test(
+    'faixa corrente fora da fila salva volta ao catálogo (fallback)',
+    () async {
+      final PlayerProvider provider = await restoredProvider(
+        savedSong: _track('mango'),
+        queueIds: ['assets/songs/apple.mp3'], // mango ficou de fora
+        queueIndex: 0,
+      );
 
-    expect(provider.currentSong!.title, 'Mango');
-    // Fallback: fila = catálogo, então a próxima é Pear (ordem alfabética).
-    await provider.next();
-    expect(provider.currentSong!.title, 'Pear');
-  });
+      expect(provider.currentSong!.title, 'Mango');
+      // Fallback: fila = catálogo, então a próxima é Pear (ordem alfabética).
+      await provider.next();
+      expect(provider.currentSong!.title, 'Pear');
+    },
+  );
 
   test('sessão antiga (sem fila salva) mantém fila = catálogo', () async {
     final PlayerProvider provider = await restoredProvider(

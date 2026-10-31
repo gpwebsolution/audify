@@ -93,8 +93,7 @@ class AudioService extends BaseAudioHandler {
   final ValueNotifier<Duration> duration = ValueNotifier(Duration.zero);
 
   /// Estado do player (playing, paused, stopped, completed...).
-  final ValueNotifier<PlayerStatus> status =
-      ValueNotifier(PlayerStatus.idle);
+  final ValueNotifier<PlayerStatus> status = ValueNotifier(PlayerStatus.idle);
 
   /// Última mensagem de erro (null = sem erro). Usada para feedback visual.
   final ValueNotifier<String?> errorMessage = ValueNotifier(null);
@@ -199,8 +198,13 @@ class AudioService extends BaseAudioHandler {
 
   /// Frequência central das bandas — layout canônico até o probe ler a
   /// real contagem/frequências do aparelho.
-  static const List<double> _canonicalBandFrequencies =
-      <double>[60, 230, 910, 3600, 14000];
+  static const List<double> _canonicalBandFrequencies = <double>[
+    60,
+    230,
+    910,
+    3600,
+    14000,
+  ];
 
   /// Timeout do probe (ativação + leitura de parâmetros). Canal nativo
   /// morto/silencioso vira "não suportado" em vez de pendurar a tela.
@@ -294,8 +298,9 @@ class AudioService extends BaseAudioHandler {
             ),
         ]);
       }
-      _publishedQueueIndex =
-          (currentIndex < 0 || currentIndex >= songs.length) ? null : currentIndex;
+      _publishedQueueIndex = (currentIndex < 0 || currentIndex >= songs.length)
+          ? null
+          : currentIndex;
       broadcastPlaybackState();
     } catch (e, s) {
       ErrorLogService.logSync('audio/publishQueue', e, s);
@@ -321,8 +326,8 @@ class AudioService extends BaseAudioHandler {
               RepeatMode.one => LoopMode.one,
             })
             .catchError((Object e, StackTrace s) {
-          ErrorLogService.logSync('audio/setLoopMode', e, s);
-        }),
+              ErrorLogService.logSync('audio/setLoopMode', e, s);
+            }),
       );
       broadcastPlaybackState();
     } catch (e, s) {
@@ -487,9 +492,8 @@ class AudioService extends BaseAudioHandler {
         (PlayerException error) {
           try {
             final int? idx = error.index;
-            final Song? failed = (idx != null &&
-                    idx >= 0 &&
-                    idx < _queueSnapshot.length)
+            final Song? failed =
+                (idx != null && idx >= 0 && idx < _queueSnapshot.length)
                 ? _queueSnapshot[idx]
                 : _currentSong;
             if (failed == null) return;
@@ -510,7 +514,9 @@ class AudioService extends BaseAudioHandler {
   /// indisponível pós-crash do processo), o app abre mesmo assim —
   /// apenas sem notificação de mídia/tela de bloqueio.
   factory AudioService.noop() {
-    debugPrint('[AudioService] Modo degradado: sem MediaSession/segundo plano.');
+    debugPrint(
+      '[AudioService] Modo degradado: sem MediaSession/segundo plano.',
+    );
     return AudioService(degradedMode: true);
   }
 
@@ -565,8 +571,9 @@ class AudioService extends BaseAudioHandler {
           case AudioInterruptionType.duck:
             break;
           case AudioInterruptionType.pause:
-            _interruptionPause =
-                wasPlaying ? AudioInterruptionType.pause : null;
+            _interruptionPause = wasPlaying
+                ? AudioInterruptionType.pause
+                : null;
             if (wasPlaying) pause();
           case AudioInterruptionType.unknown:
             _interruptionPause = null; // perda permanente: não retoma.
@@ -592,8 +599,7 @@ class AudioService extends BaseAudioHandler {
   static bool shouldPauseOnNoisy({
     required bool isPlaying,
     required bool settingEnabled,
-  }) =>
-      isPlaying && settingEnabled;
+  }) => isPlaying && settingEnabled;
 
   /// Mensagem AMIGÁVEL (pt-BR) para o usuário a partir de uma falha.
   ///
@@ -684,7 +690,9 @@ class AudioService extends BaseAudioHandler {
       case ProcessingState.loading:
       case ProcessingState.buffering:
       case ProcessingState.ready:
-        status.value = state.playing ? PlayerStatus.playing : PlayerStatus.paused;
+        status.value = state.playing
+            ? PlayerStatus.playing
+            : PlayerStatus.paused;
     }
   }
 
@@ -697,8 +705,9 @@ class AudioService extends BaseAudioHandler {
       ? AudioSource.asset(song.assetKey!)
       : AudioSource.uri(Uri.file(song.filePath!));
 
-  static List<String> _idsOf(List<Song> songs) =>
-      <String>[for (final Song s in songs) s.id];
+  static List<String> _idsOf(List<Song> songs) => <String>[
+    for (final Song s in songs) s.id,
+  ];
 
   /// True quando os ids carregados são EXATAMENTE os da fila atual —
   /// mesma ordem/tamanho (aí um novo playSong vira seek, sem recarga).
@@ -730,26 +739,31 @@ class AudioService extends BaseAudioHandler {
   /// cheio, canal nativo lento); sem arte a UI usa o fallback.
   Future<void> _updateMediaItem(Song song) async {
     try {
-      final Uri? artUri = await NotificationArtCache.uriFor(song)
-          .timeout(_mediaArtTimeout);
-      mediaItem.add(MediaItem(
-        id: song.id,
-        title: song.title,
-        artist: song.displayArtist,
-        album: song.album,
-        duration: song.duration,
-        artUri: artUri,
-      ));
+      final Uri? artUri = await NotificationArtCache.uriFor(
+        song,
+      ).timeout(_mediaArtTimeout);
+      mediaItem.add(
+        MediaItem(
+          id: song.id,
+          title: song.title,
+          artist: song.displayArtist,
+          album: song.album,
+          duration: song.duration,
+          artUri: artUri,
+        ),
+      );
     } catch (e, s) {
       // Timeout/falha: notifica SEM capa em vez de travar o playSong.
       ErrorLogService.logSync('audio/mediaItem', e, s);
-      mediaItem.add(MediaItem(
-        id: song.id,
-        title: song.title,
-        artist: song.displayArtist,
-        album: song.album,
-        duration: song.duration,
-      ));
+      mediaItem.add(
+        MediaItem(
+          id: song.id,
+          title: song.title,
+          artist: song.displayArtist,
+          album: song.album,
+          duration: song.duration,
+        ),
+      );
     }
   }
 
@@ -978,12 +992,9 @@ class AudioService extends BaseAudioHandler {
       final int minutes = stopAfterPausedMinutes?.call() ?? 0;
       if (minutes <= 0) return;
       _pausedStopDeadline = _clock().add(Duration(minutes: minutes));
-      _pausedStopTicker ??= Timer.periodic(
-        const Duration(minutes: 1),
-        (_) {
-          unawaited(checkPausedStop());
-        },
-      );
+      _pausedStopTicker ??= Timer.periodic(const Duration(minutes: 1), (_) {
+        unawaited(checkPausedStop());
+      });
     } catch (e, s) {
       ErrorLogService.logSync('audio/pausedStopSchedule', e, s);
     }
@@ -1267,8 +1278,7 @@ class AudioService extends BaseAudioHandler {
   /// foi carregado ainda, lê os parâmetros e aplica o estado registrado.
   /// Falha de qualquer tipo → [EqualizerSupport.unsupported] + log;
   /// resultado é deduplicado/congelado em um único futuro.
-  Future<EqualizerSupport> probeEqualizer() =>
-      _eqProbe ??= _probeEqualizer();
+  Future<EqualizerSupport> probeEqualizer() => _eqProbe ??= _probeEqualizer();
 
   Future<EqualizerSupport> _probeEqualizer() async {
     final bool wasIdle = _player.processingState == ProcessingState.idle;
@@ -1389,8 +1399,7 @@ class AudioService extends BaseAudioHandler {
       final AndroidEqualizerParameters params = await _equalizer.parameters;
       // Graves: o just_audio não expõe BassBoost — o reforço é um ganho
       // extra (12 dB × força%) somado às bandas 0 e 1 (grave/corpo).
-      final double bassDb =
-          s.bassEnabled ? 12.0 * s.bassStrength / 100.0 : 0.0;
+      final double bassDb = s.bassEnabled ? 12.0 * s.bassStrength / 100.0 : 0.0;
       for (int i = 0; i < params.bands.length; i++) {
         final double base = i < s.bands.length ? s.bands[i] : 0.0;
         final double lowShelf = i <= 1 ? bassDb : 0.0;
@@ -1419,10 +1428,11 @@ class AudioService extends BaseAudioHandler {
     final List<double> bands = s.bands.isEmpty || s.bands.length > 10
         ? List<double>.filled(5, 0)
         : s.bands
-            .map((double b) => b.isFinite
-                ? b.clamp(-15.0, 15.0).toDouble()
-                : 0.0)
-            .toList(growable: false);
+              .map(
+                (double b) =>
+                    b.isFinite ? b.clamp(-15.0, 15.0).toDouble() : 0.0,
+              )
+              .toList(growable: false);
     return EqualizerSettings(
       enabled: s.enabled,
       bands: bands,
@@ -1468,8 +1478,7 @@ class AudioService extends BaseAudioHandler {
   @override
   Future<void> setShuffleMode(AudioServiceShuffleMode shuffleMode) async {
     try {
-      await onSetShuffleMode
-          ?.call(shuffleMode != AudioServiceShuffleMode.none);
+      await onSetShuffleMode?.call(shuffleMode != AudioServiceShuffleMode.none);
     } catch (e, s) {
       ErrorLogService.logSync('audio/setShuffleMode', e, s);
     }
@@ -1603,38 +1612,39 @@ class AudioService extends BaseAudioHandler {
   void broadcastPlaybackState({bool throttled = false}) {
     try {
       final DateTime now = _clock();
-      if (throttled &&
-          now.difference(_lastBroadcast) < broadcastInterval) {
+      if (throttled && now.difference(_lastBroadcast) < broadcastInterval) {
         return; // posição nova já será coberta pelo próximo tick
       }
       _lastBroadcast = now;
       final bool playing = status.value == PlayerStatus.playing;
-      playbackState.add(PlaybackState(
-        controls: [
-          MediaControl.skipToPrevious,
-          playing ? MediaControl.pause : MediaControl.play,
-          MediaControl.skipToNext,
-          MediaControl.stop,
-        ],
-        systemActions: const {
-          MediaAction.seek,
-          MediaAction.setShuffleMode,
-          MediaAction.setRepeatMode,
-          MediaAction.skipToQueueItem,
-        },
-        androidCompactActionIndices: const [0, 1, 2],
-        processingState: systemProcessingState(status.value),
-        playing: playing,
-        updatePosition: position.value,
-        // Posição projetada: `position + (now - updateTime)` — o sistema
-        // calcula o avanço em tempo real, então o broadcast NÃO precisa de
-        // tick por atualização de cursor (o throttle acima é seguro).
-        updateTime: now,
-        speed: _speed,
-        repeatMode: systemRepeatMode(_publishedRepeat),
-        shuffleMode: systemShuffleMode(_publishedShuffle),
-        queueIndex: _publishedQueueIndex,
-      ));
+      playbackState.add(
+        PlaybackState(
+          controls: [
+            MediaControl.skipToPrevious,
+            playing ? MediaControl.pause : MediaControl.play,
+            MediaControl.skipToNext,
+            MediaControl.stop,
+          ],
+          systemActions: const {
+            MediaAction.seek,
+            MediaAction.setShuffleMode,
+            MediaAction.setRepeatMode,
+            MediaAction.skipToQueueItem,
+          },
+          androidCompactActionIndices: const [0, 1, 2],
+          processingState: systemProcessingState(status.value),
+          playing: playing,
+          updatePosition: position.value,
+          // Posição projetada: `position + (now - updateTime)` — o sistema
+          // calcula o avanço em tempo real, então o broadcast NÃO precisa de
+          // tick por atualização de cursor (o throttle acima é seguro).
+          updateTime: now,
+          speed: _speed,
+          repeatMode: systemRepeatMode(_publishedRepeat),
+          shuffleMode: systemShuffleMode(_publishedShuffle),
+          queueIndex: _publishedQueueIndex,
+        ),
+      );
     } catch (e, s) {
       ErrorLogService.logSync('audio/broadcast', e, s);
     }

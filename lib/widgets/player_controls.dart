@@ -26,9 +26,9 @@ class PlayerControls extends StatelessWidget {
       child: InkWell(
         onTap: song == null
             ? null
-            : () => Navigator.of(context).push(
-                  MaterialPageRoute(builder: (_) => const PlayerScreen()),
-                ),
+            : () => Navigator.of(
+                context,
+              ).push(MaterialPageRoute(builder: (_) => const PlayerScreen())),
         child: SafeArea(
           top: false,
           child: Column(
@@ -43,8 +43,8 @@ class PlayerControls extends StatelessWidget {
                 builder: (context, position, _) {
                   final double progress = provider.duration > Duration.zero
                       ? (position.inMilliseconds /
-                              provider.duration.inMilliseconds)
-                          .clamp(0.0, 1.0)
+                                provider.duration.inMilliseconds)
+                            .clamp(0.0, 1.0)
                       : 0.0;
                   return LinearProgressIndicator(
                     value: progress,
@@ -83,9 +83,7 @@ class PlayerControls extends StatelessWidget {
                         children: [
                           Text(
                             song?.title ?? 'Nenhuma faixa selecionada',
-                            style: Theme.of(context)
-                                .textTheme
-                                .titleSmall
+                            style: Theme.of(context).textTheme.titleSmall
                                 ?.copyWith(fontWeight: FontWeight.w600),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
@@ -93,9 +91,7 @@ class PlayerControls extends StatelessWidget {
                           if (song != null)
                             Text(
                               song.displayArtist,
-                              style: Theme.of(context)
-                                  .textTheme
-                                  .bodySmall
+                              style: Theme.of(context).textTheme.bodySmall
                                   ?.copyWith(color: colors.onSurfaceVariant),
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
@@ -112,8 +108,9 @@ class PlayerControls extends StatelessWidget {
                     IconButton(
                       tooltip: 'Anterior',
                       icon: const Icon(Icons.skip_previous),
-                      onPressed:
-                          provider.hasCurrentSong ? provider.previous : null,
+                      onPressed: provider.hasCurrentSong
+                          ? provider.previous
+                          : null,
                     ),
                     IconButton(
                       tooltip: provider.isPlaying ? 'Pausar' : 'Tocar',

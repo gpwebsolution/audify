@@ -27,8 +27,7 @@ import 'package:audify/services/permission_service.dart';
 
 import 'support/playable_audio_service.dart';
 
-Song _track(String name) =>
-    Song.fromAsset(assetPath: 'assets/songs/$name.mp3');
+Song _track(String name) => Song.fromAsset(assetPath: 'assets/songs/$name.mp3');
 
 class _FakeSongRepository extends SongRepository {
   final List<Song> assets;
@@ -108,22 +107,22 @@ class _GrantedGalleryProvider extends GalleryProvider {
   }
 }
 
-PlayerProvider _provider(PlayableAudioService svc,
-        {Future<void> Function()? requestNotificationPermission}) =>
-    PlayerProvider(
-      svc,
-      songRepository: _FakeSongRepository(<Song>[
-        _track('apple'),
-        _track('banana'),
-        _track('cherry'),
-      ]),
-      sessionRepository: _FakeSessionRepository(),
-      requestNotificationPermission: requestNotificationPermission,
-    );
+PlayerProvider _provider(
+  PlayableAudioService svc, {
+  Future<void> Function()? requestNotificationPermission,
+}) => PlayerProvider(
+  svc,
+  songRepository: _FakeSongRepository(<Song>[
+    _track('apple'),
+    _track('banana'),
+    _track('cherry'),
+  ]),
+  sessionRepository: _FakeSessionRepository(),
+  requestNotificationPermission: requestNotificationPermission,
+);
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
-
 
   group('PermissionService: política de pedidos (1.11)', () {
     test('shouldRequestNotification: Android + 1x/sessão + sem grant', () {
@@ -165,26 +164,23 @@ void main() {
     });
 
     test('lotes por contexto: cada aba pede só a sua permissão', () {
-      expect(
-        PermissionService.photosTabPermissions,
-        <Permission>[Permission.photos],
-      );
+      expect(PermissionService.photosTabPermissions, <Permission>[
+        Permission.photos,
+      ]);
       expect(
         PermissionService.photosTabPermissions,
         isNot(contains(Permission.notification)),
       );
-      expect(
-        PermissionService.videosTabPermissions,
-        <Permission>[Permission.videos],
-      );
+      expect(PermissionService.videosTabPermissions, <Permission>[
+        Permission.videos,
+      ]);
       expect(
         PermissionService.videosTabPermissions,
         isNot(contains(Permission.notification)),
       );
-      expect(
-        PermissionService.firstPlayNotificationPermissions,
-        <Permission>[Permission.notification],
-      );
+      expect(PermissionService.firstPlayNotificationPermissions, <Permission>[
+        Permission.notification,
+      ]);
     });
 
     test('requestNotificationAccess fora do Android não toca canal e '

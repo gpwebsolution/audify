@@ -100,8 +100,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
               // das ações rápidas; estado lido na abertura, o menu fecha).
               Builder(
                 builder: (BuildContext tileContext) {
-                  final bool fav =
-                      FavoritesProvider.instance.isFavorite(song.id);
+                  final bool fav = FavoritesProvider.instance.isFavorite(
+                    song.id,
+                  );
                   return ListTile(
                     leading: Icon(
                       fav ? Icons.favorite : Icons.favorite_border,
@@ -121,9 +122,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
               ListTile(
                 leading: const Icon(Icons.share_outlined),
                 title: Text(l10n.share),
-                subtitle: Text(
-                  isAsset ? l10n.shareAssetSub : l10n.shareApps,
-                ),
+                subtitle: Text(isAsset ? l10n.shareAssetSub : l10n.shareApps),
                 enabled: !isAsset,
                 onTap: () => go(
                   () => MediaActions.share(
@@ -172,9 +171,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
                     ? () {
                         Navigator.pop(sheetContext);
                         messenger.showSnackBar(
-                          SnackBar(
-                            content: Text(l10n.assetLockedMessage),
-                          ),
+                          SnackBar(content: Text(l10n.assetLockedMessage)),
                         );
                       }
                     : () => go(() => _deleteCurrent(context, provider, song)),
@@ -212,9 +209,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
                   subtitle: Text(l10n.sleepDefaultLabel),
                   onTap: () {
                     Navigator.pop(sheetContext);
-                    provider.startSleepTimer(
-                      Duration(minutes: defaultMinutes),
-                    );
+                    provider.startSleepTimer(Duration(minutes: defaultMinutes));
                   },
                 ),
               if (provider.sleepTimerActive)
@@ -288,11 +283,11 @@ class _PlayerScreenState extends State<PlayerScreen> {
     final int? minutes = await showDialog<int>(
       context: context,
       builder: (BuildContext dialogContext) => StatefulBuilder(
-        builder: (
-          BuildContext innerContext,
-          void Function(void Function()) setState,
-        ) =>
-            AlertDialog(
+        builder:
+            (
+              BuildContext innerContext,
+              void Function(void Function()) setState,
+            ) => AlertDialog(
               title: Text(l10nOf(innerContext).customTimerTitle),
               content: TextField(
                 controller: controller,
@@ -405,9 +400,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
       // alcança o sheet — reanexa a MESMA instância (folio da fila).
       builder: (BuildContext sheetContext) =>
           ChangeNotifierProvider<PlayerProvider>.value(
-        value: provider,
-        child: LyricsSheet(song: song),
-      ),
+            value: provider,
+            child: LyricsSheet(song: song),
+          ),
     );
   }
 
@@ -430,9 +425,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
   /// tenha gerado um ColorScheme ([ColorScheme.fromImageProvider]).
   ColorScheme _colorsFor(ColorScheme base, Song? song) {
     final int? mediaId = song?.mediaId;
-    final bool match = mediaId != null &&
-        mediaId == _capaForMediaId &&
-        _capaScheme != null;
+    final bool match =
+        mediaId != null && mediaId == _capaForMediaId && _capaScheme != null;
     return match ? _capaScheme! : base;
   }
 
@@ -503,11 +497,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     );
   }
 
-  Widget _titleBlock(
-    BuildContext context,
-    Song? song,
-    ColorScheme colors,
-  ) {
+  Widget _titleBlock(BuildContext context, Song? song, ColorScheme colors) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 24),
       child: Column(
@@ -517,9 +507,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
             textAlign: TextAlign.center,
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
-            style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-              fontWeight: FontWeight.bold,
-            ),
+            style: Theme.of(
+              context,
+            ).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 4),
           Text(
@@ -527,9 +517,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
             textAlign: TextAlign.center,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-              color: colors.onSurfaceVariant,
-            ),
+            style: Theme.of(
+              context,
+            ).textTheme.bodyLarge?.copyWith(color: colors.onSurfaceVariant),
           ),
         ],
       ),
@@ -571,11 +561,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: <Widget>[
-                    Icon(
-                      Icons.timer_outlined,
-                      size: 16,
-                      color: colors.primary,
-                    ),
+                    Icon(Icons.timer_outlined, size: 16, color: colors.primary),
                     const SizedBox(width: 6),
                     Text(
                       provider.sleepMode == SleepTimerMode.trackEnd
@@ -583,10 +569,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
                           : l10n.sleepChipIn(
                               formatDuration(provider.sleepRemaining),
                             ),
-                      style: Theme.of(context)
-                          .textTheme
-                          .labelMedium
-                          ?.copyWith(color: colors.primary),
+                      style: Theme.of(
+                        context,
+                      ).textTheme.labelMedium?.copyWith(color: colors.primary),
                     ),
                     IconButton(
                       tooltip: l10n.cancelTimer,
@@ -614,9 +599,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
                     : null,
                 onChangeEnd: sliderEnabled
                     ? (double value) {
-                        provider.seek(
-                          Duration(milliseconds: value.round()),
-                        );
+                        provider.seek(Duration(milliseconds: value.round()));
                         setState(() => _dragValueMs = null);
                       }
                     : null,
@@ -628,9 +611,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Text(
-                    formatDuration(
-                      Duration(milliseconds: sliderValue.round()),
-                    ),
+                    formatDuration(Duration(milliseconds: sliderValue.round())),
                     style: Theme.of(context).textTheme.labelMedium,
                   ),
                   Text(
@@ -741,20 +722,17 @@ class _PlayerScreenState extends State<PlayerScreen> {
               style: TextStyle(
                 fontWeight: FontWeight.bold,
                 fontSize: 14,
-                color:
-                    provider.playbackSpeed != 1.0 ? colors.primary : null,
+                color: provider.playbackSpeed != 1.0 ? colors.primary : null,
               ),
             ),
             onSelected: provider.setPlaybackSpeed,
-            itemBuilder: (BuildContext menuContext) =>
-                SettingsProvider.playbackSpeedOptions
-                    .map(
-                      (double s) => PopupMenuItem<double>(
-                        value: s,
-                        child: Text('${s}x'),
-                      ),
-                    )
-                    .toList(),
+            itemBuilder: (BuildContext menuContext) => SettingsProvider
+                .playbackSpeedOptions
+                .map(
+                  (double s) =>
+                      PopupMenuItem<double>(value: s, child: Text('${s}x')),
+                )
+                .toList(),
           ),
           // Item 4.1 — coração do favorito da faixa corrente (estado do
           // singleton; só este botão reconstrói quando o estado muda).
@@ -762,7 +740,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
             listenable: FavoritesProvider.instance,
             builder: (BuildContext context, _) {
               final Song? current = provider.currentSong;
-              final bool fav = current != null &&
+              final bool fav =
+                  current != null &&
                   FavoritesProvider.instance.isFavorite(current.id);
               return IconButton(
                 tooltip: fav ? l10n.unfavorite : l10n.favorite,
@@ -904,7 +883,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
                   ),
                   const SizedBox(height: 8),
                   _transportRow(l10n, provider, colors, canControl),
-                  if (song != null) _quickActions(context, l10n, provider, colors),
+                  if (song != null)
+                    _quickActions(context, l10n, provider, colors),
                 ],
               );
             },
@@ -929,10 +909,7 @@ class _QueueSheet extends StatelessWidget {
     if (queue.isEmpty) {
       return Padding(
         padding: const EdgeInsets.all(24),
-        child: Text(
-          l10n.queueEmpty,
-          textAlign: TextAlign.center,
-        ),
+        child: Text(l10n.queueEmpty, textAlign: TextAlign.center),
       );
     }
 
@@ -967,10 +944,7 @@ class _QueueSheet extends StatelessWidget {
                 key: ValueKey<String>(song.id),
                 leading: isCurrent
                     ? Icon(Icons.graphic_eq, color: colors.primary)
-                    : Text(
-                        '${index + 1}',
-                        textAlign: TextAlign.center,
-                      ),
+                    : Text('${index + 1}', textAlign: TextAlign.center),
                 title: Text(
                   song.title,
                   maxLines: 1,
