@@ -3,6 +3,7 @@ import 'dart:typed_data';
 
 import 'package:audify/models/file_item.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:audify/services/file_op_result.dart';
 import 'package:audify/services/file_query_service.dart';
 
 // A interface do path_provider é transitiva do path_provider direto do
@@ -168,11 +169,11 @@ void main() {
       expect(File(zipPath).lengthSync(), greaterThan(0));
 
       final String dest = '${temp.path}/extraido';
-      final bool extracted = await FileQueryService.extractArchive(
+      final FileOpResult extracted = await FileQueryService.extractArchive(
         archivePath: zipPath,
         destPath: dest,
       );
-      expect(extracted, isTrue);
+      expect(extracted.ok, isTrue);
       // O serviço extrai para uma subpasta oculta ".<nome>_extracted".
       expect(
         File('$dest/.pacote.zip_extracted/pasta/dentro.txt').readAsStringSync(),
@@ -327,9 +328,11 @@ void main() {
       await FileQueryService.delete(path: original.path, useTrash: true);
 
       final TrashEntry entry = (await FileQueryService.listTrash()).single;
-      final bool restored = await FileQueryService.restoreFromTrash(entry);
+      final FileOpResult restored = await FileQueryService.restoreFromTrash(
+        entry,
+      );
 
-      expect(restored, isTrue);
+      expect(restored.ok, isTrue);
       expect(File(entry.originalPath).readAsStringSync(), 'abc');
       expect(await FileQueryService.listTrash(), isEmpty);
       expect(File(entry.trashPath).existsSync(), isFalse);

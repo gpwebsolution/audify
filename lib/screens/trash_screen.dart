@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../providers/file_provider.dart';
 import '../providers/settings_provider.dart';
+import '../services/file_op_result.dart';
 import '../services/file_query_service.dart';
 import '../widgets/selection_bar.dart';
 
@@ -67,14 +68,17 @@ class _TrashScreenState extends State<TrashScreen> with MediaSelection<String> {
       selectedFrom(_entries, (TrashEntry e) => e.trashPath);
 
   Future<void> _restore(TrashEntry entry) async {
-    final bool ok = await context.read<FileProvider>().restoreFromTrash(entry);
+    final FileOpResult result = await context
+        .read<FileProvider>()
+        .restoreFromTrash(entry);
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
-          ok
-              ? 'Restaurado para ${entry.originalPath}'
-              : 'Falha ao restaurar — o local original pode já existir.',
+          result.ok
+              ? 'Restaurado para ${result.path ?? entry.originalPath}'
+              : result.reason ??
+                    'Falha ao restaurar — o local original pode já existir.',
         ),
       ),
     );
@@ -107,7 +111,8 @@ class _TrashScreenState extends State<TrashScreen> with MediaSelection<String> {
     int restored = 0;
     int failed = 0;
     for (final TrashEntry entry in entries) {
-      if (await files.restoreFromTrash(entry)) {
+      final FileOpResult result = await files.restoreFromTrash(entry);
+      if (result.ok) {
         restored++;
       } else {
         failed++;

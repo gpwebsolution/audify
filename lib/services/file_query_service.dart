@@ -9,8 +9,9 @@ import 'package:open_filex/open_filex.dart';
 
 import '../models/file_item.dart';
 
-
-
+import 'archive_service.dart';
+import 'file_name_validator.dart';
+import 'file_op_result.dart';
 import 'file_ops_jobs.dart';
 import 'storage_analysis_service.dart';
 import 'trash_service.dart';
@@ -206,10 +207,7 @@ class FileQueryService {
   }) async {
     try {
       final String target = overwrite ? destPath : await _uniquePath(destPath);
-      return await compute(
-        copyJob,
-        TwoPaths(source: sourcePath, dest: target),
-      );
+      return await compute(copyJob, TwoPaths(source: sourcePath, dest: target));
     } catch (e) {
       debugPrint('[FileQueryService] copy: $e');
       return false;
@@ -225,10 +223,7 @@ class FileQueryService {
   }) async {
     try {
       final String target = overwrite ? destPath : await _uniquePath(destPath);
-      return await compute(
-        moveJob,
-        TwoPaths(source: sourcePath, dest: target),
-      );
+      return await compute(moveJob, TwoPaths(source: sourcePath, dest: target));
     } catch (e) {
       debugPrint('[FileQueryService] move: $e');
       return false;
@@ -239,7 +234,7 @@ class FileQueryService {
     required String path,
     required String newName,
   }) async {
-    if (newName.contains('/') || newName.trim().isEmpty) return false;
+    if (validateFileName(newName) != null) return false;
     try {
       final String parent = path.substring(0, path.lastIndexOf('/'));
       final String target = await _uniquePath('$parent/$newName');
@@ -269,11 +264,13 @@ class FileQueryService {
     return TrashService.moveToTrash(path);
   }
 
-
   static Future<bool> createDirectory(String path) async {
+    final String name = _baseName(path);
+    if (validateFileName(name) != null) return false;
     try {
       return await compute(createDirJob, path);
-    } catch (_) {
+    } catch (e) {
+      debugPrint('[FileQueryService] createDirectory: $e');
       return false;
     }
   }
@@ -285,7 +282,7 @@ class FileQueryService {
 
   static Future<List<TrashEntry>> listTrash() => TrashService.listTrash();
 
-  static Future<bool> restoreFromTrash(TrashEntry entry) =>
+  static Future<FileOpResult> restoreFromTrash(TrashEntry entry) =>
       TrashService.restoreFromTrash(entry);
 
   static Future<bool> deleteForever(String trashPath) =>
@@ -298,7 +295,6 @@ class FileQueryService {
 
   static Future<void> emptyTrash() => TrashService.emptyTrash();
 
-
   // =========================================================================
   // ZIP
   // =========================================================================
@@ -310,6 +306,7 @@ class FileQueryService {
     required String zipPath,
     bool deleteAfter = false,
   }) async {
+    if (validateFileName(_baseName(zipPath)) != null) return false;
     try {
       final String target = await _uniquePath(zipPath);
       final bool ok = await compute(
@@ -330,28 +327,60 @@ class FileQueryService {
   }
 
   /// Extrai ZIPs para [destPath]. RAR/7z não têm decodificador em Dart puro
-  /// nem no Android SDK — retornamos false com clareza para a UI avisar.
-  static Future<bool> extractArchive({
+  /// nem no Android SDK — devolvemos um erro tipado para a UI explicar.
+  ///
+  /// A extração roda em isolate, em streaming, com limites contra zip bomb e
+  /// rejeição de caminhos que escapem do destino (zip-slip). Em caso de
+  /// falha, a pasta parcial é apagada — nunca sobra lixo pela metade.
+  static Future<FileOpResult> extractArchive({
     required String archivePath,
     required String destPath,
     bool deleteAfter = false,
+    ExtractionLimits limits = const ExtractionLimits(),
   }) async {
     final String ext = _extOf(archivePath);
-    if (ext != 'zip') return false;
+    if (ext != 'zip') {
+      return const FileOpResult.failed(
+        reason: 'Só é possível extrair arquivos .zip.',
+        code: FileOpErrorCode.unsupported,
+      );
+    }
+
+    final String outPath = await _uniquePath(
+      '$destPath/.${_baseName(archivePath)}_extracted',
+    );
     try {
-      final Directory out = Directory(
-        '$destPath/.${_baseName(archivePath)}_extracted',
+      final FileOpResult result = await compute(
+        extractZipJob,
+        ZipExtractArgs(
+          archivePath: archivePath,
+          destPath: outPath,
+          limits: limits,
+        ),
       );
-      final bool ok = await compute(
-        _extractJob,
-        _ExtractArgs(zipPath: archivePath, destPath: out.path),
-      );
-      if (!ok) return false;
+      if (!result.ok) {
+        await _deletePartialExtraction(outPath);
+        return result;
+      }
       if (deleteAfter) await compute(deletePermanentJob, archivePath);
-      return true;
+      return FileOpResult.ok(path: outPath);
     } catch (e) {
+      await _deletePartialExtraction(outPath);
       debugPrint('[FileQueryService] extractArchive: $e');
-      return false;
+      return FileOpResult.failed(
+        reason: 'Não foi possível extrair o ZIP: $e',
+        code: FileOpErrorCode.io,
+      );
+    }
+  }
+
+  static Future<void> _deletePartialExtraction(String path) async {
+    try {
+      if (FileSystemEntity.typeSync(path) != FileSystemEntityType.notFound) {
+        await compute(deletePermanentJob, path);
+      }
+    } catch (e) {
+      debugPrint('[FileQueryService] limpeza da extração ($path): $e');
     }
   }
 
@@ -462,11 +491,10 @@ class FileQueryService {
   static Future<List<DuplicateGroup>> findDuplicates({
     String rootPath = '/storage/emulated/0',
     int minSize = 1024,
-  }) =>
-      StorageAnalysisService.findDuplicates(
-        rootPath: rootPath,
-        minSize: minSize,
-      );
+  }) => StorageAnalysisService.findDuplicates(
+    rootPath: rootPath,
+    minSize: minSize,
+  );
 
   // =========================================================================
   // HELPERS ESTÁTICOS
@@ -483,30 +511,7 @@ class FileQueryService {
 
   /// Sufixo " (1)", " (2)"… quando o destino já existe — nunca sobrescreve
   /// silenciosamente.
-  static Future<String> _uniquePath(String path) async {
-    if (FileSystemEntity.typeSync(path) == FileSystemEntityType.notFound) {
-      return path;
-    }
-    final bool isDir = FileSystemEntity.isDirectorySync(path);
-    final String parent = path.substring(0, path.lastIndexOf('/'));
-    final String name = _baseName(path);
-    String stem = name, ext = '';
-    if (!isDir) {
-      final int dot = name.lastIndexOf('.');
-      if (dot > 0) {
-        stem = name.substring(0, dot);
-        ext = name.substring(dot);
-      }
-    }
-    for (int i = 1; i < 1000; i++) {
-      final String candidate = '$parent/$stem ($i)$ext';
-      if (FileSystemEntity.typeSync(candidate) ==
-          FileSystemEntityType.notFound) {
-        return candidate;
-      }
-    }
-    return path;
-  }
+  static Future<String> _uniquePath(String path) async => uniquePathSync(path);
 }
 
 class FileListResult {
@@ -832,7 +837,6 @@ Future<String?> _hashJob(String path) async {
   }
 }
 
-
 class _ZipArgs {
   final List<String> sources;
   final String zipPath;
@@ -876,41 +880,6 @@ bool _zipJob(_ZipArgs args) {
   }
 }
 
-class _ExtractArgs {
-  final String zipPath;
-  final String destPath;
-  const _ExtractArgs({required this.zipPath, required this.destPath});
-}
-
-bool _extractJob(_ExtractArgs args) {
-  try {
-    final List<int> bytes = File(args.zipPath).readAsBytesSync();
-    final Archive archive = ZipDecoder().decodeBytes(bytes);
-    final String normalizedDest = Directory(
-      args.destPath,
-    ).absolute.path.replaceAll(r'\', '/');
-
-    for (final ArchiveFile entry in archive) {
-      final String outPath = '$normalizedDest/${entry.name}'.replaceAll(
-        r'\',
-        '/',
-      );
-      // Defesa contra zip-slip: nenhuma entrada pode escapar do destino.
-      if (!outPath.startsWith(normalizedDest)) continue;
-      if (entry.isFile) {
-        final File outFile = File(outPath);
-        outFile.parent.createSync(recursive: true);
-        outFile.writeAsBytesSync(entry.content as List<int>, flush: true);
-      } else {
-        Directory(outPath).createSync(recursive: true);
-      }
-    }
-    return true;
-  } catch (_) {
-    return false;
-  }
-}
-
 class _DetailsData {
   final String path;
   final String name;
@@ -946,7 +915,10 @@ Future<_DetailsData> _detailsJob(String path) async {
     final int shifted = mode & 0x1FF;
     permissions =
         '${triad(shifted >> 6)}${triad((shifted >> 3) & 7)}${triad(shifted & 7)}';
-  } catch (_) {}
+  } catch (_) {
+    // Plataformas sem bits POSIX (ex.: Windows no host de teste) não têm
+    // permissões legíveis; a tela mostra vazio em vez de derrubar os detalhes.
+  }
 
   // EXIF apenas para imagens (leitura rápida, sem decodificar pixels).
   Map<String, dynamic>? exif;

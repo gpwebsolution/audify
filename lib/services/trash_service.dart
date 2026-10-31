@@ -4,8 +4,9 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
 
+import 'file_op_result.dart';
 import 'file_ops_jobs.dart';
-import 'file_query_service.dart';  // formatBytes (ciclo aceito pelo Dart)
+import 'file_query_service.dart'; // formatBytes (ciclo aceito pelo Dart)
 
 /// Lixeira interna do app: arquivos movidos para o diretório de suporte com
 /// manifesto JSONL (original, destino, data) e retenção com expurgo.
@@ -23,17 +24,24 @@ class TrashService {
   static File _manifestFile(Directory trashRoot) =>
       File('${trashRoot.path}/manifest.jsonl');
 
+  /// Registra a INTENÇÃO antes do move e confirma depois.
+  ///
+  /// Se o processo morrer entre o move e a confirmação, a entrada "pending"
+  /// continua no manifesto e o arquivo existe em `trash/files` — listTrash
+  /// a recupera. Se o move falhar, a entrada sem arquivo é descartada.
   static Future<void> _appendToManifest(
     String originalPath,
     String trashPath,
-    DateTime at,
-  ) async {
+    DateTime at, {
+    String state = 'pending',
+  }) async {
     final Directory support = await getApplicationSupportDirectory();
     final File manifest = _manifestFile(Directory('${support.path}/trash'));
     final Map<String, Object?> entry = <String, Object?>{
       'original': originalPath,
       'trashPath': trashPath,
       'deletedAtMs': at.millisecondsSinceEpoch,
+      'state': state,
     };
     await manifest.writeAsString(
       '${jsonEncode(entry)}\n',
@@ -43,55 +51,79 @@ class TrashService {
   }
 
   /// Entradas atuais da lixeira (arquivos que sumiram do disco são omitidos).
+  ///
+  /// Cada linha é decodificada como JSON — comparar texto (`contains`) quebra
+  /// com aspas/barras no caminho e podia esconder itens. Entradas repetidas
+  /// (pending + moved) são deduplicadas pela última ocorrência.
   static Future<List<TrashEntry>> listTrash() async {
     try {
       final Directory support = await getApplicationSupportDirectory();
       final File manifest = File('${support.path}/trash/manifest.jsonl');
       if (!manifest.existsSync()) return const [];
-      final List<TrashEntry> result = <TrashEntry>[];
+
+      final Map<String, TrashEntry> byPath = <String, TrashEntry>{};
       for (final String line in manifest.readAsLinesSync()) {
         if (line.trim().isEmpty) continue;
         try {
           final Map<String, dynamic> map =
               jsonDecode(line) as Map<String, dynamic>;
           final String trashPath = map['trashPath'] as String;
-          if (!File(trashPath).existsSync() &&
-              !Directory(trashPath).existsSync()) {
-            continue;
-          }
           final FileSystemEntityType kind = FileSystemEntity.typeSync(
             trashPath,
           );
+          if (kind == FileSystemEntityType.notFound) continue;
           final int size = kind == FileSystemEntityType.file
               ? File(trashPath).lengthSync()
               : 0;
-          result.add(
-            TrashEntry(
-              originalPath: map['original'] as String,
-              trashPath: trashPath,
-              deletedAtMs: (map['deletedAtMs'] as num).toInt(),
-              sizeBytes: size,
-            ),
+          byPath[trashPath] = TrashEntry(
+            originalPath: map['original'] as String,
+            trashPath: trashPath,
+            deletedAtMs: (map['deletedAtMs'] as num).toInt(),
+            sizeBytes: size,
           );
         } catch (_) {
+          // Linha corrompida (processo morto no meio da escrita antiga):
+          // ignora só ela; as demais continuam recuperáveis.
           continue;
         }
       }
-      return result;
-    } catch (_) {
+      return byPath.values.toList();
+    } catch (e) {
+      debugPrint('[TrashService] listTrash: $e');
       return const [];
     }
   }
 
   /// Devolve o item ao local original (recriando pastas se necessário).
-  static Future<bool> restoreFromTrash(TrashEntry entry) async {
+  ///
+  /// Usa o mesmo `moveJob` da exclusão: rename no mesmo volume e, quando o
+  /// original está em outro volume (lixeira interna -> armazenamento
+  /// compartilhado, o caso normal), cópia verificada + remoção da origem.
+  /// Se o nome original já existe, restaura como "nome (1)" — nunca
+  /// sobrescreve em silêncio.
+  static Future<FileOpResult> restoreFromTrash(TrashEntry entry) async {
     try {
-      final bool moved = await compute(_restoreJob, _RestoreArgs(entry: entry));
-      if (moved) await _removeFromManifest(entry.trashPath);
-      return moved;
+      final String target = uniquePathSync(entry.originalPath);
+      final bool moved = await compute(
+        moveJob,
+        TwoPaths(source: entry.trashPath, dest: target),
+      );
+      if (!moved) {
+        return const FileOpResult.failed(
+          reason:
+              'Não foi possível restaurar. O arquivo continua na lixeira; '
+              'verifique o espaço livre e a permissão da pasta original.',
+          code: FileOpErrorCode.io,
+        );
+      }
+      await _removeFromManifest(entry.trashPath);
+      return FileOpResult.ok(path: target);
     } catch (e) {
-      debugPrint('[FileQueryService] restoreFromTrash: $e');
-      return false;
+      debugPrint('[TrashService] restoreFromTrash: $e');
+      return FileOpResult.failed(
+        reason: 'Não foi possível restaurar: $e',
+        code: FileOpErrorCode.io,
+      );
     }
   }
 
@@ -164,21 +196,36 @@ class TrashService {
       if (!manifest.existsSync()) return;
       final List<String> kept = <String>[];
       for (final String line in manifest.readAsLinesSync()) {
-        if (!line.contains('"$trashPath"')) kept.add(line);
+        if (line.trim().isEmpty) continue;
+        try {
+          final Map<String, dynamic> map =
+              jsonDecode(line) as Map<String, dynamic>;
+          if (map['trashPath'] == trashPath) continue;
+        } catch (_) {
+          // Mantém linhas ilegíveis? Não: o manifesto novo só carrega
+          // entradas válidas (listTrash já as ignoraria).
+          continue;
+        }
+        kept.add(line);
       }
       await _rewriteManifest(kept);
     } catch (e) {
-      debugPrint('[FileQueryService] removeFromManifest: $e');
+      debugPrint('[TrashService] removeFromManifest: $e');
     }
   }
 
+  /// Escrita atômica: grava `manifest.tmp`, força o flush e renomeia sobre o
+  /// manifesto. Um processo morto no meio deixa o manifesto anterior intacto
+  /// (ou o novo completo), nunca um arquivo truncado.
   static Future<void> _rewriteManifest(List<String> lines) async {
     final Directory support = await getApplicationSupportDirectory();
     final File manifest = File('${support.path}/trash/manifest.jsonl');
-    await manifest.writeAsString(
+    final File temp = File('${manifest.path}.tmp');
+    await temp.writeAsString(
       lines.isEmpty ? '' : '${lines.join('\n')}\n',
       flush: true,
     );
+    await temp.rename(manifest.path);
   }
 
   /// Move [path] para a lixeira interna e registra no manifesto — o caminho
@@ -190,12 +237,22 @@ class TrashService {
       final String inside =
           '${trashRoot.path}/files/${stamp}_'
           '${path.split('/').where((s) => s.isNotEmpty).last}';
+      final DateTime now = DateTime.now();
+
+      // Intenção ANTES do move: se o app morrer no meio, a entrada pending
+      // + o arquivo em trash/files permitem recuperar o item.
+      await _appendToManifest(path, inside, now);
       final bool moved = await compute(
         moveJob,
         TwoPaths(source: path, dest: inside),
       );
-      if (!moved) return false;
-      await _appendToManifest(path, inside, DateTime.now());
+      if (!moved) {
+        await _removeFromManifest(inside);
+        return false;
+      }
+      // Confirmação (a entrada pending já basta para listar; a linha moved
+      // mantém o histórico legível).
+      await _appendToManifest(path, inside, now, state: 'moved');
       return true;
     } catch (e) {
       debugPrint('[TrashService] moveToTrash: $e');
@@ -272,33 +329,4 @@ class TrashEntry {
   }
 
   String get displaySize => formatBytes(sizeBytes);
-}
-
-// =============================================================================
-// RESULTADOS SIMPLES
-// =============================================================================
-
-class _RestoreArgs {
-  final TrashEntry entry;
-  const _RestoreArgs({required this.entry});
-}
-
-bool _restoreJob(_RestoreArgs args) {
-  try {
-    final TrashEntry entry = args.entry;
-    final String parent = entry.originalPath.substring(
-      0,
-      entry.originalPath.lastIndexOf('/'),
-    );
-    Directory(parent).createSync(recursive: true);
-    final bool isDir = FileSystemEntity.isDirectorySync(entry.trashPath);
-    if (isDir) {
-      Directory(entry.trashPath).renameSync(entry.originalPath);
-    } else {
-      File(entry.trashPath).renameSync(entry.originalPath);
-    }
-    return true;
-  } catch (_) {
-    return false;
-  }
 }

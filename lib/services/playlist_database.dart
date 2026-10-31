@@ -51,6 +51,20 @@ class PlaylistDatabase {
       final Database opened = await openDatabase(
         path,
         version: _dbVersion,
+        onConfigure: (Database db) async {
+          // Sem isto o SQLite aceita filhos órfãos mesmo com FOREIGN KEY no
+          // schema; os vínculos de playlist só eram limpos "na mão" no Dart.
+          await db.execute('PRAGMA foreign_keys = ON');
+        },
+        onDowngrade: (Database db, int oldVersion, int newVersion) async {
+          // Instalar um APK antigo por cima de um banco mais novo corromperia
+          // os dados. Recusar com mensagem clara é melhor que abrir torto.
+          throw StateError(
+            'O banco de dados do Audify é da versão $oldVersion, mas este '
+            'app usa a versão $newVersion. Instale a versão mais recente do '
+            'app — seus dados continuam preservados.',
+          );
+        },
         onCreate: (db, version) async {
           await _createSchema(db);
           // Item 4.3: o create nasce já com as colunas de ordenação —
@@ -312,8 +326,7 @@ class PlaylistDatabase {
     final Database db = await _database();
     await db.insert(
       'favorite_songs',
-      song.toStored()
-        ..['added_at'] = DateTime.now().millisecondsSinceEpoch,
+      song.toStored()..['added_at'] = DateTime.now().millisecondsSinceEpoch,
       conflictAlgorithm: ConflictAlgorithm.ignore,
     );
   }
@@ -347,7 +360,10 @@ class PlaylistDatabase {
   /// na contagem e atualiza o último toque. UPDATE + INSERT em
   /// transação em vez do "upsert" ON CONFLICT (SQLite < 3.24, que é o
   /// que roda em Android antigo, não o entende).
-  static Future<void> recordPlay(String songId, {required int playedAtMs}) async {
+  static Future<void> recordPlay(
+    String songId, {
+    required int playedAtMs,
+  }) async {
     final Database db = await _database();
     await db.transaction((Transaction txn) async {
       final int updated = await txn.rawUpdate(
@@ -370,10 +386,7 @@ class PlaylistDatabase {
   /// uma inversão por `last_played`, feita em memória pelo provider.
   static Future<List<Map<String, Object?>>> getStats() async {
     final Database db = await _database();
-    return db.query(
-      'song_stats',
-      orderBy: 'play_count DESC, last_played DESC',
-    );
+    return db.query('song_stats', orderBy: 'play_count DESC, last_played DESC');
   }
 
   /// Apaga todo o histórico (opção "limpar histórico").

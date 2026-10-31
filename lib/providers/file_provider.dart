@@ -5,6 +5,7 @@ import 'package:flutter/material.dart' show TextEditingController;
 import 'package:flutter/foundation.dart';
 
 import '../models/file_item.dart';
+import '../services/file_op_result.dart';
 import '../services/file_query_service.dart';
 import '../services/permission_service.dart';
 
@@ -520,12 +521,12 @@ class FileProvider extends ChangeNotifier {
   }
 
   Future<bool> extractArchive(String archivePath) async {
-    final bool ok = await FileQueryService.extractArchive(
+    final FileOpResult result = await FileQueryService.extractArchive(
       archivePath: archivePath,
       destPath: _currentPath,
     );
-    if (ok) await load(refresh: true);
-    return ok;
+    if (result.ok) await load(refresh: true);
+    return result.ok;
   }
 
   // =========================================================================
@@ -536,12 +537,13 @@ class FileProvider extends ChangeNotifier {
 
   Future<List<TrashEntry>> listTrash() => FileQueryService.listTrash();
 
-  Future<bool> restoreFromTrash(TrashEntry entry) async {
-    final bool ok = await FileQueryService.restoreFromTrash(entry);
-    if (ok && _currentPath == Directory(entry.originalPath).parent.path) {
+  Future<FileOpResult> restoreFromTrash(TrashEntry entry) async {
+    final FileOpResult result = await FileQueryService.restoreFromTrash(entry);
+    if (result.ok &&
+        _currentPath == Directory(entry.originalPath).parent.path) {
       await load(refresh: true);
     }
-    return ok;
+    return result;
   }
 
   Future<bool> deleteForever(String trashPath) =>
